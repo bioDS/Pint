@@ -28,7 +28,6 @@ void read_x_csv(char *fn, int n, int p) {
 	int col = 0, row = 0, actual_cols = p;
 	int readline_result = 0;
 	while((readline_result = getline(&buf, &line_size, fp)) > 0) {
-		//printf("new buffer, row %d, col: %d\n", row, col);
 		// remove name from beginning (for the moment)
 		int i = 1;
 		while (buf[i] != '"')
@@ -39,11 +38,8 @@ void read_x_csv(char *fn, int n, int p) {
 			if (buf[i] == ',')
 				{i++; continue;}
 			if (buf[i] == '0')
-				//{printf("test3\n"); X[row*p + col] = 0.0; printf("test5\n");}
 				X[row][col] = 0;
 			else if (buf[i] == '1')
-				//{printf("test4\n"); X[row*p + col] = 1.0;}
-				//X[row*p + col] = 1.0;
 				X[row][col] = 1;
 			else {
 				fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n", fn, row, col);
@@ -55,8 +51,6 @@ void read_x_csv(char *fn, int n, int p) {
 		}
 		if (buf[i] != '\n')
 			fprintf(stderr, "reached end of file without a newline\n");
-		if (col < p)
-			printf("number of columns < p, should p have been %d?\n", col);
 		if (col < actual_cols)
 			actual_cols = col;
 		col = 0;
@@ -66,6 +60,8 @@ void read_x_csv(char *fn, int n, int p) {
 	if (readline_result == -1)
 		fprintf(stderr, "failed to read line, errno %d\n", errno);
 
+	if (actual_cols < p)
+		printf("number of columns < p, should p have been %d?\n", actual_cols);
 	printf("read %dx%d, freeing stuff\n", row, actual_cols);
 	free(buf);
 }
@@ -103,12 +99,17 @@ void read_y_csv(char *fn, int n) {
 		col++;
 	}
 
-	printf("read %d lines, freeing stuff\n", col);
+	printf("read %d lines, freeing stuff\n", col + 1);
 	free(buf);
 	free(temp);
 }
 
 int main(int argc, char** argv) {
+	if (argc != 3) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv\n");
+		return 1;
+	}
+
 	gsl_vector *v = gsl_vector_alloc(3);
 	gsl_vector *w = gsl_vector_alloc(3);
 	gsl_vector_set_zero(v);
@@ -127,8 +128,8 @@ int main(int argc, char** argv) {
 
 
 	// testing: wip
-	read_x_csv("X.csv", N, P);
-	read_y_csv("Y.csv", N);
+	read_x_csv(argv[1], N, P);
+	read_y_csv(argv[2], N);
 
 	return 0;
 }
