@@ -12,7 +12,7 @@
 //#define N 30
 #define P 21110
 
-void read_x_csv(char *fn, int n, int p) {
+int **read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(n*sizeof(int*));
@@ -20,6 +20,7 @@ void read_x_csv(char *fn, int n, int p) {
 		X[i] = malloc(p*sizeof(int));
 
 	printf("reading X from: \"%s\"\n", fn);
+
 	FILE *fp = fopen(fn, "r");
 	if (fp == NULL) {
 		perror("opening failed");
@@ -64,13 +65,14 @@ void read_x_csv(char *fn, int n, int p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
 	printf("read %dx%d, freeing stuff\n", row, actual_cols);
 	free(buf);
+	return X;
 }
 
-void read_y_csv(char *fn, int n) {
+double *read_y_csv(char *fn, int n) {
 	char *buf = malloc(BUF_SIZE);
 	char *temp = malloc(BUF_SIZE);
 	memset(buf, 0, BUF_SIZE);
-	double Y[n];
+	double *Y = malloc(n*sizeof(double));
 
 	printf("reading Y from: \"%s\"\n", fn);
 	FILE *fp = fopen(fn, "r");
@@ -102,6 +104,10 @@ void read_y_csv(char *fn, int n) {
 	printf("read %d lines, freeing stuff\n", col + 1);
 	free(buf);
 	free(temp);
+	return Y;
+}
+
+void coordinate_descent_lasso(int **X, double *Y) {
 }
 
 int main(int argc, char** argv) {
@@ -128,8 +134,20 @@ int main(int argc, char** argv) {
 
 
 	// testing: wip
-	read_x_csv(argv[1], N, P);
-	read_y_csv(argv[2], N);
+	int **X = read_x_csv(argv[1], N, P);
+	double *Y = read_y_csv(argv[2], N);
 
+	if (X == NULL) {
+		fprintf(stderr, "failed to read X\n");
+		return 1;
+	}
+	if (Y == NULL) {
+		fprintf(stderr, "failed to read Y\n");
+		return 1;
+	}
+
+	printf("freeing X/Y\n");
+	free(X);
+	free(Y);
 	return 0;
 }
