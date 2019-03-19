@@ -7,6 +7,7 @@
 #define VECTOR_SIZE 3
 // are all ids the same size?
 #define ID_LEN 20
+#define BUF_SIZE 4096
 #define N 30856
 //#define N 30
 #define P 21110
@@ -67,10 +68,44 @@ void read_x_csv(char *fn, int n, int p) {
 
 	printf("read %dx%d, freeing stuff\n", row, actual_cols);
 	free(buf);
-
 }
 
 void read_y_csv(char *fn, int n) {
+	char *buf = malloc(BUF_SIZE);
+	char *temp = malloc(BUF_SIZE);
+	memset(buf, 0, BUF_SIZE);
+	double Y[n];
+
+	printf("reading Y from: \"%s\"\n", fn);
+	FILE *fp = fopen(fn, "r");
+	if (fp == NULL) {
+		perror("opening failed");
+	}
+
+	int col = 0, i = 0;
+	// drop the first line
+	if (fgets(buf, BUF_SIZE, fp) == NULL)
+		fprintf(stderr, "failed to read first line of Y from \"%s\"\n", fn);
+	while(fgets(buf, BUF_SIZE, fp) != NULL) {
+		i = 1;
+		// skip the name
+		while(buf[i] != '"')
+			i++;
+		i++;
+		if (buf[i] == ',')
+			i++;
+		// read the rest of the line as a float
+		memset(temp, 0, BUF_SIZE);
+		int j = 0;
+		while(buf[i] != '\n')
+			temp[j++] = buf[i++];
+		Y[col] = atof(temp);
+		col++;
+	}
+
+	printf("read %d lines, freeing stuff\n", col);
+	free(buf);
+	free(temp);
 }
 
 int main(int argc, char** argv) {
@@ -93,6 +128,7 @@ int main(int argc, char** argv) {
 
 	// testing: wip
 	read_x_csv("X.csv", N, P);
+	read_y_csv("Y.csv", N);
 
 	return 0;
 }
