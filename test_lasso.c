@@ -3,14 +3,20 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
+#include <math.h>
 
 #define VECTOR_SIZE 3
 // are all ids the same size?
 #define ID_LEN 20
 #define BUF_SIZE 4096
-#define N 30856
+//#define N 30856
+#define N 1000
 //#define N 30
-#define P 21110
+//#define P 21110
+#define P 100
+
+static int VERBOSE;
 
 int **read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -107,14 +113,73 @@ double *read_y_csv(char *fn, int n) {
 	return Y;
 }
 
-void coordinate_descent_lasso(int **X, double *Y) {
+/* Edgeworths's algorithm:
+ * \mu is zero for the moment, since the intercept (where no effects occurred)
+ * would have no effect on fitness, so 1x survived. log(1) = 0.
+ * This is probably assuming that the population doesn't grow, which we may
+ * not want.
+ */
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
+	// TODO: until converged
+		// TODO: for each main effect x_i or interaction x_ij
+			// TODO: choose index i to update uniformly at random
+			// TODO: update x_i in the direction -(dF(x)/de_i / B)
+	//TODO: free
+	double *beta = malloc(p*p*sizeof(double)); // probably too big in most cases.
+	memset(beta, 0, p*p*sizeof(double));
+
+	// Zhiyi's numbers
+	int max_iter = 10;
+	int lambda = 6.46;
+	double sump, sumn, sumk;
+
+
+	for (int iter = 0; iter < max_iter; iter++) {
+			for (int k = 0; k < p; k++) {
+			// update the predictor \Beta_k
+				double derivative = 0.0;
+				sumk = 0.0;
+				sumn = 0.0;
+				for (int i = 0; i < n; i++) {
+					sump = 0.0;
+					for (int j = 0; j < p; j++) {
+						sump += X[i][j] * beta[j];
+					}
+					sumn += (Y[i] - sump)*(double)X[i][k];
+					sumk += X[i][k] * X[i][k];
+				}
+				derivative = -sumn;
+
+				// TODO: This is probably slower than necessary.
+				double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
+				double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
+				if (Bkn < 0.0)
+					beta[k] += Bkn;
+				else if (Bkp > 0.0)
+					beta[k] += Bkp;
+				else
+					fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+				if (VERBOSE)
+					printf("beta_k is now %f\n", beta[k]);
+			}
+		printf("done iteration %d\n", iter);
+	}
+
+	return beta;
 }
 
 int main(int argc, char** argv) {
-	if (argc != 3) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv\n");
+	if (argc != 3 && argc != 4) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [optional: verbose=T/F]\n");
 		return 1;
 	}
+
+	VERBOSE = 0;
+	if (argc == 4)
+		if (strcmp(argv[3], "T") == 0) {
+			printf("verbose = True\n");
+			VERBOSE=1;
+		}
 
 	gsl_vector *v = gsl_vector_alloc(3);
 	gsl_vector *w = gsl_vector_alloc(3);
@@ -145,6 +210,14 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "failed to read Y\n");
 		return 1;
 	}
+
+	printf("begginning coordinate descent\n");
+	double *beta = simple_coordinate_descent_lasso(X, Y, N, P);
+	printf("done coordinate descent lasso, printing beta values:\n");
+	for (int i = 0; i < P; i++) {
+		printf("%f ", beta[i]);
+	}
+	printf("\n");
 
 	printf("freeing X/Y\n");
 	free(X);
