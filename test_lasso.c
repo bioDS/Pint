@@ -18,7 +18,12 @@
 
 static int VERBOSE;
 
-int **read_x_csv(char *fn, int n, int p) {
+typedef struct XMatrix {
+	int **X;
+	int actual_cols;
+} XMatrix;
+
+XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(n*sizeof(int*));
@@ -71,7 +76,10 @@ int **read_x_csv(char *fn, int n, int p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
 	printf("read %dx%d, freeing stuff\n", row, actual_cols);
 	free(buf);
-	return X;
+	XMatrix xmatrix;
+	xmatrix.X = X;
+	xmatrix.actual_cols = actual_cols;
+	return xmatrix;
 }
 
 double *read_y_csv(char *fn, int n) {
@@ -125,8 +133,8 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 			// TODO: choose index i to update uniformly at random
 			// TODO: update x_i in the direction -(dF(x)/de_i / B)
 	//TODO: free
-	double *beta = malloc(p*p*sizeof(double)); // probably too big in most cases.
-	memset(beta, 0, p*p*sizeof(double));
+	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
+	memset(beta, 0, p*sizeof(double));
 
 	// Zhiyi's numbers
 	int max_iter = 10;
@@ -143,6 +151,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 				for (int i = 0; i < n; i++) {
 					sump = 0.0;
 					for (int j = 0; j < p; j++) {
+						// if j != k ?
 						sump += X[i][j] * beta[j];
 					}
 					sumn += (Y[i] - sump)*(double)X[i][k];
@@ -154,18 +163,35 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 				double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
 				double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
 				if (Bkn < 0.0)
-					beta[k] += Bkn;
+					beta[k] = Bkn;
 				else if (Bkp > 0.0)
-					beta[k] += Bkp;
-				else
-					fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+					beta[k] = Bkp;
+				else {
+					if (VERBOSE)
+						fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+				}
 				if (VERBOSE)
-					printf("beta_k is now %f\n", beta[k]);
+					printf("beta_%d is now %f\n", k, beta[k]);
 			}
 		printf("done iteration %d\n", iter);
 	}
 
 	return beta;
+}
+
+// assumes p is even
+int **X2_from_X(int **X, int n, int p) {
+	int **X2 = malloc(n*sizeof(int*));
+	for (int row = 0; row < n; row++) {
+		X2[row] = malloc(((p*p)/2 + p/2)*sizeof(int));
+		int offset = 0;
+		for (int i = 0; i < p; i++) {
+			for (int j = i; j < p; j++) {
+				X2[row][offset++] = X[row][i] * X[row][j];
+			}
+		}
+	}
+	return X2;
 }
 
 int main(int argc, char** argv) {
@@ -199,10 +225,15 @@ int main(int argc, char** argv) {
 
 
 	// testing: wip
-	int **X = read_x_csv(argv[1], N, P);
+	XMatrix xmatrix = read_x_csv(argv[1], N, P);
 	double *Y = read_y_csv(argv[2], N);
 
-	if (X == NULL) {
+	printf("converting to X2\n");
+	int **X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
+	int nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols - 1))/2;
+	printf("done converting to X2\n");
+
+	if (xmatrix.X == NULL) {
 		fprintf(stderr, "failed to read X\n");
 		return 1;
 	}
@@ -212,15 +243,15 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(X, Y, N, P);
-	printf("done coordinate descent lasso, printing beta values:\n");
-	for (int i = 0; i < P; i++) {
+	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta);
+	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
+	for (int i = 0; i < nbeta; i++) {
 		printf("%f ", beta[i]);
 	}
 	printf("\n");
 
 	printf("freeing X/Y\n");
-	free(X);
+	free(xmatrix.X);
 	free(Y);
 	return 0;
 }
