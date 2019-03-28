@@ -15,6 +15,7 @@
 //#define N 30
 //#define P 21110
 #define P 100
+#define HALT_BETA_DIFF 50
 
 static int VERBOSE;
 
@@ -137,12 +138,17 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 	memset(beta, 0, p*sizeof(double));
 
 	// Zhiyi's numbers
-	int max_iter = 10;
-	int lambda = 6.46;
+	int max_iter = 100;
+	//int lambda = 6.46;
+	int lambda = 3.604;
 	double sump, sumn, sumk;
-
+	double error = 0, prev_error;
 
 	for (int iter = 0; iter < max_iter; iter++) {
+		prev_error = error;
+		error = 0;
+		double dBMax = 0.0; // largest beta diff this cycle
+
 			for (int k = 0; k < p; k++) {
 			// update the predictor \Beta_k
 				double derivative = 0.0;
@@ -152,9 +158,11 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 					sump = 0.0;
 					for (int j = 0; j < p; j++) {
 						// if j != k ?
-						sump += X[i][j] * beta[j];
+							//sump += X[i][j] * beta[j];
+							sump += X[i][j]?beta[j]:0.0;
 					}
-					sumn += (Y[i] - sump)*(double)X[i][k];
+					//sumn += (Y[i] - sump)*(double)X[i][k];
+					sumn += X[i][k]?(Y[i] - sump):0.0;
 					sumk += X[i][k] * X[i][k];
 				}
 				derivative = -sumn;
@@ -162,17 +170,41 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 				// TODO: This is probably slower than necessary.
 				double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
 				double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
+				double Bk_diff = beta[k];
 				if (Bkn < 0.0)
 					beta[k] = Bkn;
 				else if (Bkp > 0.0)
 					beta[k] = Bkp;
 				else {
+					beta[k] = 0.0;
 					if (VERBOSE)
 						fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
 				}
+				Bk_diff = fabs(beta[k] - Bk_diff);
+				Bk_diff *= Bk_diff;
+				if (Bk_diff > dBMax)
+					dBMax = Bk_diff;
 				if (VERBOSE)
 					printf("beta_%d is now %f\n", k, beta[k]);
 			}
+			// caculate cumulative error after update
+			for (int row = 0; row < n; row++) {
+				double sum = 0;
+				for (int k = 0; k < p; k++) {
+					sum += X[row][k]*beta[k];
+				}
+				double e_diff = Y[row] - sum;
+				e_diff *= e_diff;
+				error += e_diff;
+			}
+			printf("error is now %f\n", error);
+			// Be sure to clean up anything extra we allocate
+			// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
+			if (dBMax < HALT_BETA_DIFF) {
+				printf("largest change (%f) was less than %f, halting\n", dBMax, HALT_BETA_DIFF);
+				return beta;
+			}
+
 		printf("done iteration %d\n", iter);
 	}
 
