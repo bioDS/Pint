@@ -122,13 +122,111 @@ double *read_y_csv(char *fn, int n) {
 	return Y;
 }
 
+double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
+	double derivative = 0.0;
+	double sumk = 0.0;
+	double sumn = 0.0;
+	double sump;
+
+	for (int i = 0; i < n; i++) {
+		sump = 0.0;
+		for (int j = 0; j < p; j++) {
+			// if j != k ?
+				//sump += X[i][j] * beta[j];
+				sump += X[i][j]?beta[j]:0.0;
+		}
+		//sumn += (Y[i] - sump)*(double)X[i][k];
+		sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
+		sumk += X[i][k] * X[i][k];
+	}
+	derivative = -sumn;
+
+	// TODO: This is probably slower than necessary.
+	double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
+	double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
+	double Bk_diff = beta[k];
+	if (Bkn < 0.0)
+		beta[k] = Bkn;
+	else if (Bkp > 0.0)
+		beta[k] = Bkp;
+	else {
+		beta[k] = 0.0;
+		if (VERBOSE)
+			fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+	}
+	Bk_diff = fabs(beta[k] - Bk_diff);
+	Bk_diff *= Bk_diff;
+	if (Bk_diff > dBMax)
+		dBMax = Bk_diff;
+	if (VERBOSE)
+		printf("beta_%d is now %f\n", k, beta[k]);
+	return dBMax;
+}
+
+double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p) {
+	double new_intercept = 0.0;
+	double sumn = 0.0, sumx = 0.0;
+
+	for (int i = 0; i < n; i++) {
+		sumx = 0.0;
+		for (int j = 0; j < p; j++) {
+			sumx += X[i][j] * beta[j];
+		}
+		sumn += Y[i] - sumx;
+	}
+	new_intercept = sumn / n;
+	return new_intercept;
+}
+
+double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax) {
+	double derivative = 0.0;
+	double sumk = 0.0;
+	double sumn = 0.0;
+	double sump;
+
+	for (int i = 0; i < n; i++) {
+		sump = 0.0;
+		for (int j = 0; j < p; j++) {
+			// if j != k ?
+				//sump += X[i][j] * beta[j];
+				sump += X[i][j]?beta[j]:0.0;
+		}
+		//sumn += (Y[i] - sump)*(double)X[i][k];
+		sumn += X[i][k]?(Y[i] - sump):0.0;
+		sumk += X[i][k] * X[i][k];
+	}
+	derivative = -sumn;
+
+	// TODO: This is probably slower than necessary.
+	double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
+	double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
+	double Bk_diff = beta[k];
+	if (Bkn < 0.0)
+		beta[k] = Bkn;
+	else if (Bkp > 0.0)
+		beta[k] = Bkp;
+	else {
+		beta[k] = 0.0;
+		if (VERBOSE)
+			fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+	}
+	Bk_diff = fabs(beta[k] - Bk_diff);
+	Bk_diff *= Bk_diff;
+	if (Bk_diff > dBMax)
+		dBMax = Bk_diff;
+	if (VERBOSE)
+		printf("beta_%d is now %f\n", k, beta[k]);
+	return dBMax;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.
  * This is probably assuming that the population doesn't grow, which we may
  * not want.
+ * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -137,73 +235,42 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p) {
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
 
-	// Zhiyi's numbers
 	int max_iter = 100;
-	//int lambda = 6.46;
-	int lambda = 3.604;
-	double sump, sumn, sumk;
+
 	double error = 0, prev_error;
+	double intercept = 0.0;
 
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
 		error = 0;
 		double dBMax = 0.0; // largest beta diff this cycle
 
-			for (int k = 0; k < p; k++) {
-			// update the predictor \Beta_k
-				double derivative = 0.0;
-				sumk = 0.0;
-				sumn = 0.0;
-				for (int i = 0; i < n; i++) {
-					sump = 0.0;
-					for (int j = 0; j < p; j++) {
-						// if j != k ?
-							//sump += X[i][j] * beta[j];
-							sump += X[i][j]?beta[j]:0.0;
-					}
-					//sumn += (Y[i] - sump)*(double)X[i][k];
-					sumn += X[i][k]?(Y[i] - sump):0.0;
-					sumk += X[i][k] * X[i][k];
-				}
-				derivative = -sumn;
+		// update intercept
+		intercept = update_intercept_cyclic(intercept, X, Y, beta, n, p);
 
-				// TODO: This is probably slower than necessary.
-				double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
-				double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
-				double Bk_diff = beta[k];
-				if (Bkn < 0.0)
-					beta[k] = Bkn;
-				else if (Bkp > 0.0)
-					beta[k] = Bkp;
-				else {
-					beta[k] = 0.0;
-					if (VERBOSE)
-						fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
-				}
-				Bk_diff = fabs(beta[k] - Bk_diff);
-				Bk_diff *= Bk_diff;
-				if (Bk_diff > dBMax)
-					dBMax = Bk_diff;
-				if (VERBOSE)
-					printf("beta_%d is now %f\n", k, beta[k]);
+		for (int k = 0; k < p; k++) {
+			// update the predictor \Beta_k
+			//dBMax = update_beta_greedy_l1(X, Y, n, p, lambda, beta, k, dBMax);
+			dBMax = update_beta_cyclic(X, Y, n, p, lambda, beta, k, dBMax, intercept);
+		}
+		// caculate cumulative error after update
+		for (int row = 0; row < n; row++) {
+			double sum = 0;
+			for (int k = 0; k < p; k++) {
+				sum += X[row][k]*beta[k];
 			}
-			// caculate cumulative error after update
-			for (int row = 0; row < n; row++) {
-				double sum = 0;
-				for (int k = 0; k < p; k++) {
-					sum += X[row][k]*beta[k];
-				}
-				double e_diff = Y[row] - sum;
-				e_diff *= e_diff;
-				error += e_diff;
-			}
-			printf("error is now %f\n", error);
-			// Be sure to clean up anything extra we allocate
-			// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-			if (dBMax < HALT_BETA_DIFF) {
-				printf("largest change (%f) was less than %f, halting\n", dBMax, HALT_BETA_DIFF);
-				return beta;
-			}
+			double e_diff = Y[row] - intercept - sum;
+			e_diff *= e_diff;
+			error += e_diff;
+		}
+		error /= n;
+		printf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		// Be sure to clean up anything extra we allocate
+		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
+		if (dBMax < HALT_BETA_DIFF) {
+			printf("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
+			return beta;
+		}
 
 		printf("done iteration %d\n", iter);
 	}
@@ -232,12 +299,18 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	double lambda;
+
 	VERBOSE = 0;
-	if (argc == 4)
+	if (argc == 4) {
 		if (strcmp(argv[3], "T") == 0) {
 			printf("verbose = True\n");
 			VERBOSE=1;
 		}
+		else if ((lambda = strtod(argv[3], NULL)) == 0)
+			lambda = 3.604;
+	}
+	printf("using lambda = %f\n", lambda);
 
 	gsl_vector *v = gsl_vector_alloc(3);
 	gsl_vector *w = gsl_vector_alloc(3);
@@ -275,7 +348,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta);
+	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda);
 	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
 	for (int i = 0; i < nbeta; i++) {
 		printf("%f ", beta[i]);
