@@ -226,7 +226,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * not want.
  * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda) {
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -239,6 +239,20 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
+	int use_cyclic = 0, use_greedy = 0;
+
+	if (strcmp(method,"cyclic") == 0) {
+		printf("using cyclic descent\n");
+		use_cyclic = 1;
+	} else if (strcmp(method, "greedy") == 0) {
+		printf("using greedy descent\n");
+		use_greedy = 1;
+	}
+
+	if (use_greedy == 0 && use_cyclic == 0) {
+		fprintf(stderr, "exactly one of cyclic/greedy must be specified\n");
+		return NULL;
+	}
 
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
@@ -294,23 +308,27 @@ int **X2_from_X(int **X, int n, int p) {
 }
 
 int main(int argc, char** argv) {
-	if (argc != 3 && argc != 4) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [optional: verbose=T/F]\n");
+	if (argc != 5 && argc != 6) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] verbose=T/F [optional: lambda]\n");
 		return 1;
 	}
 
-	double lambda;
+	char *method = argv[3];
+	char *verbose = argv[4];
 
 	VERBOSE = 0;
-	if (argc == 4) {
-		if (strcmp(argv[3], "T") == 0) {
-			printf("verbose = True\n");
-			VERBOSE=1;
-		}
-		else if ((lambda = strtod(argv[3], NULL)) == 0)
+	if (strcmp(verbose, "T") == 0)
+		VERBOSE = 1;
+
+	double lambda;
+
+	if (argc == 6) {
+		if ((lambda = strtod(argv[5], NULL)) == 0)
 			lambda = 3.604;
 	}
 	printf("using lambda = %f\n", lambda);
+
+
 
 	gsl_vector *v = gsl_vector_alloc(3);
 	gsl_vector *w = gsl_vector_alloc(3);
@@ -348,8 +366,12 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda);
+	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda, method);
 	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
+	if (beta == NULL) {
+		fprintf(stderr, "failed to estimate beta values\n");
+		return 1;
+	}
 	for (int i = 0; i < nbeta; i++) {
 		printf("%f ", beta[i]);
 	}
