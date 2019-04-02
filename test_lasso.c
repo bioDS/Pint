@@ -15,7 +15,7 @@
 //#define N 30
 //#define P 21110
 #define P 100
-#define HALT_BETA_DIFF 50
+#define HALT_BETA_DIFF 0
 
 static int VERBOSE;
 
@@ -120,6 +120,48 @@ double *read_y_csv(char *fn, int n) {
 	free(buf);
 	free(temp);
 	return Y;
+}
+
+// n.b.: for glmnet gamma should be lambda * [alpha=1] = lambda
+double soft_threshold(double z, double gamma) {
+	if (fabs(z) < gamma)
+		return 0.0;
+	double val = fabs(z) - gamma;
+	if (signbit(z))
+		return -val;
+	else
+		return val;
+}
+
+//TODO: applies when the x variables are standardized to have unit variance, is this the case?
+//TODO: glmnet also standardizes Y before computing its lambda sequence.
+double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
+	double derivative = 0.0;
+	double sumk = 0.0;
+	double sumn = 0.0;
+	double sump;
+	double new_beta;
+
+	for (int i = 0; i < n; i++) {
+		sump = 0.0;
+		for (int j = 0; j < p; j++) {
+			if (j != k)
+				sump += X[i][j]?beta[j]:0.0;
+		}
+		//sumn += (Y[i] - sump)*(double)X[i][k];
+		sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
+		sumk += X[i][k] * X[i][k];
+	}
+
+	new_beta = soft_threshold(sumn/n, lambda);
+	// soft thresholding of n, lambda*[alpha=1]
+
+	if (fabs(beta[k] - new_beta) > dBMax)
+		dBMax = fabs(beta[k] - new_beta);
+	beta[k] = new_beta;
+	if (VERBOSE)
+		printf("beta_%d is now %f\n", k, beta[k]);
+	return dBMax;
 }
 
 double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
@@ -235,10 +277,11 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
 
-	int max_iter = 100;
+	int max_iter = 5;
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
+	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
 	if (strcmp(method,"cyclic") == 0) {
@@ -260,7 +303,9 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		double dBMax = 0.0; // largest beta diff this cycle
 
 		// update intercept
-		intercept = update_intercept_cyclic(intercept, X, Y, beta, n, p);
+		//intercept = update_intercept_cyclic(intercept, X, Y, beta, n, p);
+		//iter_lambda = lambda*(max_iter-iter)/max_iter;
+		//printf("using lambda = %f\n", iter_lambda);
 
 		for (int k = 0; k < p; k++) {
 			// update the predictor \Beta_k
@@ -296,7 +341,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 int **X2_from_X(int **X, int n, int p) {
 	int **X2 = malloc(n*sizeof(int*));
 	for (int row = 0; row < n; row++) {
-		X2[row] = malloc(((p*p)/2 + p/2)*sizeof(int));
+		X2[row] = malloc(((p*p)/2 + p/2 + 1)*sizeof(int));
 		int offset = 0;
 		for (int i = 0; i < p; i++) {
 			for (int j = i; j < p; j++) {
@@ -376,6 +421,12 @@ int main(int argc, char** argv) {
 		printf("%f ", beta[i]);
 	}
 	printf("\n");
+
+	printf("indices significantly negative (-500):\n");
+	for (int i = 0; i < nbeta; i++) {
+		if (beta[i] < -500)
+			printf("%d: %f\n", i, beta[i]);
+	}
 
 	printf("freeing X/Y\n");
 	free(xmatrix.X);
