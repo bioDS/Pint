@@ -18,6 +18,7 @@
 */
 #include <stdio.h>
 #include "common.h"
+#include <unistd.h>
 void usage(char * argv[]){
        fprintf(stderr, "Usage: %s\n\t-m matrix A in sparse matrix market format\n"
                        "\t -v vector y in sparse matrix market format\n"
