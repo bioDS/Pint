@@ -337,11 +337,10 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	return beta;
 }
 
-// assumes p is even
 int **X2_from_X(int **X, int n, int p) {
 	int **X2 = malloc(n*sizeof(int*));
 	for (int row = 0; row < n; row++) {
-		X2[row] = malloc(((p*p)/2 + p/2 + 1)*sizeof(int));
+		X2[row] = malloc(((p*(p+1))/2)*sizeof(int));
 		int offset = 0;
 		for (int i = 0; i < p; i++) {
 			for (int j = i; j < p; j++) {
