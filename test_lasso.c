@@ -13,8 +13,8 @@
 //#define N 30856
 #define N 1000
 //#define N 30
-//#define P 21110
-#define P 100
+#define P 5050
+//#define P 35
 #define HALT_BETA_DIFF 0
 
 static int VERBOSE;
