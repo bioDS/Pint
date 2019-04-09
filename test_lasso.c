@@ -73,8 +73,10 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	if (readline_result == -1)
 		fprintf(stderr, "failed to read line, errno %d\n", errno);
 
-	if (actual_cols < p)
+	if (actual_cols < p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
+		p = actual_cols;
+	}
 	printf("read %dx%d, freeing stuff\n", row, actual_cols);
 	free(buf);
 	XMatrix xmatrix;
