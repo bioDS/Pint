@@ -197,8 +197,8 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 	derivative = -sumn;
 
 	// TODO: This is probably slower than necessary.
-	double Bkn = fmin(0.0, beta[k] - (derivative - lambda)/(sumk));
-	double Bkp = fmax(0.0, beta[k] - (derivative + lambda)/(sumk));
+	double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
+	double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
 	double Bk_diff = beta[k];
 	if (Bkn < 0.0)
 		beta[k] = Bkn;
