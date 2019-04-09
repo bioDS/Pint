@@ -297,6 +297,8 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
+	lambda = lambda*n/2.0;
+
 	if (strcmp(method,"cyclic") == 0) {
 		printf("using cyclic descent\n");
 		use_cyclic = 1;
