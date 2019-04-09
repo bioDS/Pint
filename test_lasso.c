@@ -116,6 +116,16 @@ double *read_y_csv(char *fn, int n) {
 		col++;
 	}
 
+	printf("normalising y values\n");
+	double mean = 0.0;
+	for (int i = 0; i < n; i++) {
+		mean += Y[i];
+	}
+	mean /= n;
+	for (int i = 0; i < n; i++) {
+		Y[i] -= mean;
+	}
+
 	printf("read %d lines, freeing stuff\n", col + 1);
 	free(buf);
 	free(temp);
