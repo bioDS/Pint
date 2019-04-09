@@ -197,17 +197,21 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 	derivative = -sumn;
 
 	// TODO: This is probably slower than necessary.
-	double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
-	double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
 	double Bk_diff = beta[k];
-	if (Bkn < 0.0)
-		beta[k] = Bkn;
-	else if (Bkp > 0.0)
-		beta[k] = Bkp;
-	else {
+	if (sumk == 0.0) {
 		beta[k] = 0.0;
-		if (VERBOSE)
-			fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+	} else {
+		double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
+		double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
+		if (Bkn < 0.0)
+			beta[k] = Bkn;
+		else if (Bkp > 0.0)
+			beta[k] = Bkp;
+		else {
+			beta[k] = 0.0;
+			//if (VERBOSE)
+			//	fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+		}
 	}
 	Bk_diff = fabs(beta[k] - Bk_diff);
 	Bk_diff *= Bk_diff;
