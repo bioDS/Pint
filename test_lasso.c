@@ -367,13 +367,18 @@ int **X2_from_X(int **X, int n, int p) {
 }
 
 int main(int argc, char** argv) {
-	if (argc != 5 && argc != 6) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] verbose=T/F [optional: lambda]\n");
+	if (argc != 6 && argc != 7) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [optional: lambda]\n");
 		return 1;
 	}
 
 	char *method = argv[3];
-	char *verbose = argv[4];
+	char *scale = argv[4];
+	char *verbose = argv[5];
+
+	int USE_INT=0; // main effects only by default
+	if (strcmp(scale, "int") == 0)
+		USE_INT=1;
 
 	VERBOSE = 0;
 	if (strcmp(verbose, "T") == 0)
@@ -381,8 +386,8 @@ int main(int argc, char** argv) {
 
 	double lambda;
 
-	if (argc == 6) {
-		if ((lambda = strtod(argv[5], NULL)) == 0)
+	if (argc == 7) {
+		if ((lambda = strtod(argv[6], NULL)) == 0)
 			lambda = 3.604;
 	}
 	printf("using lambda = %f\n", lambda);
@@ -410,10 +415,17 @@ int main(int argc, char** argv) {
 	XMatrix xmatrix = read_x_csv(argv[1], N, P);
 	double *Y = read_y_csv(argv[2], N);
 
-	printf("converting to X2\n");
-	int **X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
-	int nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols - 1))/2;
-	printf("done converting to X2\n");
+	int **X2;
+	int nbeta;
+	if (USE_INT) {
+		printf("converting to X2\n");
+		X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
+		nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols+1))/2;
+	} else {
+		nbeta = xmatrix.actual_cols;
+		X2 = xmatrix.X;
+	}
+	printf("using nbeta = %d\n", nbeta);
 
 	if (xmatrix.X == NULL) {
 		fprintf(stderr, "failed to read X\n");
