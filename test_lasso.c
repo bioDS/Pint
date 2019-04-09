@@ -99,8 +99,8 @@ double *read_y_csv(char *fn, int n) {
 
 	int col = 0, i = 0;
 	// drop the first line
-	if (fgets(buf, BUF_SIZE, fp) == NULL)
-		fprintf(stderr, "failed to read first line of Y from \"%s\"\n", fn);
+	//if (fgets(buf, BUF_SIZE, fp) == NULL)
+	//	fprintf(stderr, "failed to read first line of Y from \"%s\"\n", fn);
 	while(fgets(buf, BUF_SIZE, fp) != NULL) {
 		i = 1;
 		// skip the name
