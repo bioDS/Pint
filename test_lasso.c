@@ -187,6 +187,7 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 		for (int j = 0; j < p; j++) {
 			// if j != k ?
 				//sump += X[i][j] * beta[j];
+			if (j != k)
 				sump += X[i][j]?beta[j]:0.0;
 		}
 		//sumn += (Y[i] - sump)*(double)X[i][k];
