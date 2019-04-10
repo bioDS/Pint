@@ -115,6 +115,7 @@ double *read_y_csv(char *fn, int n) {
 		while(buf[i] != '\n')
 			temp[j++] = buf[i++];
 		Y[col] = atof(temp);
+		//printf("temp '%s' set %d: %f\n", temp, col, Y[col]);
 		col++;
 	}
 
@@ -128,7 +129,7 @@ double *read_y_csv(char *fn, int n) {
 		Y[i] -= mean;
 	}
 
-	printf("read %d lines, freeing stuff\n", col + 1);
+	printf("read %d lines, freeing stuff\n", col);
 	free(buf);
 	free(temp);
 	return Y;
@@ -190,10 +191,16 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 			if (j != k)
 				sump += X[i][j]?beta[j]:0.0;
 		}
+		if (VERBOSE)
+			printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 		//sumn += (Y[i] - sump)*(double)X[i][k];
 		sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
+		if (VERBOSE)
+			printf("adding %f\n", X[i][k]?(Y[i] - intercept - sump):0.0);
 		sumk += X[i][k] * X[i][k];
 	}
+	if (VERBOSE)
+		printf("sumn: %f\n", sumn);
 	derivative = -sumn;
 
 	// TODO: This is probably slower than necessary.
@@ -220,6 +227,9 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 	if (VERBOSE)
 		printf("beta_%d is now %f\n", k, beta[k]);
 	return dBMax;
+}
+
+void update_beta_shoot() {
 }
 
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p) {
@@ -294,14 +304,16 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
 
-	int max_iter = 5;
+	int max_iter = 3;
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
+	printf("original lambda: %f n: %d ", lambda, n);
 	lambda = lambda*n/2.0;
+	printf("effective lambda is %f\n", lambda);
 
 	if (strcmp(method,"cyclic") == 0) {
 		printf("using cyclic descent\n");
