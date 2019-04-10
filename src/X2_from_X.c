@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <errno.h>
+#include "test_lasso.h"
 
 typedef struct XMatrix {
 	int **X;
@@ -65,20 +66,6 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	xmatrix.X = X;
 	xmatrix.actual_cols = actual_cols;
 	return xmatrix;
-}
-
-int **X2_from_X(int **X, int n, int p) {
-	int **X2 = malloc(n*sizeof(int*));
-	for (int row = 0; row < n; row++) {
-		X2[row] = malloc(((p*(p+1))/2)*sizeof(int));
-		int offset = 0;
-		for (int i = 0; i < p; i++) {
-			for (int j = i; j < p; j++) {
-				X2[row][offset++] = X[row][i] * X[row][j];
-			}
-		}
-	}
-	return X2;
 }
 
 void write_x_csv(char *filename, int **X, int n, int p) {
