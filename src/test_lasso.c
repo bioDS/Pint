@@ -1,10 +1,4 @@
-#include<stdio.h>
-#include <gsl/gsl_vector.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>
-#include <math.h>
+#include "test_lasso.h"
 
 #define VECTOR_SIZE 3
 // are all ids the same size?
@@ -385,6 +379,11 @@ int **X2_from_X(int **X, int n, int p) {
 int main(int argc, char** argv) {
 	if (argc != 6 && argc != 7) {
 		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [optional: lambda]\n");
+		printf("actual args(%d): '", argc);
+		for (int i = 0; i < argc; i++) {
+			printf("%s ", argv[i]);
+		}
+		printf("\n");
 		return 1;
 	}
 

@@ -1,2 +1,8 @@
 project('lasso', 'c')
-executable('test_lasso', 'test_lasso.c', dependencies : dependency('gsl'))
+
+add_project_arguments([
+  '-I' + meson.build_root(),
+], language: 'c')
+
+subdir('src')
+subdir('tests')
