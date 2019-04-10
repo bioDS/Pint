@@ -67,6 +67,9 @@ valuetype_t soft_threshold(valuetype_t _lambda, valuetype_t shootDiff) {
   else return 0;
 }
 
+// We keep a running copy of the entirety of Ax, and at each iteration
+// only need to calculate the current column of At(Ax), to get the udpate.
+// - which appears to be 2*At_i(Ax) - covar*oldvalue - (Ay_i?)
 double shoot(int x_i, valuetype_t lambda) {
     feature& feat = lassoprob->feature_consts[x_i];
     valuetype_t oldvalue = lassoprob->x[x_i];

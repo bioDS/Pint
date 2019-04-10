@@ -67,8 +67,8 @@ int main(int argc, char * argv[]){
 	     break;
 	   case 'a':	
 	     algorithm = atoi(optarg);
-	     if (algorithm < 1 || algorithm > 3){
-	       fprintf(stderr, "Algorithm should be 1-3\n");
+	     if (algorithm < 1 || algorithm > 4){
+	       fprintf(stderr, "Algorithm should be 1-4\n");
 	       exit(1);
 	     }
 	     break;
@@ -150,9 +150,31 @@ int main(int argc, char * argv[]){
         }
        printf("Found minimal lambda with all zero solution %g\n", lambda);
     }
-    else {
-     usage(argv);
-    }
+	else if (algorithm == 4) {
+		double max_lambda = 1e10;
+		double min_lambda = 1e-10;
+		int tries = 0;
+		lambda = max_lambda;
+        while (tries < 50) {
+			printf("Trying out lambda %g", lambda);
+			solveLasso(&prob, lambda, K, threshold, maxiter, verbose);
+			if (all_zero) {
+				max_lambda = lambda;
+				lambda = (max_lambda + min_lambda) / 2;
+				printf("OK\n");
+				all_zero = false;
+			}
+			else {
+				min_lambda = lambda;
+				lambda = (max_lambda + min_lambda) / 2;
+				printf("Too small\n");
+			}
+			tries++;
+		}
+       printf("Found minimal lambda with all zero solution %g\n", lambda);
+	} else {
+		usage(argv);
+	}
       
     int * I = new int[prob.nx];
     int * J = new int[prob.nx];

@@ -125,12 +125,14 @@ void initialize_all() {
     active = (bool *) calloc(logregprob->nx,sizeof(bool));
     xjneg = (double *) calloc(logregprob->nx,sizeof(double));
     pos_y = 0;
+	printf("loop count: %d\n", logregprob->ny);
     for(int i=0; i<logregprob->ny; i++)  {
         logregprob->expAx[i] = 1.0; // since(exp(0) = 1)
         pos_y += (logregprob->y[i] == 1);
     }
     neg_y = logregprob->ny-pos_y;
     
+	printf("pos_y: %d, neg_y %d\n", pos_y, neg_y);
     assert(pos_y > 0 && neg_y > 0);
     for(int i=0; i<logregprob->nx; i++) active[i] = true;
     
