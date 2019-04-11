@@ -9,8 +9,11 @@ static void test_always_fails() {
 	g_assert (1 == 2);
 }
 
+// will fail if Y has been normalised
 static void test_can_read_Y() {
-	double *Y = read_y_csv("../testYSmall.csv", N);
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", N);
+	printf("test stdout\n");
+	printf("%f\n", Y[0]);
 	g_assert(Y[0] == -133.351709197933);
 }
 
