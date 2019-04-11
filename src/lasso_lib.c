@@ -95,6 +95,9 @@ double *read_y_csv(char *fn, int n) {
 		col++;
 	}
 
+	// for comparison with implementations that normalise rather than
+	// finding the intercept.
+#ifdef NORMALISE_Y
 	printf("normalising y values\n");
 	double mean = 0.0;
 	for (int i = 0; i < n; i++) {
@@ -104,6 +107,7 @@ double *read_y_csv(char *fn, int n) {
 	for (int i = 0; i < n; i++) {
 		Y[i] -= mean;
 	}
+#endif
 
 	printf("read %d lines, freeing stuff\n", col);
 	free(buf);
@@ -309,7 +313,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		error = 0;
 		double dBMax = 0.0; // largest beta diff this cycle
 
-		// update intercept
+		// update intercept (don't for the moment, it should be 0 anyway)
 		//intercept = update_intercept_cyclic(intercept, X, Y, beta, n, p);
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
