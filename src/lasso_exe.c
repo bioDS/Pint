@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda, method);
+	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda, method, 10);
 	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
 	if (beta == NULL) {
 		fprintf(stderr, "failed to estimate beta values\n");

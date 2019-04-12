@@ -1,5 +1,7 @@
 #include "lasso_lib.h"
 
+const static int NORMALISE_Y = 0;
+
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
@@ -97,17 +99,17 @@ double *read_y_csv(char *fn, int n) {
 
 	// for comparison with implementations that normalise rather than
 	// finding the intercept.
-#ifdef NORMALISE_Y
-	printf("normalising y values\n");
-	double mean = 0.0;
-	for (int i = 0; i < n; i++) {
-		mean += Y[i];
+	if (NORMALISE_Y == 1) {
+		printf("%d, normalising y values\n", NORMALISE_Y);
+		double mean = 0.0;
+		for (int i = 0; i < n; i++) {
+			mean += Y[i];
+		}
+		mean /= n;
+		for (int i = 0; i < n; i++) {
+			Y[i] -= mean;
+		}
 	}
-	mean /= n;
-	for (int i = 0; i < n; i++) {
-		Y[i] -= mean;
-	}
-#endif
 
 	printf("read %d lines, freeing stuff\n", col);
 	free(buf);
@@ -276,7 +278,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * not want.
  * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method) {
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -284,8 +286,6 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	//TODO: free
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
-
-	int max_iter = 3;
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
