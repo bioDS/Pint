@@ -16,6 +16,24 @@
 static void test_update_beta_greedy_l1() {
 }
 static void test_update_intercept_cyclic() {
+	int n = 1000;
+	int p = 100;
+	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
+	int **X = xmatrix.X;
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
+	double lambda = 6.46;
+	double *beta = malloc(p*sizeof(double));
+	memset(beta, 0, p*sizeof(double));
+	int k = 27;
+	double dBMax = 0;
+	double intercept = 0;
+
+	printf("beta[27]: %f\n", beta[27]);
+	update_beta_cyclic(X, Y, n, p, lambda, beta, k, dBMax, intercept);
+	printf("beta[27]: %f\n", beta[27]);
+	g_assert_true(beta[27] != 0.0);
+	g_assert_true(beta[27] < -263.94);
+	g_assert_true(beta[27] > -263.941);
 }
 static void test_soft_threshold() {
 }

@@ -188,17 +188,18 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 	if (sumk == 0.0) {
 		beta[k] = 0.0;
 	} else {
-		double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
-		double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
-		if (Bkn < 0.0)
-			beta[k] = Bkn;
-		else if (Bkp > 0.0)
-			beta[k] = Bkp;
-		else {
-			beta[k] = 0.0;
-			//if (VERBOSE)
-			//	fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
-		}
+		beta[k] = soft_threshold(sumn, lambda*n/2)/sumk;
+		//double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
+		//double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
+		//if (Bkn < 0.0)
+		//	beta[k] = Bkn;
+		//else if (Bkp > 0.0)
+		//	beta[k] = Bkp;
+		//else {
+		//	beta[k] = 0.0;
+		//	//if (VERBOSE)
+		//	//	fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
+		//}
 	}
 	Bk_diff = fabs(beta[k] - Bk_diff);
 	Bk_diff *= Bk_diff;
@@ -292,7 +293,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	int use_cyclic = 0, use_greedy = 0;
 
 	printf("original lambda: %f n: %d ", lambda, n);
-	lambda = lambda*n/2.0;
+	lambda = lambda;
 	printf("effective lambda is %f\n", lambda);
 
 	if (strcmp(method,"cyclic") == 0) {
