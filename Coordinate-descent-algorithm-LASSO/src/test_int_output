@@ -1,0 +1,66 @@
+Start training process..
+d =  5050
+iter:  0
+iter:  1
+iter:  2
+iter:  3
+iter:  4
+iter:  5
+iter:  6
+iter:  7
+iter:  8
+iter:  9
+iter:  10
+iter:  11
+iter:  12
+iter:  13
+iter:  14
+iter:  15
+iter:  16
+iter:  17
+iter:  18
+iter:  19
+iter:  20
+iter:  21
+iter:  22
+iter:  23
+iter:  24
+iter:  25
+iter:  26
+iter:  27
+iter:  28
+iter:  29
+iter:  30
+iter:  31
+iter:  32
+iter:  33
+iter:  34
+iter:  35
+iter:  36
+iter:  37
+iter:  38
+iter:  39
+iter:  40
+iter:  41
+iter:  42
+iter:  43
+iter:  44
+iter:  45
+iter:  46
+iter:  47
+iter:  48
+iter:  49
+Training process finished. Thank you for viewing!
+[[-74.13658487 -80.4537344   -5.44507075 ...   0.           0.
+    0.        ]
+ [-74.13658487 -80.4537344   -5.44507075 ...   0.           0.
+    0.        ]
+ [  0.           0.           0.         ...   0.           0.
+    0.        ]
+ ...
+ [  0.           0.           0.         ...   0.           0.
+    0.        ]
+ [  0.           0.           0.         ...   0.           0.
+    0.        ]
+ [  0.           0.           0.         ...   0.           0.
+    0.        ]]
