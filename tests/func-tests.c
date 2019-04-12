@@ -20,6 +20,19 @@ static void test_update_intercept_cyclic() {
 static void test_soft_threshold() {
 }
 static void test_read_x_csv() {
+	int n = 1000;
+	int p = 100;
+	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX.csv", n, p);
+	g_assert_true(xmatrix.actual_cols == 100);
+	g_assert_true(xmatrix.X[0][0] == 0);
+	g_assert_true(xmatrix.X[999][99] == 0);
+	g_assert_true(xmatrix.X[575][16] == 1);
+
+	int sum = 0;
+	for (int i = 0; i < p; i++) {
+		sum += xmatrix.X[321][i];
+	}
+	g_assert_true(sum == 8);
 }
 static void test_X2_from_X() {
 }
@@ -28,8 +41,8 @@ static void test_simple_coordinate_descent() {
 
 static void test_read_y_csv() {
 	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", N);
-	g_assert(Y[0] == -133.351709197933);
-	g_assert(Y[999] == -352.293608898344);
+	g_assert_true(Y[0] == -133.351709197933);
+	g_assert_true(Y[999] == -352.293608898344);
 }
 
 int main (int argc, char *argv[]) {
