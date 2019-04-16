@@ -1,6 +1,8 @@
 #include "lasso_lib.h"
 
 const static int NORMALISE_Y = 0;
+int skipped_updates = 0;
+int total_updates = 0;
 
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -159,7 +161,7 @@ double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, doubl
 	return dBMax;
 }
 
-double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
+double update_beta_cyclic(int **X, double *Y, double *X_col_totals, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
@@ -167,19 +169,24 @@ double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda, doubl
 
 	for (int i = 0; i < n; i++) {
 		sump = 0.0;
-		for (int j = 0; j < p; j++) {
-			// if j != k ?
-				//sump += X[i][j] * beta[j];
-			if (j != k)
-				sump += X[i][j]?beta[j]:0.0;
+		if (X[i][k] != 0) {
+			for (int j = 0; j < p; j++) {
+				if (j != k)
+					//sump += X[i][j]?beta[j]:0.0;
+					sump += X[i][j] * beta[j];
+			}
+			if (VERBOSE)
+				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
+			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
+			sumn += (Y[i] - intercept - sump)*(double)X[i][k];
+			if (VERBOSE)
+				printf("adding %f\n", X[i][k]?(Y[i] - intercept - sump):0.0);
+			//X_col_totals[k] = sump + X[i][k]?beta[k]:0.0;
+		} else {
+			skipped_updates++;
 		}
-		if (VERBOSE)
-			printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
-		//sumn += (Y[i] - sump)*(double)X[i][k];
-		sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
-		if (VERBOSE)
-			printf("adding %f\n", X[i][k]?(Y[i] - intercept - sump):0.0);
 		sumk += X[i][k] * X[i][k];
+		total_updates++;
 	}
 	if (VERBOSE)
 		printf("sumn: %f\n", sumn);
@@ -286,6 +293,9 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	//TODO: free
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
+	double *X_col_totals = malloc(p*sizeof(double));
+	for (int i = 0; i < p; i++)
+		X_col_totals[i] = -INFINITY;
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
@@ -322,7 +332,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		for (int k = 0; k < p; k++) {
 			// update the predictor \Beta_k
 			//dBMax = update_beta_greedy_l1(X, Y, n, p, lambda, beta, k, dBMax);
-			dBMax = update_beta_cyclic(X, Y, n, p, lambda, beta, k, dBMax, intercept);
+			dBMax = update_beta_cyclic(X, Y, X_col_totals, n, p, lambda, beta, k, dBMax, intercept);
 		}
 		// caculate cumulative error after update
 		for (int row = 0; row < n; row++) {
@@ -346,6 +356,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		printf("done iteration %d\n", iter);
 	}
 
+	printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
 	return beta;
 }
 
