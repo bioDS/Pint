@@ -1,5 +1,6 @@
 #include <glib.h>
 #include "../src/lasso_lib.h"
+#include <locale.h>
 
 /* int **X2_from_X(int **X, int n, int p); */
 /* double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method); */
@@ -11,32 +12,67 @@
 /* double *read_y_csv(char *fn, int n); */
 /* XMatrix read_x_csv(char *fn, int n, int p); */
 
+typedef struct {
+	int n;
+	int p;
+	XMatrix xmatrix;
+	int **X;
+	double *Y;
+	double *X_col_totals;
+	double lambda;
+	double *beta;
+	int k;
+	double dBMax;
+	double intercept;
+} UpdateFixture;
 
 static void test_update_beta_greedy_l1() {
+	printf("not implemented yet\n");
 }
 
 static void test_update_intercept_cyclic() {
-	int n = 1000;
-	int p = 35;
-	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	int **X = xmatrix.X;
-	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
-	double lambda = 6.46;
-	double *beta = malloc(p*sizeof(double));
-	memset(beta, 0, p*sizeof(double));
-	int k = 27;
-	double dBMax = 0;
-	double intercept = 0;
-
-	printf("beta[27]: %f\n", beta[27]);
-	update_beta_cyclic(X, Y, n, p, lambda, beta, k, dBMax, intercept);
-	printf("beta[27]: %f\n", beta[27]);
-	g_assert_true(beta[27] != 0.0);
-	g_assert_true(beta[27] < -263.94);
-	g_assert_true(beta[27] > -263.941);
+	printf("not implemented yet\n");
 }
 
+static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer user_data) {
+	fixture->n = 1000;
+	fixture->p = 35;
+	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	fixture->X = fixture->xmatrix.X;
+	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
+	fixture->X_col_totals = malloc(fixture->p*sizeof(double));
+	fixture->lambda = 6.46;
+	fixture->beta = malloc(fixture->p*sizeof(double));
+	memset(fixture->beta, 0, fixture->p*sizeof(double));
+	fixture->k = 27;
+	fixture->dBMax = 0;
+	fixture->intercept = 0;
+
+	for (int i = 0; i < fixture->p; i++)
+		fixture->X_col_totals[i] = -INFINITY;
+}
+
+static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
+	for (int i = 0; i < fixture->n; i++) {
+		free(fixture->xmatrix.X[i]);
+	}
+	free(fixture->Y);
+	free(fixture->X_col_totals);
+	free(fixture->beta);
+}
+
+static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
+	printf("beta[27]: %f\n", fixture->beta[27]);
+	update_beta_cyclic(fixture->X, fixture->Y, fixture->X_col_totals, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept);
+	printf("beta[27]: %f\n", fixture->beta[27]);
+	g_assert_true(fixture->beta[27] != 0.0);
+	g_assert_true(fixture->beta[27] < -263.94);
+	g_assert_true(fixture->beta[27] > -263.941);
+}
+
+
 static void test_soft_threshold() {
+	printf("not implemented yet\n");
 }
 
 static void test_read_x_csv() {
@@ -54,7 +90,9 @@ static void test_read_x_csv() {
 	}
 	g_assert_true(sum == 8);
 }
+
 static void test_X2_from_X() {
+	printf("not implemented yet\n");
 }
 
 static void test_simple_coordinate_descent() {
@@ -83,18 +121,21 @@ static void test_simple_coordinate_descent() {
 
 // will fail if Y has been normalised
 static void test_read_y_csv() {
-	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", N);
+	int n = 1000;
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
 	g_assert_true(Y[0] == -133.351709197933);
 	g_assert_true(Y[999] == -352.293608898344);
 }
 
 int main (int argc, char *argv[]) {
+	setlocale (LC_ALL, "");
 	g_test_init (&argc, &argv, NULL);
 
 	g_test_add_func("/func/test-read-y-csv", test_read_y_csv);
 	g_test_add_func("/func/test-read-x-csv", test_read_x_csv);
 	g_test_add_func("/func/test-soft-threshol", test_soft_threshold);
-	g_test_add_func("/func/test-update-beta-cyclic", test_update_intercept_cyclic);
+	//g_test_add_func("/func/test-update-beta-cyclic", test_update_beta_cyclic);
+	g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL, update_beta_fixture_set_up, test_update_beta_cyclic, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-update-intercept-cyclic", test_update_intercept_cyclic);
 	g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
 	g_test_add_func("/func/test-simple-coordinate-descent-lasso", test_simple_coordinate_descent);
