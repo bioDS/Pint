@@ -163,6 +163,7 @@ double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, doubl
 
 // separated to make profiling easier.
 // TODO: this is taking most of the time, worth avoiding.
+//		- has not been adjusted for on the fly X2.
 double get_sump(int p, int k, int i, double *beta, int **X) {
 	double sump = 0;
 	for (int j = 0; j < p; j++) {
@@ -173,11 +174,38 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 	return sump;
 }
 
-double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
+struct int_pair {
+	int i; int j;
+};
+
+//TODO: this takes far too long.
+struct int_pair get_num(int num, int p) {
+	int offset = 0;
+	struct int_pair ip;
+	ip.i = -1;
+	ip.j = -1;
+	for (int i = 0; i < p; i++) {
+		for (int j = i; j < p; j++) {
+			if (offset == num) {
+				ip.i = i;
+				ip.j = j;
+				return ip;
+			}
+			offset++;
+		}
+	}
+	return ip;
+}
+
+double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
 	double sump;
+	struct int_pair ip;
+	if (k >= p) {
+		ip = get_num(k, p);
+	}
 
 	for (int i = 0; i < n; i++) {
 		sump = 0.0;
@@ -188,7 +216,14 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
 		if (X[i][k] != 0) {
 			//sump = get_sump(p, k, i, beta, X);
-			sump = rowsum[i] - X[i][k]*beta[k];
+			if (k < p)
+				sump = rowsum[i] - X[i][k]*beta[k];
+			else {
+				// TODO: what if X is not binary?
+				if (X[i][ip.i] != 0 && X[i][ip.j] != 0) {
+					sump = rowsum[i] - beta[k];
+				}
+			}
 			if (VERBOSE)
 				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
@@ -199,7 +234,11 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		} else {
 			skipped_updates++;
 		}
-		sumk += X[i][k] * X[i][k];
+		if (k < p)
+			sumk += X[i][k] * X[i][k];
+		else
+			if (X[i][ip.i] != 0 && X[i][ip.j] != 0)
+				sumk++;
 		total_updates++;
 	}
 	if (VERBOSE)
@@ -227,7 +266,13 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	for (int i = 0; i < n; i++) {
-		rowsum[i] += Bk_diff * X[i][k];
+		if (k < p)
+			rowsum[i] += Bk_diff * X[i][k];
+		else {
+			//TODO: again, non-binary?
+			if (X[i][ip.i] != 0 && X[i][ip.j] != 0)
+				rowsum[i] += Bk_diff;
+		}
 	}
 
 
@@ -305,12 +350,13 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * not want.
  * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter) {
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
 			// TODO: update x_i in the direction -(dF(x)/de_i / B)
 	//TODO: free
+	int p_int = p*p/2 + p/2;
 	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
 	memset(beta, 0, p*sizeof(double));
 	double *X_col_totals = malloc(p*sizeof(double));
@@ -354,21 +400,38 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
 
-		for (int k = 0; k < p; k++) {
-			// update the predictor \Beta_k
-			//dBMax = update_beta_greedy_l1(X, Y, n, p, lambda, beta, k, dBMax);
-			dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept);
-		}
-		// caculate cumulative error after update
-		for (int row = 0; row < n; row++) {
-			double sum = 0;
+		if (USE_INT == 0)
 			for (int k = 0; k < p; k++) {
-				sum += X[row][k]*beta[k];
+				// update the predictor \Beta_k
+				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT);
 			}
-			double e_diff = Y[row] - intercept - sum;
-			e_diff *= e_diff;
-			error += e_diff;
-		}
+		else
+			for (int k = 0; k < p_int; k++) {
+				// update the predictor \Beta_k
+				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT);
+			}
+
+		// caculate cumulative error after update
+		if (USE_INT == 0)
+			for (int row = 0; row < n; row++) {
+				double sum = 0;
+				for (int k = 0; k < p; k++) {
+					sum += X[row][k]*beta[k];
+				}
+				double e_diff = Y[row] - intercept - sum;
+				e_diff *= e_diff;
+				error += e_diff;
+			}
+		else
+			for (int row = 0; row < n; row++) {
+				double sum = 0;
+				for (int k = 0; k < p; k++) {
+					sum += X[row][k]*beta[k];
+				}
+				double e_diff = Y[row] - intercept - sum;
+				e_diff *= e_diff;
+				error += e_diff;
+			}
 		error /= n;
 		printf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
 		// Be sure to clean up anything extra we allocate

@@ -63,7 +63,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
-	update_beta_cyclic(fixture->X, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept);
+	update_beta_cyclic(fixture->X, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, 0);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
@@ -109,7 +109,7 @@ static void test_simple_coordinate_descent() {
 	double dBMax = 0;
 	double intercept = 0;
 
-	beta = simple_coordinate_descent_lasso(X, Y, n, p, lambda, "cyclic", 10);
+	beta = simple_coordinate_descent_lasso(X, Y, n, p, lambda, "cyclic", 10, 0);
 
 	double acceptable_diff = 0.0001;
 	for (int i = 0; i < p; i++) {

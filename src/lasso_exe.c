@@ -58,14 +58,14 @@ int main(int argc, char** argv) {
 
 	int **X2;
 	int nbeta;
-	if (USE_INT) {
-		printf("converting to X2\n");
-		X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
-		nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols+1))/2;
-	} else {
+	//if (USE_INT) {
+	//	printf("converting to X2\n");
+	//	X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
+	//	nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols+1))/2;
+	//} else {
 		nbeta = xmatrix.actual_cols;
 		X2 = xmatrix.X;
-	}
+	//}
 	printf("using nbeta = %d\n", nbeta);
 
 	if (xmatrix.X == NULL) {
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda, method, 10);
+	double *beta = simple_coordinate_descent_lasso(X2, Y, N, nbeta, lambda, method, 10, USE_INT);
 	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
 	if (beta == NULL) {
 		fprintf(stderr, "failed to estimate beta values\n");
