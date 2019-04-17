@@ -161,7 +161,19 @@ double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, doubl
 	return dBMax;
 }
 
-double update_beta_cyclic(int **X, double *Y, double *X_col_totals, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
+// separated to make profiling easier.
+// TODO: this is taking most of the time, worth avoiding.
+double get_sump(int p, int k, int i, double *beta, int **X) {
+	double sump = 0;
+	for (int j = 0; j < p; j++) {
+		if (j != k)
+			//sump += X[i][j]?beta[j]:0.0;
+			sump += X[i][j] * beta[j];
+	}
+	return sump;
+}
+
+double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
@@ -169,12 +181,14 @@ double update_beta_cyclic(int **X, double *Y, double *X_col_totals, int n, int p
 
 	for (int i = 0; i < n; i++) {
 		sump = 0.0;
+		// TODO: avoid unnecessary calculations for large lambda.
+		// e.g. store current_row_count[1..n], sum_largest_betas[1..largest_row_count].
+		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
+		//	surely the required row size could be calculated instead.
+		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
 		if (X[i][k] != 0) {
-			for (int j = 0; j < p; j++) {
-				if (j != k)
-					//sump += X[i][j]?beta[j]:0.0;
-					sump += X[i][j] * beta[j];
-			}
+			//sump = get_sump(p, k, i, beta, X);
+			sump = rowsum[i] - X[i][k]*beta[k];
 			if (VERBOSE)
 				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
@@ -210,7 +224,13 @@ double update_beta_cyclic(int **X, double *Y, double *X_col_totals, int n, int p
 		//	//	fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
 		//}
 	}
-	Bk_diff = fabs(beta[k] - Bk_diff);
+	Bk_diff = beta[k] - Bk_diff;
+	// update every rowsum[i] w/ effects of beta change.
+	for (int i = 0; i < n; i++) {
+		rowsum[i] += Bk_diff * X[i][k];
+	}
+
+
 	Bk_diff *= Bk_diff;
 	if (Bk_diff > dBMax)
 		dBMax = Bk_diff;
@@ -319,6 +339,11 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		return NULL;
 	}
 
+	// initially every value will be 0, since all betas are 0.
+	double rowsum[n];
+	for (int row = 0; row < n; row++)
+		rowsum[row] = 0.0;
+
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
 		error = 0;
@@ -332,7 +357,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		for (int k = 0; k < p; k++) {
 			// update the predictor \Beta_k
 			//dBMax = update_beta_greedy_l1(X, Y, n, p, lambda, beta, k, dBMax);
-			dBMax = update_beta_cyclic(X, Y, X_col_totals, n, p, lambda, beta, k, dBMax, intercept);
+			dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept);
 		}
 		// caculate cumulative error after update
 		for (int row = 0; row < n; row++) {

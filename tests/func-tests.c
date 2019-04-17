@@ -18,7 +18,7 @@ typedef struct {
 	XMatrix xmatrix;
 	int **X;
 	double *Y;
-	double *X_col_totals;
+	double *rowsum;
 	double lambda;
 	double *beta;
 	int k;
@@ -40,7 +40,7 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
-	fixture->X_col_totals = malloc(fixture->p*sizeof(double));
+	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 6.46;
 	fixture->beta = malloc(fixture->p*sizeof(double));
 	memset(fixture->beta, 0, fixture->p*sizeof(double));
@@ -49,7 +49,7 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 	fixture->intercept = 0;
 
 	for (int i = 0; i < fixture->p; i++)
-		fixture->X_col_totals[i] = -INFINITY;
+		fixture->rowsum[i] = 0;
 }
 
 static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
@@ -57,13 +57,13 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 		free(fixture->xmatrix.X[i]);
 	}
 	free(fixture->Y);
-	free(fixture->X_col_totals);
+	free(fixture->rowsum);
 	free(fixture->beta);
 }
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
-	update_beta_cyclic(fixture->X, fixture->Y, fixture->X_col_totals, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept);
+	update_beta_cyclic(fixture->X, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
