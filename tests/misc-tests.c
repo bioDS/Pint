@@ -11,7 +11,7 @@ static void test_always_fails() {
 
 // will fail if Y has been normalised
 static void test_can_read_Y() {
-	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", N);
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", 1000);
 	g_assert(Y[0] == -133.351709197933);
 	g_assert(Y[999] == -352.293608898344);
 }

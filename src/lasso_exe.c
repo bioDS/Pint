@@ -2,8 +2,8 @@
 #include "lasso_lib.h"
 
 int main(int argc, char** argv) {
-	if (argc != 6 && argc != 7) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [optional: lambda]\n");
+	if (argc != 9) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [lambda] N P\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -26,13 +26,14 @@ int main(int argc, char** argv) {
 
 	double lambda;
 
-	if (argc == 7) {
-		if ((lambda = strtod(argv[6], NULL)) == 0)
-			lambda = 3.604;
-	}
+	if ((lambda = strtod(argv[6], NULL)) == 0)
+		lambda = 3.604;
 	printf("using lambda = %f\n", lambda);
 
 
+	int N = atoi(argv[7]);
+	int P = atoi(argv[8]);
+	printf("using N = %d, P = %d\n", N, P);
 
 	gsl_vector *v = gsl_vector_alloc(3);
 	gsl_vector *w = gsl_vector_alloc(3);
