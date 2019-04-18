@@ -398,8 +398,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 
 	// initially every value will be 0, since all betas are 0.
 	double rowsum[n];
-	for (int row = 0; row < n; row++)
-		rowsum[row] = 0.0;
+	memset(rowsum, 0, n*sizeof(double));
 
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
