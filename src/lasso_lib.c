@@ -382,7 +382,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	double *beta;
 	if (USE_INT) {
 		beta = malloc(p_int*sizeof(double)); // probably too big in most cases.
-		memset(beta, 0, p*sizeof(double));
+		memset(beta, 0, p_int*sizeof(double));
 	}
 	else {
 		beta = malloc(p*sizeof(double)); // probably too big in most cases.
