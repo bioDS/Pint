@@ -32,6 +32,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 		while (buf[i] != '\n' && i < line_size) {
 			if (buf[i] == ',')
 				{i++; continue;}
+			//printf("setting X[%d][%d] to %c\n", row, col, buf[i]);
 			if (buf[i] == '0')
 				X[row][col] = 0;
 			else if (buf[i] == '1')
@@ -200,13 +201,15 @@ struct int_pair get_num(int num, int p) {
 	return ip;
 }
 
+// N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
+// That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
 	double sump;
 	struct int_pair ip;
-	if (k >= p) {
+	if (USE_INT) {
 		ip = get_num(k, p);
 		if (VERBOSE)
 			printf("using interaction %d,%d (k: %d)\n", ip.i, ip.j, k);
@@ -222,7 +225,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
 		//	surely the required row size could be calculated instead.
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
-		if ((k < p && X[i][k] != 0) || (k >=p && X[i][ip.i] != 0 && X[i][ip.j] != 0)) {
+		if ((!USE_INT && X[i][k] != 0) || (USE_INT && X[i][ip.i] != 0 && X[i][ip.j] != 0)) {
 			//sump = get_sump(p, k, i, beta, X);
 			if (k < p)
 				sump = rowsum[i] - X[i][k]*beta[k];
@@ -249,7 +252,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		} else {
 			skipped_updates++;
 		}
-		if (k < p)
+		if (!USE_INT)
 			sumk += X[i][k] * X[i][k];
 		else
 			if (X[i][ip.i] != 0 && X[i][ip.j] != 0)
@@ -258,6 +261,8 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	}
 	if (VERBOSE)
 		printf("sumn: %f\n", sumn);
+	if (VERBOSE)
+		printf("sumk: %f\n", sumk);
 	derivative = -sumn;
 
 	// TODO: This is probably slower than necessary.
@@ -281,7 +286,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	for (int i = 0; i < n; i++) {
-		if (k < p)
+		if (!USE_INT)
 			rowsum[i] += Bk_diff * X[i][k];
 		else {
 			//TODO: again, non-binary?
