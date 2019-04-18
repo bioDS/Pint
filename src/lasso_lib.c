@@ -181,6 +181,7 @@ struct int_pair {
 };
 
 //TODO: this takes far too long.
+//	-could we store one row (of essentially these) instead?
 struct int_pair get_num(int num, int p) {
 	int offset = 0;
 	struct int_pair ip;
