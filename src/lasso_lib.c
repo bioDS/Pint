@@ -4,6 +4,8 @@ const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
 int total_updates = 0;
 
+static int VERBOSE = 0;
+
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
@@ -205,6 +207,11 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	struct int_pair ip;
 	if (k >= p) {
 		ip = get_num(k, p);
+		if (VERBOSE)
+			printf("using interaction %d,%d (k: %d)\n", ip.i, ip.j, k);
+	} else {
+		if (VERBOSE)
+			printf("using main effect %d\n", k);
 	}
 
 	for (int i = 0; i < n; i++) {
@@ -224,6 +231,8 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 					sump = rowsum[i] - beta[k];
 				}
 			}
+			if (VERBOSE)
+				printf("rowsum[%d]: %f\n", i, rowsum[i]);
 			if (VERBOSE)
 				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
@@ -350,7 +359,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * not want.
  * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT) {
+double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -362,6 +371,8 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	double *X_col_totals = malloc(p*sizeof(double));
 	for (int i = 0; i < p; i++)
 		X_col_totals[i] = -INFINITY;
+	VERBOSE = verbose;
+
 
 	double error = 0, prev_error;
 	double intercept = 0.0;

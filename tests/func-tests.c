@@ -109,7 +109,7 @@ static void test_simple_coordinate_descent() {
 	double dBMax = 0;
 	double intercept = 0;
 
-	beta = simple_coordinate_descent_lasso(X, Y, n, p, lambda, "cyclic", 10, 0);
+	beta = simple_coordinate_descent_lasso(X, Y, n, p, lambda, "cyclic", 10, 0, 0);
 
 	double acceptable_diff = 0.0001;
 	for (int i = 0; i < p; i++) {
