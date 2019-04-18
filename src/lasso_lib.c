@@ -177,15 +177,12 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 	return sump;
 }
 
-struct int_pair {
-	int i; int j;
-};
 
 //TODO: this takes far too long.
 //	-could we store one row (of essentially these) instead?
-struct int_pair get_num(int num, int p) {
+int_pair get_num(int num, int p) {
 	int offset = 0;
-	struct int_pair ip;
+	int_pair ip;
 	ip.i = -1;
 	ip.j = -1;
 	for (int i = 0; i < p; i++) {
@@ -203,14 +200,15 @@ struct int_pair get_num(int num, int p) {
 
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
-double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT) {
+double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
 	double sump;
-	struct int_pair ip;
+	int_pair ip;
 	if (USE_INT) {
-		ip = get_num(k, p);
+		//ip = get_num(k, p);
+		ip = precalc_get_num[k];
 		if (VERBOSE)
 			printf("using interaction %d,%d (k: %d)\n", ip.i, ip.j, k);
 	} else {
@@ -377,6 +375,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 			// TODO: update x_i in the direction -(dF(x)/de_i / B)
 	//TODO: free
 	VERBOSE = verbose;
+	int_pair *precalc_get_num;
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -387,6 +386,17 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	else {
 		beta = malloc(p*sizeof(double)); // probably too big in most cases.
 		memset(beta, 0, p*sizeof(double));
+	}
+	if (USE_INT) {
+		precalc_get_num = malloc(p_int*sizeof(int_pair));
+		int offset = 0;
+		for (int i = 0; i < p; i++) {
+			for (int j = i; j < p; j++) {
+				precalc_get_num[offset].i = i;
+				precalc_get_num[offset].j = j;
+				offset++;
+			}
+		}
 	}
 
 	double error = 0, prev_error;
@@ -428,12 +438,13 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		if (USE_INT == 0)
 			for (int k = 0; k < p; k++) {
 				// update the predictor \Beta_k
-				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT);
+				//TODO: NULL here seems somewhat unsafe.
+				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, NULL);
 			}
 		else
 			for (int k = 0; k < p_int; k++) {
 				// update the predictor \Beta_k
-				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT);
+				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 			}
 
 		// caculate cumulative error after update
@@ -473,6 +484,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p_int*n*max_iter, total_updates, (skipped_updates*100.0)/(p_int*n*max_iter));
 	else
 		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
+	free(precalc_get_num);
 	return beta;
 }
 
