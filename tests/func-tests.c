@@ -48,7 +48,7 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 	fixture->dBMax = 0;
 	fixture->intercept = 0;
 
-	for (int i = 0; i < fixture->p; i++)
+	for (int i = 0; i < fixture->n; i++)
 		fixture->rowsum[i] = 0;
 }
 
