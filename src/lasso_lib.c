@@ -10,6 +10,12 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(n*sizeof(int*));
+
+	// forces X[...] to be sequential. (and adds some segfaults).
+	//int *Xq = malloc(n*p*sizeof(int));
+	//for (int i = 0; i < n; i++)
+	//	X[i] = &Xq[p*i];
+
 	for (int i = 0; i < n; i++)
 		X[i] = malloc(p*sizeof(int));
 
