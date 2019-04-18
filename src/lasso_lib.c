@@ -222,7 +222,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
 		//	surely the required row size could be calculated instead.
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
-		if (X[i][k] != 0) {
+		if ((k < p && X[i][k] != 0) || (k >=p && X[i][ip.i] != 0 && X[i][ip.j] != 0)) {
 			//sump = get_sump(p, k, i, beta, X);
 			if (k < p)
 				sump = rowsum[i] - X[i][k]*beta[k];
@@ -237,7 +237,12 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 			if (VERBOSE)
 				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
-			sumn += (Y[i] - intercept - sump)*(double)X[i][k];
+			if (k < p)
+				sumn += (Y[i] - intercept - sump)*(double)X[i][k];
+			else
+				//TODO: assumes X is binary
+				if (X[i][ip.i] != 0 && X[i][ip.j] != 0)
+					sumn += Y[i] - intercept - sump;
 			if (VERBOSE)
 				printf("adding %f\n", X[i][k]?(Y[i] - intercept - sump):0.0);
 			//X_col_totals[k] = sump + X[i][k]?beta[k]:0.0;
@@ -366,14 +371,18 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 			// TODO: choose index i to update uniformly at random
 			// TODO: update x_i in the direction -(dF(x)/de_i / B)
 	//TODO: free
-	int p_int = p*p/2 + p/2;
-	double *beta = malloc(p*sizeof(double)); // probably too big in most cases.
-	memset(beta, 0, p*sizeof(double));
-	double *X_col_totals = malloc(p*sizeof(double));
-	for (int i = 0; i < p; i++)
-		X_col_totals[i] = -INFINITY;
 	VERBOSE = verbose;
 
+	int p_int = p*(p+1)/2;
+	double *beta;
+	if (USE_INT) {
+		beta = malloc(p_int*sizeof(double)); // probably too big in most cases.
+		memset(beta, 0, p*sizeof(double));
+	}
+	else {
+		beta = malloc(p*sizeof(double)); // probably too big in most cases.
+		memset(beta, 0, p*sizeof(double));
+	}
 
 	double error = 0, prev_error;
 	double intercept = 0.0;
@@ -455,7 +464,10 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 		printf("done iteration %d\n", iter);
 	}
 
-	printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
+	if (USE_INT)
+		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p_int*n*max_iter, total_updates, (skipped_updates*100.0)/(p_int*n*max_iter));
+	else
+		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
 	return beta;
 }
 
