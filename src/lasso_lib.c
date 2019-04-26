@@ -1,4 +1,7 @@
 #include "lasso_lib.h"
+#include <omp.h>
+
+#define NumCores 4
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -211,6 +214,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	double sumk = 0.0;
 	double sumn = 0.0;
 	double sump;
+	int pairwise_product = 0;
 	int_pair ip;
 	if (USE_INT) {
 		//ip = get_num(k, p);
@@ -222,6 +226,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 			printf("using main effect %d\n", k);
 	}
 
+	#pragma omp parallel for num_threads(1) private(sump) shared(X) reduction (+:sumn, sumk)
 	for (int i = 0; i < n; i++) {
 		sump = 0.0;
 		// TODO: avoid unnecessary calculations for large lambda.
@@ -229,7 +234,10 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
 		//	surely the required row size could be calculated instead.
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
-		if ((!USE_INT && X[k][i] != 0) || (USE_INT && X[ip.i][i] != 0 && X[ip.j][i] != 0)) {
+		// TODO; linked list to next non-zero row?
+		//		- or a column-major sparse format
+		pairwise_product = X[ip.i][i] * X[ip.j][i];
+		if (pairwise_product != 0) {
 			//sump = get_sump(p, k, i, beta, X);
 			if (k < p)
 				sump = rowsum[i] - X[k][i]*beta[k];
@@ -244,11 +252,11 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 			if (VERBOSE)
 				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
 			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
-			if (k < p)
+			if (!USE_INT)
 				sumn += (Y[i] - intercept - sump)*(double)X[k][i];
 			else
 				//TODO: assumes X is binary
-				if (X[ip.i][i] != 0 && X[ip.j][i] != 0)
+				if (pairwise_product != 0)
 					sumn += Y[i] - intercept - sump;
 			if (VERBOSE)
 				printf("adding %f\n", X[k][i]?(Y[i] - intercept - sump):0.0);
@@ -259,7 +267,7 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		if (!USE_INT)
 			sumk += X[k][i] * X[k][i];
 		else
-			if (X[ip.i][i] != 0 && X[ip.j][i] != 0)
+			if (pairwise_product != 0)
 				sumk++;
 		total_updates++;
 	}
@@ -383,6 +391,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	//TODO: free
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
+
 
 	int p_int = p*(p+1)/2;
 	double *beta;
