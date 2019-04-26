@@ -1,5 +1,6 @@
 #include "lasso_lib.h"
 #include <omp.h>
+#include <glib-2.0/glib.h>
 
 #define NumCores 4
 
@@ -13,6 +14,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(p*sizeof(int*));
+	gsl_spmatrix *X_sparse = gsl_spmatrix_alloc(n, p);
 
 	// forces X[...] to be sequential. (and adds some segfaults).
 	//int *Xq = malloc(n*p*sizeof(int));
@@ -42,10 +44,13 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 			if (buf[i] == ',')
 				{i++; continue;}
 			//printf("setting X[%d][%d] to %c\n", row, col, buf[i]);
-			if (buf[i] == '0')
+			if (buf[i] == '0') {
 				X[col][row] = 0;
-			else if (buf[i] == '1')
+			}
+			else if (buf[i] == '1') {
 				X[col][row] = 1;
+				gsl_spmatrix_set(X_sparse, row, col, 1);
+			}
 			else {
 				fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n", fn, row, col);
 				exit(0);
@@ -73,6 +78,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	free(buf);
 	XMatrix xmatrix;
 	xmatrix.X = X;
+	xmatrix.X_sparse = gsl_spmatrix_ccs(X_sparse);
 	xmatrix.actual_cols = actual_cols;
 	return xmatrix;
 }
@@ -209,13 +215,16 @@ int_pair get_num(int num, int p) {
 
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
-double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
 	double derivative = 0.0;
 	double sumk = 0.0;
 	double sumn = 0.0;
 	double sump;
+	int **X = xmatrix.X;
+	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 	int pairwise_product = 0;
 	int_pair ip;
+	USE_INT = 1;
 	if (USE_INT) {
 		//ip = get_num(k, p);
 		ip = precalc_get_num[k];
@@ -226,8 +235,9 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 			printf("using main effect %d\n", k);
 	}
 
+	int i, j, row;
 	#pragma omp parallel for num_threads(1) private(sump) shared(X) reduction (+:sumn, sumk)
-	for (int i = 0; i < n; i++) {
+	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 		sump = 0.0;
 		// TODO: avoid unnecessary calculations for large lambda.
 		// e.g. store current_row_count[1..n], sum_largest_betas[1..largest_row_count].
@@ -238,8 +248,12 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		//		- or a column-major sparse format
 		if (!USE_INT)
 			pairwise_product = X[k][i];
-		else
-			pairwise_product = X[ip.i][i] * X[ip.j][i];
+		else {
+			row = xmatrix_sparse.col_nz_indices[k][e];
+			i = row;
+			pairwise_product = 1;
+			//pairwise_product = X[ip.i][i] * X[ip.j][i];
+		}
 		if (pairwise_product != 0) {
 			//sump = get_sump(p, k, i, beta, X);
 			if (!USE_INT)
@@ -386,7 +400,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * not want.
  * TODO: add an intercept
  */
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -394,7 +408,10 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 	//TODO: free
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
+	int **X = xmatrix.X;
+	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, 1);
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -475,7 +492,8 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 			for (int k = 0; k < p; k++) {
 				// update the predictor \Beta_k
 				//TODO: NULL here seems somewhat unsafe.
-				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, NULL);
+				XMatrix_sparse empty_sparse_x2;
+				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, NULL);
 			}
 		else
 			for (int k = 0; k < p_int; k++) {
@@ -485,7 +503,7 @@ double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double
 				}
 
 				// update the predictor \Beta_k
-				dBMax = update_beta_cyclic(X, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 			}
 
 		// caculate cumulative error after update
@@ -539,6 +557,55 @@ int **X2_from_X(int **X, int n, int p) {
 			for (int j = i; j < p; j++) {
 				X2[row][offset++] = X[row][i] * X[row][j];
 			}
+		}
+	}
+	return X2;
+}
+
+
+// TODO: write a test comparing this to non-sparse X2
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
+	XMatrix_sparse X2;
+	GSList *current_col = NULL;
+	int colno, val, length;
+	int p_int = (p*(p+1))/2;
+
+	if (!USE_INT) {
+		X2.col_nz_indices = malloc(p*sizeof(int *));
+	} else
+		X2.col_nz_indices = malloc(p_int*sizeof(int *));
+	X2.col_nz = malloc(p*sizeof(int));
+
+	int offset = 0;
+	for (int i = 0; i < p; i++) {
+		for (int j = i; j < p; j++) {
+			if (!USE_INT && j != i)
+				continue;
+			colno = offset++;
+
+			for (int row = 0; row < n; row++) {
+				val = X[i][row] * X[j][row];
+				if (val == 1) {
+					printf("appending %d to col %d (%lx)\n", row, colno, current_col);
+					current_col = g_slist_prepend(current_col, (void*)(long)row);
+				}
+				else if (val != 0)
+					fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
+			}
+			length = g_slist_length(current_col);
+
+			X2.col_nz_indices[colno] = malloc(length*sizeof(int));
+			X2.col_nz[colno] = length;
+
+			GSList *current_col_ind = current_col;
+			int temp_counter = 0;
+			while(current_col_ind != NULL) {
+				X2.col_nz_indices[colno][temp_counter++] = (int)(long)current_col_ind->data;
+				current_col_ind = current_col_ind->next;
+			}
+
+			g_slist_free(current_col);
+			current_col = NULL;
 		}
 	}
 	return X2;

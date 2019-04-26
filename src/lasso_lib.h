@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <gsl/gsl_vector.h>
+#include <gsl/gsl_spmatrix.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -21,18 +22,25 @@ static int VERBOSE;
 
 typedef struct XMatrix {
 	int **X;
+	gsl_spmatrix *X_sparse;
 	int actual_cols;
 } XMatrix;
+
+typedef struct XMatrix_sparse {
+	int **col_nz_indices;
+	int *col_nz;
+} XMatrix_sparse;
 
 typedef struct {
 	int i; int j;
 } int_pair;
 
 int **X2_from_X(int **X, int n, int p);
-double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT);
+double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
-double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num);
+double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num);
 double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept);
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);

@@ -3,6 +3,7 @@ install_headers('lasso_lib.h')
 lasso_lib_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
+	dependency('glib-2.0'),
 ]
 
 lasso_lib = shared_library('lasso_lib', 'lasso_lib.c', 'lasso_lib.h',
