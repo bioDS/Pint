@@ -236,10 +236,13 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
 		// TODO; linked list to next non-zero row?
 		//		- or a column-major sparse format
-		pairwise_product = X[ip.i][i] * X[ip.j][i];
+		if (!USE_INT)
+			pairwise_product = X[k][i];
+		else
+			pairwise_product = X[ip.i][i] * X[ip.j][i];
 		if (pairwise_product != 0) {
 			//sump = get_sump(p, k, i, beta, X);
-			if (k < p)
+			if (!USE_INT)
 				sump = rowsum[i] - X[k][i]*beta[k];
 			else {
 				// TODO: what if X is not binary?
