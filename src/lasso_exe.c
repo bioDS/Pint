@@ -53,7 +53,8 @@ int main(int argc, char** argv) {
 
 
 	// testing: wip
-	XMatrix xmatrix = read_x_csv(argv[1], N, P);
+	//XMatrix xmatrix = read_x_csv(argv[1], N, P);
+	XMatrix xmatrix = read_x_column_major(argv[1], N, P);
 	double *Y = read_y_csv(argv[2], N);
 
 	int **X2;
