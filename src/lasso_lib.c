@@ -6,7 +6,7 @@ int total_updates = 0;
 
 static int VERBOSE = 0;
 
-XMatrix read_x_column_major(char *fn, int n, int p) {
+XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(p*sizeof(int*));
@@ -43,74 +43,6 @@ XMatrix read_x_column_major(char *fn, int n, int p) {
 				X[col][row] = 0;
 			else if (buf[i] == '1')
 				X[col][row] = 1;
-			else {
-				fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n", fn, row, col);
-				exit(0);
-			}
-			i++;
-			if (++col >= p)
-				break;
-		}
-		if (buf[i] != '\n')
-			fprintf(stderr, "reached end of file without a newline\n");
-		if (col < actual_cols)
-			actual_cols = col;
-		col = 0;
-		if (++row >= n)
-			break;
-	}
-	if (readline_result == -1)
-		fprintf(stderr, "failed to read line, errno %d\n", errno);
-
-	if (actual_cols < p) {
-		printf("number of columns < p, should p have been %d?\n", actual_cols);
-		p = actual_cols;
-	}
-	printf("read %dx%d, freeing stuff\n", row, actual_cols);
-	free(buf);
-	XMatrix xmatrix;
-	xmatrix.X = X;
-	xmatrix.actual_cols = actual_cols;
-	return xmatrix;
-}
-
-XMatrix read_x_csv(char *fn, int n, int p) {
-	char *buf = NULL;
-	size_t line_size = 0;
-	int **X = malloc(n*sizeof(int*));
-
-	// forces X[...] to be sequential. (and adds some segfaults).
-	//int *Xq = malloc(n*p*sizeof(int));
-	//for (int i = 0; i < n; i++)
-	//	X[i] = &Xq[p*i];
-
-	for (int i = 0; i < n; i++)
-		X[i] = malloc(p*sizeof(int));
-
-	printf("reading X from: \"%s\"\n", fn);
-
-	FILE *fp = fopen(fn, "r");
-	if (fp == NULL) {
-		perror("opening failed");
-	}
-
-	int col = 0, row = 0, actual_cols = p;
-	int readline_result = 0;
-	while((readline_result = getline(&buf, &line_size, fp)) > 0) {
-		// remove name from beginning (for the moment)
-		int i = 1;
-		while (buf[i] != '"')
-			i++;
-		i++;
-		// read to the end of the line
-		while (buf[i] != '\n' && i < line_size) {
-			if (buf[i] == ',')
-				{i++; continue;}
-			//printf("setting X[%d][%d] to %c\n", row, col, buf[i]);
-			if (buf[i] == '0')
-				X[row][col] = 0;
-			else if (buf[i] == '1')
-				X[row][col] = 1;
 			else {
 				fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n", fn, row, col);
 				exit(0);
@@ -297,7 +229,6 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
 		//	surely the required row size could be calculated instead.
 		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
-		// TODO: store columns, not rows, read entire column [..][ip.i], [..][ip.j] instead of this:
 		if ((!USE_INT && X[k][i] != 0) || (USE_INT && X[ip.i][i] != 0 && X[ip.j][i] != 0)) {
 			//sump = get_sump(p, k, i, beta, X);
 			if (k < p)
