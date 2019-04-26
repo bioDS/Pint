@@ -55,7 +55,7 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 }
 
 static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
-	for (int i = 0; i < fixture->n; i++) {
+	for (int i = 0; i < fixture->p; i++) {
 		free(fixture->xmatrix.X[i]);
 	}
 	free(fixture->Y);
@@ -83,12 +83,12 @@ static void test_read_x_csv() {
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX.csv", n, p);
 	g_assert_true(xmatrix.actual_cols == 100);
 	g_assert_true(xmatrix.X[0][0] == 0);
-	g_assert_true(xmatrix.X[999][99] == 0);
-	g_assert_true(xmatrix.X[575][16] == 1);
+	g_assert_true(xmatrix.X[99][999] == 0);
+	g_assert_true(xmatrix.X[16][575] == 1);
 
 	int sum = 0;
 	for (int i = 0; i < p; i++) {
-		sum += xmatrix.X[321][i];
+		sum += xmatrix.X[i][321];
 	}
 	g_assert_true(sum == 8);
 }
