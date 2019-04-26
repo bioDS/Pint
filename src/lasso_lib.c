@@ -289,15 +289,16 @@ double update_beta_cyclic(int **X, double *Y, double *rowsum, int n, int p, doub
 	}
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
-	for (int i = 0; i < n; i++) {
-		if (!USE_INT)
-			rowsum[i] += Bk_diff * X[k][i];
-		else {
-			//TODO: again, non-binary?
-			if (X[ip.i][i] != 0 && X[ip.j][i] != 0)
-				rowsum[i] += Bk_diff;
+	if (Bk_diff != 0)
+		for (int i = 0; i < n; i++) {
+			if (!USE_INT)
+				rowsum[i] += Bk_diff * X[k][i];
+			else {
+				//TODO: again, non-binary?
+				if (X[ip.i][i] != 0 && X[ip.j][i] != 0)
+					rowsum[i] += Bk_diff;
+			}
 		}
-	}
 
 
 	Bk_diff *= Bk_diff;
