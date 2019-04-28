@@ -572,9 +572,11 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 
 	if (!USE_INT) {
 		X2.col_nz_indices = malloc(p*sizeof(int *));
-	} else
+		X2.col_nz = malloc(p*sizeof(int));
+	} else {
 		X2.col_nz_indices = malloc(p_int*sizeof(int *));
-	X2.col_nz = malloc(p*sizeof(int));
+		X2.col_nz = malloc(p_int*sizeof(int));
+	}
 
 	int offset = 0;
 	for (int i = 0; i < p; i++) {
