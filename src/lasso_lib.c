@@ -411,6 +411,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
+	printf("calculating sparse interaction matrix\n");
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, 1);
 
 	int p_int = p*(p+1)/2;
@@ -588,7 +589,6 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 			for (int row = 0; row < n; row++) {
 				val = X[i][row] * X[j][row];
 				if (val == 1) {
-					printf("appending %d to col %d (%lx)\n", row, colno, current_col);
 					current_col = g_slist_prepend(current_col, (void*)(long)row);
 				}
 				else if (val != 0)
