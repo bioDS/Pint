@@ -584,32 +584,33 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	int offset = 0;
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
-			if (!USE_INT && j != i)
-				continue;
-			colno = offset++;
+			// only include main effects (where i==j) unless USE_INT is set.
+			if (USE_INT || j == i) {
+				colno = offset++;
 
-			for (int row = 0; row < n; row++) {
-				val = X[i][row] * X[j][row];
-				if (val == 1) {
-					current_col = g_slist_prepend(current_col, (void*)(long)row);
+				for (int row = 0; row < n; row++) {
+					val = X[i][row] * X[j][row];
+					if (val == 1) {
+						current_col = g_slist_prepend(current_col, (void*)(long)row);
+					}
+					else if (val != 0)
+						fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
 				}
-				else if (val != 0)
-					fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
+				length = g_slist_length(current_col);
+
+				X2.col_nz_indices[colno] = malloc(length*sizeof(int));
+				X2.col_nz[colno] = length;
+
+				GSList *current_col_ind = current_col;
+				int temp_counter = 0;
+				while(current_col_ind != NULL) {
+					X2.col_nz_indices[colno][temp_counter++] = (int)(long)current_col_ind->data;
+					current_col_ind = current_col_ind->next;
+				}
+
+				g_slist_free(current_col);
+				current_col = NULL;
 			}
-			length = g_slist_length(current_col);
-
-			X2.col_nz_indices[colno] = malloc(length*sizeof(int));
-			X2.col_nz[colno] = length;
-
-			GSList *current_col_ind = current_col;
-			int temp_counter = 0;
-			while(current_col_ind != NULL) {
-				X2.col_nz_indices[colno][temp_counter++] = (int)(long)current_col_ind->data;
-				current_col_ind = current_col_ind->next;
-			}
-
-			g_slist_free(current_col);
-			current_col = NULL;
 		}
 	}
 	return X2;
