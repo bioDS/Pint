@@ -224,7 +224,6 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 	int pairwise_product = 0;
 	int_pair ip;
-	USE_INT = 1;
 	if (USE_INT) {
 		//ip = get_num(k, p);
 		ip = precalc_get_num[k];
@@ -233,7 +232,11 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	} else {
 		if (VERBOSE)
 			printf("using main effect %d\n", k);
+		ip.i = k;
+		ip.j = k;
 	}
+	// From here on things should behave the same (this is set mostly for testing)
+	USE_INT = 1;
 
 	int i, j, row;
 	#pragma omp parallel for num_threads(1) private(sump) shared(X) reduction (+:sumn, sumk)
@@ -412,7 +415,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
 	printf("calculating sparse interaction matrix\n");
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, 1);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT);
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -489,13 +492,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
 
-		if (USE_INT == 0)
+		if (USE_INT == 0) {
+			// update the predictor \Beta_k
 			for (int k = 0; k < p; k++) {
-				// update the predictor \Beta_k
-				//TODO: NULL here seems somewhat unsafe.
-				XMatrix_sparse empty_sparse_x2;
-				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, NULL);
+				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 			}
+		}
 		else
 			for (int k = 0; k < p_int; k++) {
 				if (k % (p_int/100) == 0) {
