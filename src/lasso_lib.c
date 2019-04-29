@@ -569,7 +569,6 @@ int **X2_from_X(int **X, int n, int p) {
 // TODO: write a test comparing this to non-sparse X2
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	XMatrix_sparse X2;
-	GSList *current_col = NULL;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
 
@@ -581,12 +580,17 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 		X2.col_nz = malloc(p_int*sizeof(int));
 	}
 
-	int offset = 0;
+	#pragma omp parallel for shared(X2, X ) private(length, val, colno)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
+			GSList *current_col = NULL;
 			// only include main effects (where i==j) unless USE_INT is set.
 			if (USE_INT || j == i) {
-				colno = offset++;
+				if (USE_INT)
+					// worked out by hand as being equivalent to the offset we would have reached.
+					colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
+				else
+					colno = i;
 
 				for (int row = 0; row < n; row++) {
 					val = X[i][row] * X[j][row];
