@@ -219,7 +219,7 @@ int_pair get_num(int num, int p) {
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
 	double derivative = 0.0;
-	double sumk = 0.0;
+	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	double sump;
 	int **X = xmatrix.X;
@@ -247,9 +247,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		i = xmatrix_sparse.col_nz_indices[k][e];
 		// TODO: assumes X is binary
 		sumn += Y[i] - intercept - rowsum[i];
-		sumk++;
-		total_updates++;
 	}
+	total_updates += xmatrix_sparse.col_nz[k];
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -261,11 +260,9 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	if (Bk_diff != 0) {
-		#pragma omp parallel for shared(rowsum, X)
-		for (int i = 0; i < n; i++) {
-			//TODO: again, non-binary?
-			if (X[ip.i][i] * X[ip.j][i] != 0)
-				rowsum[i] += Bk_diff;
+		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+			i = xmatrix_sparse.col_nz_indices[k][e];
+			rowsum[i] += Bk_diff;
 		}
 	} else {
 		zero_updates += xmatrix_sparse.col_nz[k];
