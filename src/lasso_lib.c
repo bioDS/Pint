@@ -9,6 +9,7 @@ int skipped_updates = 0;
 int total_updates = 0;
 
 static int VERBOSE = 0;
+static int zero_updates = 0;
 
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -139,9 +140,10 @@ double *read_y_csv(char *fn, int n) {
 
 // n.b.: for glmnet gamma should be lambda * [alpha=1] = lambda
 double soft_threshold(double z, double gamma) {
-	if (fabs(z) < gamma)
+	double abs = fabs(z);
+	if (abs < gamma)
 		return 0.0;
-	double val = fabs(z) - gamma;
+	double val = abs - gamma;
 	if (signbit(z))
 		return -val;
 	else
@@ -218,7 +220,7 @@ int_pair get_num(int num, int p) {
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
 	double derivative = 0.0;
 	double sumk = 0.0;
-	double sumn = 0.0;
+	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	double sump;
 	int **X = xmatrix.X;
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
@@ -239,63 +241,15 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	USE_INT = 1;
 
 	int i, j, row;
-	#pragma omp parallel for num_threads(1) private(sump) shared(X) reduction (+:sumn, sumk)
+	//#pragma omp parallel for num_threads(1) private(i) shared(X, Y, xmatrix_sparse, rowsum) reduction (+:sumn, sumk, total_updates)
 	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-		sump = 0.0;
 		// TODO: avoid unnecessary calculations for large lambda.
-		// e.g. store current_row_count[1..n], sum_largest_betas[1..largest_row_count].
-		// - would prevent updating sufficiently small rows only, since we don't know which betas matter.
-		//	surely the required row size could be calculated instead.
-		// e.g.2. store each row's sum(beta_i*x[row][i]), sump = total - (current k).
-		// TODO; linked list to next non-zero row?
-		//		- or a column-major sparse format
-		if (!USE_INT)
-			pairwise_product = X[k][i];
-		else {
-			row = xmatrix_sparse.col_nz_indices[k][e];
-			i = row;
-			pairwise_product = 1;
-			//pairwise_product = X[ip.i][i] * X[ip.j][i];
-		}
-		if (pairwise_product != 0) {
-			//sump = get_sump(p, k, i, beta, X);
-			if (!USE_INT)
-				sump = rowsum[i] - X[k][i]*beta[k];
-			else {
-				// TODO: what if X is not binary?
-				if (X[ip.i][i] != 0 && X[ip.j][i] != 0) {
-					sump = rowsum[i] - beta[k];
-				}
-			}
-			if (VERBOSE)
-				printf("rowsum[%d]: %f\n", i, rowsum[i]);
-			if (VERBOSE)
-				printf("sump: %f, Y[%d]: %f, intercept: %f\n", sump, i, Y[i], intercept);
-			//sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
-			if (!USE_INT)
-				sumn += (Y[i] - intercept - sump)*(double)X[k][i];
-			else
-				//TODO: assumes X is binary
-				if (pairwise_product != 0)
-					sumn += Y[i] - intercept - sump;
-			if (VERBOSE)
-				printf("adding %f\n", X[k][i]?(Y[i] - intercept - sump):0.0);
-			//X_col_totals[k] = sump + X[i][k]?beta[k]:0.0;
-		} else {
-			skipped_updates++;
-		}
-		if (!USE_INT)
-			sumk += X[k][i] * X[k][i];
-		else
-			if (pairwise_product != 0)
-				sumk++;
+		i = xmatrix_sparse.col_nz_indices[k][e];
+		// TODO: assumes X is binary
+		sumn += Y[i] - intercept - rowsum[i];
+		sumk++;
 		total_updates++;
 	}
-	if (VERBOSE)
-		printf("sumn: %f\n", sumn);
-	if (VERBOSE)
-		printf("sumk: %f\n", sumk);
-	derivative = -sumn;
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -303,30 +257,19 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		beta[k] = 0.0;
 	} else {
 		beta[k] = soft_threshold(sumn, lambda*n/2)/sumk;
-		//double Bkn = fmin(0.0, -(derivative + lambda)/(sumk));
-		//double Bkp = fmax(0.0, -(derivative - lambda)/(sumk));
-		//if (Bkn < 0.0)
-		//	beta[k] = Bkn;
-		//else if (Bkp > 0.0)
-		//	beta[k] = Bkp;
-		//else {
-		//	beta[k] = 0.0;
-		//	//if (VERBOSE)
-		//	//	fprintf(stderr, "both \\Beta_k- (%f) and \\Beta_k+ (%f) were invalid\n", Bkn, Bkp);
-		//}
 	}
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
-	if (Bk_diff != 0)
+	if (Bk_diff != 0) {
+		#pragma omp parallel for shared(rowsum, X)
 		for (int i = 0; i < n; i++) {
-			if (!USE_INT)
-				rowsum[i] += Bk_diff * X[k][i];
-			else {
-				//TODO: again, non-binary?
-				if (X[ip.i][i] != 0 && X[ip.j][i] != 0)
-					rowsum[i] += Bk_diff;
-			}
+			//TODO: again, non-binary?
+			if (X[ip.i][i] * X[ip.j][i] != 0)
+				rowsum[i] += Bk_diff;
 		}
+	} else {
+		zero_updates += xmatrix_sparse.col_nz[k];
+	}
 
 
 	Bk_diff *= Bk_diff;
@@ -506,7 +449,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				}
 
 				// update the predictor \Beta_k
-				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+				if (X2.col_nz[k] != 0)
+					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 			}
 
 		// caculate cumulative error after update
@@ -548,6 +492,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	else
 		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
 	free(precalc_get_num);
+	printf("performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+
 	return beta;
 }
 
