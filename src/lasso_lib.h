@@ -31,6 +31,11 @@ typedef struct XMatrix_sparse {
 	int *col_nz;
 } XMatrix_sparse;
 
+typedef struct XMatrix_sparse_row {
+	int **row_nz_indices;
+	int *row_nz;
+} XMatrix_sparse_row;
+
 typedef struct {
 	int i; int j;
 } int_pair;
