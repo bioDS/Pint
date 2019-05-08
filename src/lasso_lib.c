@@ -377,6 +377,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				offset++;
 			}
 		}
+	} else {
+		p_int = p;
 	}
 
 	//int skip_count = 0;
@@ -432,23 +434,16 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
 
-		if (USE_INT == 0) {
-			// update the predictor \Beta_k
-			for (int k = 0; k < p; k++) {
-				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+		for (int k = 0; k < p_int; k++) {
+			if (k % (p_int/100) == 0) {
+				printf("*");
+				fflush(stdout);
 			}
-		}
-		else
-			for (int k = 0; k < p_int; k++) {
-				if (k % (p_int/100) == 0) {
-					printf("*");
-					fflush(stdout);
-				}
 
-				// update the predictor \Beta_k
-				if (X2.col_nz[k] != 0)
-					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
-			}
+			// update the predictor \Beta_k
+			if (X2.col_nz[k] != 0)
+				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+		}
 
 		// caculate cumulative error after update
 		printf("calculating error\n");
