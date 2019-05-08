@@ -45,3 +45,4 @@ double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, doubl
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
+int_pair get_num(int num, int p);
