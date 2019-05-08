@@ -1,6 +1,7 @@
 #include "lasso_lib.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
+#include <ncurses.h>
 
 #define NumCores 4
 
@@ -29,7 +30,9 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	for (int i = 0; i < p; i++)
 		X[i] = malloc(n*sizeof(int));
 
-	printf("reading X from: \"%s\"\n", fn);
+	move(1,0);
+	printw("reading X from: \"%s\"\n", fn);
+	refresh();
 
 	FILE *fp = fopen(fn, "r");
 	if (fp == NULL) {
@@ -79,7 +82,9 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
 		p = actual_cols;
 	}
-	printf("read %dx%d, freeing stuff\n", row, actual_cols);
+	move(2,0);
+	printw("read %dx%d, freeing stuff\n", row, actual_cols);
+	refresh();
 	free(buf);
 	XMatrix xmatrix;
 	xmatrix.X = X;
@@ -94,7 +99,9 @@ double *read_y_csv(char *fn, int n) {
 	memset(buf, 0, BUF_SIZE);
 	double *Y = malloc(n*sizeof(double));
 
-	printf("reading Y from: \"%s\"\n", fn);
+	move(3,0);
+	printw("reading Y from: \"%s\"\n", fn);
+	refresh();
 	FILE *fp = fopen(fn, "r");
 	if (fp == NULL) {
 		perror("opening failed");
@@ -136,7 +143,9 @@ double *read_y_csv(char *fn, int n) {
 		}
 	}
 
-	printf("read %d lines, freeing stuff\n", col);
+	move(4,0);
+	printw("read %d lines, freeing stuff\n", col);
+	refresh();
 	free(buf);
 	free(temp);
 	return Y;
@@ -365,7 +374,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
-	printf("calculating sparse interaction matrix\n");
+	move(7,0);
+	printw("calculating sparse interaction matrix\n");
+	refresh();
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT);
 
 	int p_int = p*(p+1)/2;
@@ -414,17 +425,19 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
-	printf("original lambda: %f n: %d ", lambda, n);
-	lambda = lambda;
-	printf("effective lambda is %f\n", lambda);
+	//printw("original lambda: %f n: %d ", lambda, n);
+	//lambda = lambda;
+	//printw("effective lambda is %f\n", lambda);
 
+	move(8,0);
 	if (strcmp(method,"cyclic") == 0) {
-		printf("using cyclic descent\n");
+		printw("using cyclic descent\n");
 		use_cyclic = 1;
 	} else if (strcmp(method, "greedy") == 0) {
-		printf("using greedy descent\n");
+		printw("using greedy descent\n");
 		use_greedy = 1;
 	}
+	refresh();
 
 	if (use_greedy == 0 && use_cyclic == 0) {
 		fprintf(stderr, "exactly one of cyclic/greedy must be specified\n");
@@ -454,10 +467,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			total_col += X2.col_nz[i];
 		}
 	}
-	printf("largest column has %d non-zero entries (out of %d)\n", largest_col, n);
-	printf("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
+	move(9,0);
+	printw("largest column has %d non-zero entries (out of %d)\n", largest_col, n);
+	move(10,0);
+	printw("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
+	refresh();
 
 	for (int iter = 0; iter < max_iter; iter++) {
+		refresh();
 		prev_error = error;
 		error = 0;
 		double dBMax = 0.0; // largest beta diff this cycle
@@ -468,25 +485,33 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//printf("using lambda = %f\n", iter_lambda);
 
 		haschanged = 1;
+		int count=5;
+		#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 		for (int k = 0; k < p_int; k++) {
 			if (k % (p_int/100) == 0) {
-				printf("*");
-				fflush(stdout);
+				move(12,0);
+				printw("iteration %d: ", iter);
+				refresh();
+				move(12,15);
+				printw("%d%%", count++);
+				refresh();
 			}
 
 			// update the predictor \Beta_k
-			// TODO: this check is currently slower than just calculating every non-zero column
-			if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2)
+			// TODO: this check is currently slower than just calculating every non-zero column (for non-huge lambda)
+			// TODO: is there any way to keep a running total of the sum of the n largest lambda?
+			if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
 				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+			}
 			else {
 				skipped_updates += X2.col_nz[k];
 				total_updates += X2.col_nz[k];
 			}
 		}
 		haschanged = 0;
+		printw("\n\n");
 
 		// caculate cumulative error after update
-		printf("\ncalculating error\n");
 		if (USE_INT == 0)
 			for (int row = 0; row < n; row++) {
 				double sum = 0;
@@ -508,33 +533,34 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				error += e_diff;
 			}
 		error /= n;
-		printf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
-		printf("indices significantly negative (-500):\n");
+		printw("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		printw("indices significantly negative (-500):\n");
 		for (int i = 0; i < p_int; i++) {
 			if (beta[i] < -500) {
 				int_pair ip = get_num(i, p);
 				if (ip.i == ip.j)
-					printf("main: %d (%d):     %f\n", i, ip.i, beta[i]);
+					printw("main: %d (%d):\t\t\t %f\n", i, ip.i, beta[i]);
 				else
-					printf("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
+					printw("int: %d  (%d, %d):\t\t %f\n", i, ip.i, ip.j, beta[i]);
 			}
 		}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
 		if (dBMax < HALT_BETA_DIFF) {
-			printf("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
+			printw("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
 			return beta;
 		}
 
-		printf("done iteration %d\n", iter);
+		printw("done iteration %d\n", iter);
+		clrtobot();
 	}
 
 	if (USE_INT)
-		printf("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+		printw("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
 	else
-		printf("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+		printw("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
 	free(precalc_get_num);
-	printf("performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	printw("performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
 
 	return beta;
 }
@@ -559,6 +585,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	XMatrix_sparse X2;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
+	double percent_done = 0;
+	int iter_done = 0;
 
 	if (!USE_INT) {
 		X2.col_nz_indices = malloc(p*sizeof(int *));
@@ -568,7 +596,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 		X2.col_nz = malloc(p_int*sizeof(int));
 	}
 
-	#pragma omp parallel for shared(X2, X ) private(length, val, colno)
+	//TODO: iter_done isn't exactly being updated safely
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) reduction(+:percent_done)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GSList *current_col = NULL;
@@ -603,6 +632,13 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 				g_slist_free(current_col);
 				current_col = NULL;
 			}
+		}
+		percent_done += 1/(p);
+		iter_done++;
+		if (omp_get_thread_num() == 0) {
+			move(7,40);
+			printw("%.1f%%\n", (float)iter_done*100/p);
+			refresh();
 		}
 	}
 	return X2;

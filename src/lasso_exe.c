@@ -1,5 +1,6 @@
 #include <gsl/gsl_vector.h>
 #include "lasso_lib.h"
+#include <ncurses.h>
 
 int main(int argc, char** argv) {
 	if (argc != 9) {
@@ -11,6 +12,9 @@ int main(int argc, char** argv) {
 		printf("\n");
 		return 1;
 	}
+
+	initscr();
+	refresh();
 
 	char *method = argv[3];
 	char *scale = argv[4];
@@ -28,11 +32,14 @@ int main(int argc, char** argv) {
 
 	if ((lambda = strtod(argv[6], NULL)) == 0)
 		lambda = 3.604;
-	printf("using lambda = %f\n", lambda);
+	move(1,0);
+	printw("using lambda = %f\n", lambda);
 
 
 	int N = atoi(argv[7]);
 	int P = atoi(argv[8]);
+	move(1,0);
+	printw("using N = %d, P = %d\n", N, P);
 
 
 	// testing: wip
@@ -49,7 +56,9 @@ int main(int argc, char** argv) {
 		nbeta = xmatrix.actual_cols;
 		X2 = xmatrix.X;
 	//}
-	printf("using nbeta = %d\n", nbeta);
+	move(5,0);
+	printw("using nbeta = %d\n", nbeta);
+	refresh();
 
 	if (xmatrix.X == NULL) {
 		fprintf(stderr, "failed to read X\n");
@@ -60,12 +69,15 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	printf("begginning coordinate descent\n");
+	move(6,0);
+	printw("begginning coordinate descent\n");
+	refresh();
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 10, USE_INT, VERBOSE);
+	int nbeta_int = nbeta;
 	if (USE_INT) {
-		nbeta = nbeta*(nbeta+1)/2;
+		nbeta_int = nbeta*(nbeta+1)/2;
 	}
-	printf("done coordinate descent lasso, printing (%d) beta values:\n", nbeta);
+	//printw("done coordinate descent lasso, printing (%d) beta values:\n", nbeta_int);
 	if (beta == NULL) {
 		fprintf(stderr, "failed to estimate beta values\n");
 		return 1;
@@ -75,14 +87,30 @@ int main(int argc, char** argv) {
 	//}
 	//printf("\n");
 
-	printf("indices significantly negative (-500):\n");
-	for (int i = 0; i < nbeta; i++) {
-		if (beta[i] < -500)
-			printf("%d: %f\n", i, beta[i]);
+	move(14,0);
+	printw("indices significantly negative (-500):\n");
+	int sig_beta_count = 0;
+	for (int i = 0; i < nbeta_int; i++) {
+		if (beta[i] < -500) {
+			sig_beta_count++;
+			int_pair ip = get_num(i, nbeta);
+			if (ip.i == ip.j)
+				printw("main: %d (%d):     %f\n", i, ip.i, beta[i]);
+			else
+				printw("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
+		}
 	}
 
-	printf("freeing X/Y\n");
+	printw("\n\n");
+
+	//printw("\n");
 	free(xmatrix.X);
 	free(Y);
+	move(22 + sig_beta_count,0);
+	printw("freeing X/Y\n");
+	printw("finished! press q to exit");
+	while(getch() != 'q');
+	getch();
+	endwin();
 	return 0;
 }
