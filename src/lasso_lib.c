@@ -486,7 +486,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		haschanged = 0;
 
 		// caculate cumulative error after update
-		printf("calculating error\n");
+		printf("\ncalculating error\n");
 		if (USE_INT == 0)
 			for (int row = 0; row < n; row++) {
 				double sum = 0;
