@@ -508,9 +508,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	}
 
 	if (USE_INT)
-		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p_int*n*max_iter, total_updates, (skipped_updates*100.0)/(p_int*n*max_iter));
+		printf("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
 	else
-		printf("lasso done, skipped_updates %d out of %d (which should be %d) a.k.a (%f\%)\n", skipped_updates, p*n*max_iter, total_updates, (skipped_updates*100.0)/(p*n*max_iter));
+		printf("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
 	free(precalc_get_num);
 	printf("performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
 
