@@ -585,7 +585,6 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	XMatrix_sparse X2;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
-	double percent_done = 0;
 	int iter_done = 0;
 
 	if (!USE_INT) {
@@ -597,7 +596,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	}
 
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) reduction(+:percent_done)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GSList *current_col = NULL;
@@ -633,7 +632,6 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 				current_col = NULL;
 			}
 		}
-		percent_done += 1/(p);
 		iter_done++;
 		if (omp_get_thread_num() == 0) {
 			move(7,40);
