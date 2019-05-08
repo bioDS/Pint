@@ -509,6 +509,16 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			}
 		error /= n;
 		printf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		printf("indices significantly negative (-500):\n");
+		for (int i = 0; i < p_int; i++) {
+			if (beta[i] < -500) {
+				int_pair ip = get_num(i, p);
+				if (ip.i == ip.j)
+					printf("main: %d (%d):     %f\n", i, ip.i, beta[i]);
+				else
+					printf("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
+			}
+		}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
 		if (dBMax < HALT_BETA_DIFF) {
