@@ -87,10 +87,10 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "failed to estimate beta values\n");
 		return 1;
 	}
-	for (int i = 0; i < nbeta; i++) {
-		printf("%f ", beta[i]);
-	}
-	printf("\n");
+	//for (int i = 0; i < nbeta; i++) {
+	//	printf("%f ", beta[i]);
+	//}
+	//printf("\n");
 
 	printf("indices significantly negative (-500):\n");
 	for (int i = 0; i < nbeta; i++) {
