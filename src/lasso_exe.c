@@ -33,23 +33,6 @@ int main(int argc, char** argv) {
 
 	int N = atoi(argv[7]);
 	int P = atoi(argv[8]);
-	printf("using N = %d, P = %d\n", N, P);
-
-	gsl_vector *v = gsl_vector_alloc(3);
-	gsl_vector *w = gsl_vector_alloc(3);
-	gsl_vector_set_zero(v);
-	gsl_vector_set(v, 1, 2);
-	gsl_vector_set(v, 2, 3);
-	gsl_vector_memcpy(w, v);
-	gsl_vector_set(w,2,1);
-
-	int result = gsl_vector_mul(v,w);
-	printf("result: %d\n", result);
-	printf("v: ");
-	for (int i = 0; i < VECTOR_SIZE; i++) {
-		printf("%f ", gsl_vector_get(v, i));
-	}
-	printf("\n");
 
 
 	// testing: wip
