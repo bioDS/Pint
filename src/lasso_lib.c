@@ -12,6 +12,8 @@ static int VERBOSE = 0;
 static int zero_updates = 0;
 static int haschanged = 1;
 static int *colsum;
+static double *col_ysum;
+static double max_rowsum = 0;
 
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -270,6 +272,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			i = xmatrix_sparse.col_nz_indices[k][e];
 			rowsum[i] += Bk_diff;
+			if (rowsum[i] < max_rowsum)
+				max_rowsum = rowsum[i];
 		}
 	} else {
 		zero_updates += xmatrix_sparse.col_nz[k];
@@ -431,6 +435,16 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double rowsum[n];
 	memset(rowsum, 0, n*sizeof(double));
 
+	colsum = malloc(p_int*sizeof(double));
+	memset(colsum, 0, p_int*sizeof(double));
+
+	col_ysum = malloc(p_int*sizeof(double));
+	for (int col = 0; col < p_int; col++) {
+		for (int row_ind = 0; row_ind < X2.col_nz[col]; row_ind++) {
+			col_ysum[col] += Y[X2.col_nz_indices[col][row_ind]];
+		}
+	}
+
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
 		error = 0;
@@ -449,8 +463,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			}
 
 			// update the predictor \Beta_k
-			if (X2.col_nz[k] != 0)
+			// TODO: this check is currently slower than just calculating every non-zero column
+			if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2)
 				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+			else
+				skipped_updates += X2.col_nz[k];
 		}
 		haschanged = 0;
 
