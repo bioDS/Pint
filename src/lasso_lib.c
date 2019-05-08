@@ -445,6 +445,18 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		}
 	}
 
+	// find largest number of non-zeros in any column
+	int largest_col = 0;
+	long total_col = 0;
+	for (int i = 0; i < p_int; i++) {
+		if (X2.col_nz[i] > largest_col) {
+			largest_col = X2.col_nz[i];
+			total_col += X2.col_nz[i];
+		}
+	}
+	printf("largest column has %d non-zero entries (out of %d)\n", largest_col, n);
+	printf("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
+
 	for (int iter = 0; iter < max_iter; iter++) {
 		prev_error = error;
 		error = 0;
