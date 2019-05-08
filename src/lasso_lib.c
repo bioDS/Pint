@@ -466,8 +466,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// TODO: this check is currently slower than just calculating every non-zero column
 			if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2)
 				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
-			else
+			else {
 				skipped_updates += X2.col_nz[k];
+				total_updates += X2.col_nz[k];
+			}
 		}
 		haschanged = 0;
 
