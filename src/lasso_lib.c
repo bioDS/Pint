@@ -10,6 +10,8 @@ int total_updates = 0;
 
 static int VERBOSE = 0;
 static int zero_updates = 0;
+static int haschanged = 1;
+static int *colsum;
 
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -242,11 +244,15 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 
 	int i, j, row;
 	//#pragma omp parallel for num_threads(1) private(i) shared(X, Y, xmatrix_sparse, rowsum) reduction (+:sumn, sumk, total_updates)
-	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-		// TODO: avoid unnecessary calculations for large lambda.
-		i = xmatrix_sparse.col_nz_indices[k][e];
-		// TODO: assumes X is binary
-		sumn += Y[i] - intercept - rowsum[i];
+	if (haschanged == 1) {
+		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+			// TODO: avoid unnecessary calculations for large lambda.
+			i = xmatrix_sparse.col_nz_indices[k][e];
+			// TODO: assumes X is binary
+			sumn += Y[i] - intercept - rowsum[i];
+		}
+	} else {
+		sumn = colsum[k];
 	}
 	total_updates += xmatrix_sparse.col_nz[k];
 
@@ -260,6 +266,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	if (Bk_diff != 0) {
+		haschanged = 1;
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			i = xmatrix_sparse.col_nz_indices[k][e];
 			rowsum[i] += Bk_diff;
@@ -434,6 +441,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
 
+		haschanged = 1;
 		for (int k = 0; k < p_int; k++) {
 			if (k % (p_int/100) == 0) {
 				printf("*");
@@ -444,6 +452,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			if (X2.col_nz[k] != 0)
 				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 		}
+		haschanged = 0;
 
 		// caculate cumulative error after update
 		printf("calculating error\n");
