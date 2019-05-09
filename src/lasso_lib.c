@@ -16,6 +16,24 @@ static int *colsum;
 static double *col_ysum;
 static double max_rowsum = 0;
 
+struct Beta_Set {
+	GSList set;
+	int set_size;
+};
+
+typedef struct Beta_Sets {
+	struct beta_set *sets;
+	int number_of_sets;
+} Beta_Sets;
+
+
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row) {
+	Beta_Sets beta_sets;
+
+
+	return beta_sets;
+}
+
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
