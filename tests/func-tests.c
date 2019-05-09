@@ -162,6 +162,35 @@ static void test_read_y_csv() {
 	g_assert_true(Y[999] == -352.293608898344);
 }
 
+static void test_find_beta_sets() {
+	int n = 6;
+	int p = 7;
+	int Xt[7][6] = { {1,1,0,0,0,0},
+					{0,0,0,0,1,1},
+					{0,0,0,1,1,0},
+					{0,0,1,1,0,0},
+					{0,0,0,1,1,0},
+					{0,1,1,0,0,1},
+					{1,0,1,0,1,1}};
+	int **X = malloc(p*sizeof(int*));
+	for (int i = 0; i < p; i++) {
+		X[i] = malloc(n*sizeof(int));
+		memcpy(X[i], Xt[i], n*sizeof(int));
+	}
+	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0);
+	XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
+
+	printf("\nsparse col 0:\n");
+	for (int i = 0; i < x2row.row_nz[0]; i++)
+		printf("%d ", x2row.row_nz_indices[i]);
+	printf("\n");
+
+	find_beta_sets(x2col, x2row, p, n);
+	for (int i = 0; i < p; i++)
+		free(X[i]);
+	return;
+}
+
 int main (int argc, char *argv[]) {
 	setlocale (LC_ALL, "");
 	g_test_init (&argc, &argv, NULL);
@@ -175,6 +204,7 @@ int main (int argc, char *argv[]) {
 	g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
 	g_test_add("/func/test-simple-coordinate-descent-main", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_main, update_beta_fixture_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, update_beta_fixture_tear_down);
+	g_test_add_func("/func/test-find-beta-sets", test_find_beta_sets);
 
 	return g_test_run();
 }

@@ -53,6 +53,7 @@ typedef struct Beta_Sets {
 
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT);
+XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);

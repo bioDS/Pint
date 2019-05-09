@@ -23,32 +23,38 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 
 	int remaining_columns = actual_p_int;
 	int *allowable_columns = malloc(actual_p_int*sizeof(int));
-	memset(allowable_columns, 1, actual_p_int*sizeof(int));
+	for (int i = 0; i < actual_p_int; i++)
+		allowable_columns[i] = 1;
 
 	// do one iteration only
 	for (int row = 0; row < n; row++) {
+		printf("\nchecking row %d\n", row);
 		int removed_one = 0;
 		for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
 			int col = x2row.row_nz_indices[row][col_ind];
+			printf("\t checking column %d\n", col);
 			// remove this column from those allowed to be updated at the same time as the set so far
 			// (if it is currently allowed)
 			if (allowable_columns[col] == 1) {
-				if (removed_one == 0)
+				if (removed_one == 0) {
+					printf("\t keeping column %d\n", col);
 					removed_one++;
+				}
 				else {
+					printf("\t removing column %d\n", col);
 					allowable_columns[col] = 0;
 				}
 			}
 		}
 	}
 
-	printw("allowed at the same time: \n");
+	printf("allowed at the same time: \n");
 	for (int i = 0; i < actual_p_int; i++) {
 		if (allowable_columns[i] == 1) {
-			printw("%d ", i);
+			printf("%d ", i);
 		}
 	}
-	printw("\n");
+	printf("\n");
 
 	//int current_col = 0;
 	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
@@ -666,6 +672,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 						fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
 				}
 				length = g_slist_length(current_col);
+				current_col = g_slist_reverse(current_col);
 
 				X2.col_nz_indices[colno] = malloc(length*sizeof(int));
 				X2.col_nz[colno] = length;
@@ -722,6 +729,7 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 			}
 		}
 		length = g_slist_length(current_row);
+		current_row = g_slist_reverse(current_row);
 
 		X2.row_nz_indices[rowno] = malloc(length*sizeof(int));
 		X2.row_nz[rowno] = length;
