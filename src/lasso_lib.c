@@ -16,21 +16,52 @@ static int *colsum;
 static double *col_ysum;
 static double max_rowsum = 0;
 
-struct Beta_Set {
-	GSList set;
-	int set_size;
-};
 
-typedef struct Beta_Sets {
-	struct beta_set *sets;
-	int number_of_sets;
-} Beta_Sets;
-
-
-Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row) {
+//TODO: try using dancing links
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Beta_Sets beta_sets;
 
+	int remaining_columns = actual_p_int;
+	int *allowable_columns = malloc(actual_p_int*sizeof(int));
+	memset(allowable_columns, 1, actual_p_int*sizeof(int));
 
+	// do one iteration only
+	for (int row = 0; row < n; row++) {
+		int removed_one = 0;
+		for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
+			int col = x2row.row_nz_indices[row][col_ind];
+			// remove this column from those allowed to be updated at the same time as the set so far
+			// (if it is currently allowed)
+			if (allowable_columns[col] == 1) {
+				if (removed_one == 0)
+					removed_one++;
+				else {
+					allowable_columns[col] = 0;
+				}
+			}
+		}
+	}
+
+	printw("allowed at the same time: \n");
+	for (int i = 0; i < actual_p_int; i++) {
+		if (allowable_columns[i] == 1) {
+			printw("%d ", i);
+		}
+	}
+	printw("\n");
+
+	//int current_col = 0;
+	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
+	//	int row = x2col.col_nz_indices[current_col][row_ind];
+	//	for (int compare_col_ind = 0; compare_col_ind < x2row.row_nz[row]; compare_col_ind++) {
+	//		int compare_col = x2row.row_nz_indices[row][compare_col_ind];
+	//		if (compare_col == current_col)
+	//			continue;
+	//		allowable_columns[compare_col] = 0;
+	//	}
+	//}
+
+	free(allowable_columns);
 	return beta_sets;
 }
 

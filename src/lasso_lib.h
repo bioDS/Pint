@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <math.h>
+#include <glib-2.0/glib.h>
 
 #define VECTOR_SIZE 3
 // are all ids the same size?
@@ -40,6 +41,16 @@ typedef struct {
 	int i; int j;
 } int_pair;
 
+struct Beta_Set {
+	GSList set;
+	int set_size;
+};
+
+typedef struct Beta_Sets {
+	struct beta_set *sets;
+	int number_of_sets;
+} Beta_Sets;
+
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
@@ -51,3 +62,4 @@ double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(int num, int p);
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n);

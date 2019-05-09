@@ -15,7 +15,7 @@ lasso_lib = shared_library('lasso_lib', 'lasso_lib.c', 'lasso_lib.h',
 libdir_abs = join_paths(get_option('prefix'), get_option('libdir'))
 
 lasso_exe = executable('lasso_exe', 'lasso_exe.c', link_with: lasso_lib,
-	dependencies: [dependency('gsl'), dependency('ncurses')],
+	dependencies: lasso_lib_deps,
 	install: true,
 	install_rpath: libdir_abs
 )
