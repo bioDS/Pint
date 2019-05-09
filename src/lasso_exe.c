@@ -109,6 +109,7 @@ int main(int argc, char** argv) {
 	move(22 + sig_beta_count,0);
 	printw("freeing X/Y\n");
 	printw("finished! press q to exit");
+	clrtobot();
 	while(getch() != 'q');
 	getch();
 	endwin();
