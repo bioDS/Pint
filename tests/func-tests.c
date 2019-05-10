@@ -185,9 +185,39 @@ static void test_find_beta_sets() {
 		printf("'%d' ", x2row.row_nz_indices[0][i]);
 	printf("\n");
 
-	find_beta_sets(x2col, x2row, p, n);
-	for (int i = 0; i < p; i++)
+	//n = 1000;
+	//p = 100;
+	//XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
+	//x2col = sparse_X2_from_X(xmatrix.X, n, p, 1);
+	//x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
+
+
+	//find_beta_sets(x2col, x2row, p*(p+1)/2, n);
+	Beta_Sets beta_sets = find_beta_sets(x2col, x2row, p, n);
+	for (int i = 0; i < 7; i++)
 		free(X[i]);
+
+	int correct_set_sizes[5] = {2,2,1,1,1};
+	int correct_cols_for_set[7] = {0, 1, 2, 3, 4, 5, 6};
+
+	printf("\nchecking number of sets (%d) == 5\n", beta_sets.number_of_sets);
+	g_assert_true(beta_sets.number_of_sets = 5);
+
+
+	int val_counter = 0;
+	for (int set = 0; set < beta_sets.number_of_sets; set++) {
+		GSList *temp_set = beta_sets.sets[set].set;
+		for (int entry = 0; entry < correct_set_sizes[set]; entry++) {
+			int val = (int)(long)temp_set->data;
+			printf("comparing set %d, entry %d: %d == %d\n", set, entry, val, correct_cols_for_set[val_counter]);
+			g_assert_true(val == correct_cols_for_set[val_counter++]);
+			temp_set = temp_set->next;
+		}
+	}
+
+	printf("\nset 0 size: %d\n", beta_sets.sets[0].set_size);
+	g_assert_true(beta_sets.sets[0].set_size == 2);
+	g_assert_true(beta_sets.sets[0].set->data == 0);
 	return;
 }
 
