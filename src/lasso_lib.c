@@ -707,7 +707,7 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 	X2.row_nz_indices = malloc(n*sizeof(int *));
 	X2.row_nz = malloc(n*sizeof(int));
 
-	#pragma omp parallel for shared(X2, X) private(length, val, rowno)
+	#pragma omp parallel for shared(X2, X) private(length, val, colno)
 	for (int rowno = 0; rowno < n; rowno++) {
 		GSList *current_row = NULL;
 		// only include main effects (where i==j) unless USE_INT is set.
