@@ -67,16 +67,16 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 			//printf("\n");
 		}
 
-		printf("allowed at the same time: \n");
+		//printf("allowed at the same time: \n");
 		for (int i = 0; i < actual_p_int; i++) {
 			if (allowable_columns[i] == 1) {
 				todo_columns[i] = 0;
 				remaining_columns--;
-				printf("%d ", i);
+				//printf("%d ", i);
 				current_set = g_slist_prepend(current_set, (void *)(long)i);
 			}
 		}
-		printf("\n");
+		//printf("\n");
 		current_set = g_slist_reverse(current_set);
 		all_sets = g_slist_prepend(all_sets, current_set);
 
@@ -88,22 +88,22 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	all_sets = g_slist_reverse(all_sets);
 
 	beta_sets.number_of_sets = g_slist_length(all_sets);
-	printf("printing values from list (length %d):\n", beta_sets.number_of_sets);
+	//printf("printing values from list (length %d):\n", beta_sets.number_of_sets);
 	beta_sets.sets = malloc(beta_sets.number_of_sets*sizeof(struct Beta_Set));
 	GSList *temp_set_pointer = all_sets;
 	int counter = 0;
 	while (temp_set_pointer != NULL) {
-		printf("\n");
+		//printf("\n");
 		GSList *temp_val_pointer = temp_set_pointer->data;
-		printf("reading list %d (length %d)\n", counter, g_slist_length(temp_set_pointer));
+		//printf("reading list %d (length %d)\n", counter, g_slist_length(temp_set_pointer));
 		//struct Beta_Set temp_beta_set = malloc(sizeof(struct Beta_Set));
 		beta_sets.sets[counter].set = temp_set_pointer->data;
 		beta_sets.sets[counter].set_size = g_slist_length(temp_set_pointer->data);
-		while (temp_val_pointer != NULL) {
-			printf("%ld ", (long)temp_val_pointer->data);
+		//while (temp_val_pointer != NULL) {
+		//	printf("%ld ", (long)temp_val_pointer->data);
 
-			temp_val_pointer = temp_val_pointer->next;
-		}
+		//	temp_val_pointer = temp_val_pointer->next;
+		//}
 		temp_set_pointer = temp_set_pointer->next;
 		counter++;
 	}
