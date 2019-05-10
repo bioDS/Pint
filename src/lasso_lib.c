@@ -22,39 +22,61 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	Beta_Sets beta_sets;
 
 	int remaining_columns = actual_p_int;
+	int iteration_count = 0;
 	int *allowable_columns = malloc(actual_p_int*sizeof(int));
-	for (int i = 0; i < actual_p_int; i++)
+	int *todo_columns = malloc(actual_p_int*sizeof(int));
+	for (int i = 0; i < actual_p_int; i++) {
 		allowable_columns[i] = 1;
+		todo_columns[i] = 1;
+	}
 
 	// do one iteration only
-	for (int row = 0; row < n; row++) {
-		printf("\nchecking row %d\n", row);
-		int removed_one = 0;
-		for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
-			int col = x2row.row_nz_indices[row][col_ind];
-			printf("\t checking column %d\n", col);
-			// remove this column from those allowed to be updated at the same time as the set so far
-			// (if it is currently allowed)
-			if (allowable_columns[col] == 1) {
-				if (removed_one == 0) {
-					printf("\t keeping column %d\n", col);
-					removed_one++;
-				}
-				else {
-					printf("\t removing column %d\n", col);
-					allowable_columns[col] = 0;
+	while (remaining_columns > 0 && iteration_count < 10) {
+		printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
+		for (int row = 0; row < n; row++) {
+			//printf("\nchecking row %d\n", row);
+			int removed_one = 0;
+			for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
+				int col = x2row.row_nz_indices[row][col_ind];
+				//printf("\t checking column %d\n", col);
+				// remove this column from those allowed to be updated at the same time as the set so far
+				// (if it is currently allowed)
+				if (allowable_columns[col] == 1) {
+					if (removed_one == 0) {
+						//printf("\t keeping column %d\n", col);
+						removed_one++;
+					}
+					else {
+						//printf("\t removing column %d\n", col);
+						allowable_columns[col] = 0;
+					}
+				} else {
+					//printf("\t \t column %d not allowed\n", col);
 				}
 			}
-		}
-	}
 
-	printf("allowed at the same time: \n");
-	for (int i = 0; i < actual_p_int; i++) {
-		if (allowable_columns[i] == 1) {
-			printf("%d ", i);
+			printf("  allowed columns: ");
+			for (int i = 0; i < actual_p_int; i++) {
+				if (allowable_columns[i] == 1)
+					printf("%d ", i);
+			}
+			printf("\n");
+		}
+
+		printf("allowed at the same time: \n");
+		for (int i = 0; i < actual_p_int; i++) {
+			if (allowable_columns[i] == 1) {
+				todo_columns[i] = 0;
+				remaining_columns--;
+				printf("%d ", i);
+			}
+		}
+		printf("\n");
+
+		for (int i = 0; i < actual_p_int; i++) {
+			allowable_columns[i] = todo_columns[i];
 		}
 	}
-	printf("\n");
 
 	//int current_col = 0;
 	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
