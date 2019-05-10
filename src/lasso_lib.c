@@ -713,7 +713,6 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 		// only include main effects (where i==j) unless USE_INT is set.
 		for (int i = 0; i < p; i++) {
 			for (int j = i; j < p; j++) {
-				GSList *current_col = NULL;
 				// only include main effects (where i==j) unless USE_INT is set.
 				if (USE_INT || j == i) {
 					if (USE_INT)
@@ -721,7 +720,7 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 						colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
 					else
 						colno = i;
-					if (X[rowno][i] * X[rowno][j] == 1) {
+					if (X[i][rowno] * X[j][rowno] == 1) {
 						current_row = g_slist_prepend(current_row, (void*)(long)colno);
 					}
 
