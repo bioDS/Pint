@@ -32,7 +32,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 
 	// do one iteration only
 	while (remaining_columns > 0 && iteration_count < 10) {
-		printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
+		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
 		for (int row = 0; row < n; row++) {
 			//printf("\nchecking row %d\n", row);
 			int removed_one = 0;
@@ -55,12 +55,12 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 				}
 			}
 
-			printf("  allowed columns: ");
-			for (int i = 0; i < actual_p_int; i++) {
-				if (allowable_columns[i] == 1)
-					printf("%d ", i);
-			}
-			printf("\n");
+			//printf("  allowed columns: ");
+			//for (int i = 0; i < actual_p_int; i++) {
+			//	if (allowable_columns[i] == 1)
+			//		printf("%d ", i);
+			//}
+			//printf("\n");
 		}
 
 		printf("allowed at the same time: \n");
