@@ -168,9 +168,9 @@ static void test_find_beta_sets() {
 	int Xt[7][6] = { {1,1,0,0,0,0},
 					{0,0,0,0,1,1},
 					{0,0,0,1,1,0},
+					{1,1,1,0,0,0},
 					{0,0,1,1,0,0},
 					{0,0,0,1,1,0},
-					{0,1,1,0,0,1},
 					{1,0,1,0,1,1}};
 	int **X = malloc(p*sizeof(int*));
 	for (int i = 0; i < p; i++) {
@@ -180,9 +180,9 @@ static void test_find_beta_sets() {
 	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0);
 	XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
 
-	printf("\nsparse col 0:\n");
+	printf("\nsparse row 0 (%d entries):\n", x2row.row_nz[0]);
 	for (int i = 0; i < x2row.row_nz[0]; i++)
-		printf("%d ", x2row.row_nz_indices[i]);
+		printf("'%d' ", x2row.row_nz_indices[0][i]);
 	printf("\n");
 
 	find_beta_sets(x2col, x2row, p, n);
