@@ -485,6 +485,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	printw("calculating sparse interaction matrix\n");
 	refresh();
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT);
+	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -580,6 +581,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	printw("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
 	refresh();
 
+	Beta_Sets beta_sets;
+	if (USE_INT == 1)
+		beta_sets = find_beta_sets(X2, X2row, p_int, n);
+	else
+		beta_sets = find_beta_sets(X2, X2row, p, n);
+
 	for (int iter = 0; iter < max_iter; iter++) {
 		refresh();
 		prev_error = error;
@@ -593,28 +600,43 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 		haschanged = 1;
 		int count=5;
-		#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
-		for (int k = 0; k < p_int; k++) {
-			if (k % (p_int/100) == 0) {
-				move(12,0);
-				printw("iteration %d: ", iter);
-				refresh();
-				move(12,15);
-				printw("%d%%", count++);
-				refresh();
-			}
+		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
+		//for (int k = 0; k < p_int; k++) {
+		//	if (k % (p_int/100) == 0) {
+		//		move(12,0);
+		//		printw("iteration %d: ", iter);
+		//		refresh();
+		//		move(12,15);
+		//		printw("%d%%", count++);
+		//		refresh();
+		//	}
 
 			// update the predictor \Beta_k
 			// TODO: this check is currently slower than just calculating every non-zero column (for non-huge lambda)
 			// TODO: is there any way to keep a running total of the sum of the n largest lambda?
-			if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
-				dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+			int *cols_to_update = malloc(p_int*sizeof(int));
+			for (int i = 0; i < p_int; i++)
+				cols_to_update[i] = -1;
+			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
+				GSList *temp_list = beta_sets.sets[i].set;
+				int counter = 0;
+				while (temp_list->next != NULL) {
+					cols_to_update[counter++] = (int)(long)temp_list->data;
+
+					temp_list = temp_list->next;
+				}
+				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
+					int k = cols_to_update[j];
+					if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+					}
+					else {
+						skipped_updates += X2.col_nz[k];
+						total_updates += X2.col_nz[k];
+					}
+				}
 			}
-			else {
-				skipped_updates += X2.col_nz[k];
-				total_updates += X2.col_nz[k];
-			}
-		}
+		//}
 		haschanged = 0;
 		printw("\n\n");
 
