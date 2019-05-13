@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
 	move(6,0);
 	printw("begginning coordinate descent\n");
 	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 10, USE_INT, VERBOSE);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 100, USE_INT, VERBOSE);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -95,9 +95,9 @@ int main(int argc, char** argv) {
 			sig_beta_count++;
 			int_pair ip = get_num(i, nbeta);
 			if (ip.i == ip.j)
-				printw("main: %d (%d):     %f\n", i, ip.i, beta[i]);
+				printw("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
 			else
-				printw("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
+				printw("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 		}
 	}
 
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
 	//printw("\n");
 	free(xmatrix.X);
 	free(Y);
-	move(22 + sig_beta_count,0);
+	//move(22 + sig_beta_count,0);
 	printw("freeing X/Y\n");
 	printw("finished! press q to exit");
 	clrtobot();
