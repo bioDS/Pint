@@ -20,6 +20,9 @@ static double max_rowsum = 0;
 //TODO: try using dancing links
 //TODO: stop after |set| = numCores?
 //		- maybe after numCores*10 (or something) has been allowd through this row
+//TODO: split into GList[numcores] (or similar) (by rows w/ no overlap?)
+//		OR: pre-allocate GList contents?
+//TODO: rather than linked lists, arrays of structs with offsets might compress better?
 Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Beta_Sets beta_sets;
 
@@ -29,22 +32,42 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	int *allowable_columns = malloc(actual_p_int*sizeof(int));
 	int n_allowable_columns = actual_p_int;
 	int *todo_columns = malloc(actual_p_int*sizeof(int));
-	for (int i = 0; i < actual_p_int; i++) {
-		allowable_columns[i] = 1;
-		todo_columns[i] = 1;
-	}
+	int ypos, xpos;
+	//for (int i = 0; i < actual_p_int; i++) {
+	//	allowable_columns[i] = 1;
+	//	todo_columns[i] = 1;
+	//}
 
 	GList *all_sets = NULL;
 	GList *todo_cols_list = NULL;
-	int ypos, xpos;
-	getyx(stdscr, ypos, xpos);
 
-	for (int i = 0; i < actual_p_int; i++) {
-		todo_cols_list = g_list_append(todo_cols_list, (void*)(long)i);
+	printw("doing set stuff: ");
+	refresh();
+	getyx(stdscr, ypos, xpos);
+	todo_cols_list = malloc(actual_p_int*sizeof(GList));
+	todo_cols_list[0].data = (void*)(int)0;
+	todo_cols_list[0].prev = NULL;
+	todo_cols_list[0].next = &todo_cols_list[1];
+	for (int i = 1; i < actual_p_int - 1; i++) {
+		move(ypos, xpos);
+		printw("%.1f%%", (float)100*i/actual_p_int);
+		refresh();
+		//todo_cols_list = g_list_append(todo_cols_list, (void*)(long)i);
+		todo_cols_list[i].next = &todo_cols_list[i+1];
+		todo_cols_list[i].prev = &todo_cols_list[i-1];
+		todo_cols_list[i].data = (void*)(long)i;
 	}
+	todo_cols_list[actual_p_int - 1].data = (void*)(long)(actual_p_int - 1);
+	todo_cols_list[actual_p_int - 1].prev = &todo_cols_list[actual_p_int - 2];
+	todo_cols_list[actual_p_int - 1].next = NULL;
+	if (VERBOSE)
+		printf("todo_cols_list length is %d, should be %d\n", g_list_length(todo_cols_list), actual_p_int);
 	GList *current_set = NULL;
 	current_set = g_list_copy(todo_cols_list);
+	printw("done set stuff\n");
+	refresh();
 
+	getyx(stdscr, ypos, xpos);
 	// do one iteration only
 	while (remaining_columns > 0) {
 		move(ypos, xpos);
@@ -53,49 +76,74 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
 		//#pragma omp parallel for shared(allowable_columns, todo_columns) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns)
 		for (int row = 0; row < n; row++) {
+			if (x2row.row_nz[row] == 0)
+				continue;
 			//move(ypos+1, xpos);
-			printf("\nrow %d", row);
+			if (VERBOSE)
+				printf("\nrow %d", row);
 			//refresh();
 			//printf("\nchecking row %d\n", row);
 			int removed_one = 0;
 			int next_one_in_row_ind = 0;
-			//for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
-			for (GList *temp_tempcol = NULL, *tempcol = current_set; tempcol != NULL;) {
-				int col = (int)(long)tempcol->data;
-				//int col = x2row.row_nz_indices[row][col_ind];
-				printf("\t checking column %d\n", col);
+			GList *temp_tempcol;
+			GList *tempcol = current_set;
+			for (int col_ind = 0; col_ind < x2row.row_nz[row] && tempcol != NULL; col_ind++) {
+
+//			for (GList *temp_tempcol = NULL, *tempcol = current_set; tempcol != NULL;) {
+				int tempcol_col = (int)(long)tempcol->data;
+				int iter_col = x2row.row_nz_indices[row][col_ind];
+				if (VERBOSE)
+					printf("\t checking column %d (current tempcol %d)\n", iter_col, tempcol_col);
 				// remove this column from those allowed to be updated at the same time as the set so far
 				// (if it is currently allowed)
-				if (col < x2row.row_nz_indices[row][next_one_in_row_ind]) {
+				while (iter_col > tempcol_col && tempcol != NULL) {
 					tempcol = tempcol->next;
-				} else if (col > x2row.row_nz_indices[row][next_one_in_row_ind]) {
-					if (next_one_in_row_ind++ > x2row.row_nz[row]) {
-						fprintf(stderr, "incremented row too far at line 72\n");
-					}
-					tempcol = tempcol->next;
-				} else {
-					next_one_in_row_ind++;
+					if (tempcol != NULL)
+						tempcol_col = (int)(long)tempcol->data;
+				}
+				if (VERBOSE)
+					printf("after loop tempcol was %d\n", tempcol_col);
+				if (iter_col < tempcol_col) {
+					//if (next_one_in_row_ind++ > x2row.row_nz[row]) {
+					//	fprintf(stderr, "incremented row too far at line 72\n");
+					//}
+					//if (next_one_in_row_ind >= x2row.row_nz[row]) {
+					//	tempcol = tempcol->next;
+					//} else {
+					//	while(col > x2row.row_nz_indices[row][next_one_in_row_ind] && next_one_in_row_ind < x2row.row_nz[row]) {
+					//		next_one_in_row_ind++;
+					//	}
+					//}
+				} else if (iter_col == tempcol_col && tempcol != NULL) {
+					if (VERBOSE)
+						printf("tempcol is now equal to iter_col, actually checking\n");
+					//next_one_in_row_ind++;
 					if (removed_one == 0) {
-						printf("\t keeping column %d\n", col);
+						if (VERBOSE)
+							printf("\t keeping column %d\n", iter_col);
 						removed_one++;
 						tempcol = tempcol->next;
 					}
 					else {
-						printf("\t removing column %d\n", col);
+						if (VERBOSE)
+							printf("\t removing column %d\n", iter_col);
 						//allowable_columns[col] = 0;
 						temp_tempcol = tempcol;
 						tempcol = tempcol->next;
 						g_list_delete_link(current_set, temp_tempcol);
+						//g_list_remove(current_set, (void*)(long)iter_col);
 						n_allowable_columns--;
 					}
 				}
 			}
 
-			printf("  allowed columns: ");
-			for (GList *tempcol = current_set; tempcol != NULL; tempcol = tempcol->next) {
-				printf("%d ", (int)(long)tempcol->data);
+			if (VERBOSE) {
+				printf("  allowed columns: ");
+				for (GList *tempcol = current_set; tempcol != NULL; tempcol = tempcol->next) {
+					printf("%d ", (int)(long)tempcol->data);
+				}
+				printf("\n");
 			}
-			printf("\n");
 		}
 
 		//printf("allowed at the same time: \n");
