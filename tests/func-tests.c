@@ -201,7 +201,7 @@ static void test_find_beta_sets() {
 	int correct_cols_for_set[7] = {0, 1, 2, 3, 4, 5, 6};
 
 	printf("\nchecking number of sets (%d) == 5\n", beta_sets.number_of_sets);
-	g_assert_true(beta_sets.number_of_sets = 5);
+	g_assert_true(beta_sets.number_of_sets == 5);
 
 
 	int val_counter = 0;
