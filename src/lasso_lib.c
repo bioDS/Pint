@@ -23,6 +23,7 @@ static double max_rowsum = 0;
 //TODO: split into GList[numcores] (or similar) (by rows w/ no overlap?)
 //		OR: pre-allocate GList contents?
 //TODO: rather than linked lists, arrays of structs with offsets might compress better?
+// GQueue?
 Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Beta_Sets beta_sets;
 
@@ -45,6 +46,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	refresh();
 	getyx(stdscr, ypos, xpos);
 	todo_cols_list = malloc(actual_p_int*sizeof(GList));
+	GList *initial_todo_cols_list = todo_cols_list;
 	todo_cols_list[0].data = (void*)(int)0;
 	todo_cols_list[0].prev = NULL;
 	todo_cols_list[0].next = &todo_cols_list[1];
@@ -150,6 +152,10 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 		//for (int i = 0; i < actual_p_int; i++) {
 		int maxcols = 32;
 		int foundcols = 0;
+		if (current_set->data == todo_cols_list->data) {
+			todo_cols_list[1].prev = NULL;
+			todo_cols_list == &todo_cols_list[1];
+		}
 		for (GList *temp_tempcol = NULL, *prevcol = NULL, *tempcol = current_set; tempcol != NULL;) {
 			if (foundcols > maxcols)
 				break;
@@ -162,7 +168,13 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 			temp_tempcol = tempcol;
 			tempcol = tempcol->next;
 			//todo_cols_list = g_list_delete_link(todo_cols_list, temp_tempcol);
-			todo_cols_list = g_list_remove(todo_cols_list, (void*)(long)i);
+			//todo_cols_list = g_list_remove(todo_cols_list, (void*)(long)i);
+			if (i == actual_p_int - 1) {
+				todo_cols_list[i-1].next = NULL;
+			} else {
+				todo_cols_list[i-1].next = &todo_cols_list[i+1];
+				todo_cols_list[i+1].prev = &todo_cols_list[i-1];
+			}
 			//foundcols++;
 		}
 		//printf("\n");
@@ -210,6 +222,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	//}
 
 	free(allowable_columns);
+	free(initial_todo_cols_list);
 	return beta_sets;
 }
 
