@@ -9,7 +9,7 @@ const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
 int total_updates = 0;
 
-static int VERBOSE = 0;
+static int VERBOSE = 1;
 static int zero_updates = 0;
 static int haschanged = 1;
 static int *colsum;
