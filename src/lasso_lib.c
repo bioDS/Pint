@@ -106,16 +106,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 				if (VERBOSE)
 					printf("after loop tempcol was %d\n", tempcol_col);
 				if (iter_col < tempcol_col) {
-					//if (next_one_in_row_ind++ > x2row.row_nz[row]) {
-					//	fprintf(stderr, "incremented row too far at line 72\n");
-					//}
-					//if (next_one_in_row_ind >= x2row.row_nz[row]) {
-					//	tempcol = tempcol->next;
-					//} else {
-					//	while(col > x2row.row_nz_indices[row][next_one_in_row_ind] && next_one_in_row_ind < x2row.row_nz[row]) {
-					//		next_one_in_row_ind++;
-					//	}
-					//}
+					continue;
 				} else if (iter_col == tempcol_col && tempcol != NULL) {
 					if (VERBOSE)
 						printf("tempcol is now equal to iter_col, actually checking\n");
@@ -152,43 +143,39 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 		//for (int i = 0; i < actual_p_int; i++) {
 		int maxcols = 32;
 		int foundcols = 0;
-		if (current_set->data == todo_cols_list->data) {
-			todo_cols_list[1].prev = NULL;
-			todo_cols_list == &todo_cols_list[1];
-		}
-		for (GList *temp_tempcol = NULL, *prevcol = NULL, *tempcol = current_set; tempcol != NULL;) {
+		GList *tempcol = current_set;
+		for (GList *temp_tempcol = NULL; tempcol != NULL;) {
 			if (foundcols > maxcols)
 				break;
 			int i = (int)(long)tempcol->data;
-			todo_columns[i] = 0;
 			remaining_columns--;
-			//printf("%d ", i);
-			//current_set = g_list_append(current_set, (void *)(long)i);
 
 			temp_tempcol = tempcol;
 			tempcol = tempcol->next;
-			//todo_cols_list = g_list_delete_link(todo_cols_list, temp_tempcol);
-			//todo_cols_list = g_list_remove(todo_cols_list, (void*)(long)i);
-			if (i == actual_p_int - 1) {
-				todo_cols_list[i-1].next = NULL;
+
+			if (temp_tempcol->data == todo_cols_list->data) {
+				todo_cols_list = todo_cols_list->next;
+				if (todo_cols_list != NULL)
+					todo_cols_list->prev = NULL;
+			} else if (i == g_list_last(todo_cols_list)->data) {
+				//initial_todo_cols_list[i-1].next = NULL;
+				(todo_cols_list[i].prev)->next = NULL;
+				tempcol = NULL;
 			} else {
-				todo_cols_list[i-1].next = &todo_cols_list[i+1];
-				todo_cols_list[i+1].prev = &todo_cols_list[i-1];
+				initial_todo_cols_list[i].prev->next = initial_todo_cols_list[i].next;
+				initial_todo_cols_list[i].next->prev = initial_todo_cols_list[i].prev;
 			}
 			//foundcols++;
 		}
 		//printf("\n");
-		all_sets = g_list_append(all_sets, current_set);
+		all_sets = g_list_prepend(all_sets, g_list_copy(current_set));
+		g_list_free(current_set);
+		//TODO: manually allocate a copy?
 		current_set = g_list_copy(todo_cols_list);
-
-		//n_allowable_columns = 0;
-		//for (int i = 0; i < actual_p_int; i++) {
-		//	allowable_columns[i] = todo_columns[i];
-		//	n_allowable_columns++;
-		//}
 	}
 
 
+	all_sets = g_list_reverse(all_sets);
 	beta_sets.number_of_sets = g_list_length(all_sets);
 	//printf("printing values from list (length %d):\n", beta_sets.number_of_sets);
 	beta_sets.sets = malloc(beta_sets.number_of_sets*sizeof(struct Beta_Set));
