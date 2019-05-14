@@ -185,11 +185,6 @@ static void test_find_beta_sets() {
 		printf("'%d' ", x2row.row_nz_indices[0][i]);
 	printf("\n");
 
-	//n = 1000;
-	//p = 100;
-	//XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	//x2col = sparse_X2_from_X(xmatrix.X, n, p, 1);
-	//x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
 
 
 	//find_beta_sets(x2col, x2row, p*(p+1)/2, n);
@@ -206,7 +201,7 @@ static void test_find_beta_sets() {
 
 	int val_counter = 0;
 	for (int set = 0; set < beta_sets.number_of_sets; set++) {
-		GSList *temp_set = beta_sets.sets[set].set;
+		GList *temp_set = beta_sets.sets[set].set;
 		for (int entry = 0; entry < correct_set_sizes[set]; entry++) {
 			int val = (int)(long)temp_set->data;
 			printf("comparing set %d, entry %d: %d == %d\n", set, entry, val, correct_cols_for_set[val_counter]);
@@ -214,10 +209,38 @@ static void test_find_beta_sets() {
 			temp_set = temp_set->next;
 		}
 	}
-
 	printf("\nset 0 size: %d\n", beta_sets.sets[0].set_size);
 	g_assert_true(beta_sets.sets[0].set_size == 2);
 	g_assert_true(beta_sets.sets[0].set->data == 0);
+
+
+	printf("checking find_beta for testX\n");
+	n = 1000;
+	p = 100;
+	int p_int = p*(p+1)/2;
+	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
+	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1);
+	x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
+	beta_sets = find_beta_sets(x2col, x2row, p_int, n);
+
+	printf("found %d sets\n", beta_sets.number_of_sets);
+	printf("checking every element is present exactly once\n");
+
+	int found[p_int];
+		memset(found, 0, p_int*sizeof(int));
+	for (int i = 0; i < beta_sets.number_of_sets; i++) {
+		for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
+			int k = (int)(long)temp_list->data;
+			g_assert_true(k >= 0);
+			g_assert_true(k < p_int);
+			g_assert_true(found[k] == 0);
+			found[k] = 1;
+		}
+	}
+	for (int i = 0; i < p_int; i++) {
+		g_assert_true(found[i] == 1);
+	}
+
 	return;
 }
 
