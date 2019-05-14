@@ -52,7 +52,8 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	todo_cols_list[0].next = &todo_cols_list[1];
 	for (int i = 1; i < actual_p_int - 1; i++) {
 		move(ypos, xpos);
-		printw("%.1f%%", (float)100*i/actual_p_int);
+		if (i%100 == 0)
+			printw("%.1f%%", (float)100*i/actual_p_int);
 		refresh();
 		//todo_cols_list = g_list_append(todo_cols_list, (void*)(long)i);
 		todo_cols_list[i].next = &todo_cols_list[i+1];
@@ -73,11 +74,17 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	// do one iteration only
 	while (remaining_columns > 0) {
 		move(ypos, xpos);
-		printw("\nremaining columns: %d \t (%.2f%%)", remaining_columns, (double)remaining_columns*100/actual_p_int);
+		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
 		refresh();
 		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
 		//#pragma omp parallel for shared(allowable_columns, todo_columns) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns)
+		//TODO: row passes take a long time when current_set is full, can we avoid finding the same things over and over to save time?
 		for (int row = 0; row < n; row++) {
+			if (row%100 == 0) {
+				move(ypos+2, xpos);
+				printw("row: %.0f%%\n", ((float)row*100)/n);
+				refresh();
+			}
 			if (x2row.row_nz[row] == 0)
 				continue;
 			//move(ypos+1, xpos);
@@ -116,6 +123,9 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 							printf("\t keeping column %d\n", iter_col);
 						removed_one++;
 						tempcol = tempcol->next;
+						//move(ypos+3, xpos);
+						//printw("current_set length: %d\n", g_list_length(current_set));
+						//refresh();
 					}
 					else {
 						if (VERBOSE)
