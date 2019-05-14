@@ -130,7 +130,7 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->X = fixture->xmatrix.X;
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0);
 
-	double acceptable_diff = 0.1;
+	double acceptable_diff = 1.5;
 	for (int i = 0; i < fixture->p; i++) {
 		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[i]);
 		g_assert_true(fixture->beta[i] < small_X2_correct_beta[i] + acceptable_diff);
@@ -146,7 +146,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	int p_int = fixture->p*(fixture->p+1)/2;
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0);
 
-	double acceptable_diff = 0.1;
+	double acceptable_diff = 1.5;
 	for (int i = 0; i < p_int; i++) {
 		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[i]);
 		g_assert_true(fixture->beta[i] < small_X2_correct_beta[i] + acceptable_diff);
