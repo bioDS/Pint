@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
 	move(6,0);
 	printw("begginning coordinate descent\n");
 	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 100, USE_INT, VERBOSE);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 10, USE_INT, VERBOSE);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
