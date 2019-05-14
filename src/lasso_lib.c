@@ -9,7 +9,7 @@ const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
 int total_updates = 0;
 
-static int VERBOSE = 1;
+static int VERBOSE = 0;
 static int zero_updates = 0;
 static int haschanged = 1;
 static int *colsum;
@@ -66,7 +66,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 		printf("todo_cols_list length is %d, should be %d\n", g_list_length(todo_cols_list), actual_p_int);
 	GList *current_set = NULL;
 	current_set = g_list_copy(todo_cols_list);
-	printw("done set stuff\n");
+	printw("\ndone set stuff\n");
 	refresh();
 
 	getyx(stdscr, ypos, xpos);
@@ -159,7 +159,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 					todo_cols_list->prev = NULL;
 			} else if (i == g_list_last(todo_cols_list)->data) {
 				//initial_todo_cols_list[i-1].next = NULL;
-				(todo_cols_list[i].prev)->next = NULL;
+				(initial_todo_cols_list[i].prev)->next = NULL;
 				tempcol = NULL;
 			} else {
 				initial_todo_cols_list[i].prev->next = initial_todo_cols_list[i].next;
@@ -717,13 +717,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			//printf("number of sets: %d\n", beta_sets.number_of_sets);
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				//printf("set %d size: %d\n", i, beta_sets.sets[i].set_size);
-				GSList *temp_list = beta_sets.sets[i].set;
 				int counter = 0;
-				while (temp_list->next != NULL) {
+				for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
 					cols_to_update[counter++] = (int)(long)temp_list->data;
 					//printf("updating k %d\n", (int)(long)temp_list->data);
-					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, (int)(long)temp_list->data, dBMax, intercept, USE_INT, precalc_get_num);
-					temp_list = temp_list->next;
+					//int k = (int)(long)temp_list->data;
+					//if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, (int)(long)temp_list->data, dBMax, intercept, USE_INT, precalc_get_num);
+					//}
 				}
 				//for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 				//	int k = cols_to_update[j];
