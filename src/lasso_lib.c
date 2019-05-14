@@ -681,6 +681,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	printw(" done\n");
 	refresh();
 
+	int scrx, scry;
+	getyx(stdscr, scry, scrx);
+
 	int *cols_to_update = malloc(p_int*sizeof(int));
 	for (int iter = 0; iter < max_iter; iter++) {
 		refresh();
@@ -736,6 +739,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			}
 		//}
 		haschanged = 0;
+		move(scry, scrx);
 		printw("\n\n");
 
 		// caculate cumulative error after update
