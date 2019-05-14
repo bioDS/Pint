@@ -42,7 +42,7 @@ typedef struct {
 } int_pair;
 
 struct Beta_Set {
-	GSList *set;
+	GList *set;
 	int set_size;
 };
 
