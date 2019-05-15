@@ -3,13 +3,13 @@
 #include <glib-2.0/glib.h>
 #include <ncurses.h>
 
-#define NumCores 4
+#define NumCores 1
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
 int total_updates = 0;
 
-static int VERBOSE = 0;
+static int VERBOSE = 1;
 static int zero_updates = 0;
 static int haschanged = 1;
 static int *colsum;
@@ -24,7 +24,197 @@ static double max_rowsum = 0;
 //		OR: pre-allocate GList contents?
 //TODO: rather than linked lists, arrays of structs with offsets might compress better?
 // GQueue?
-Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+
+Column_Set copy_column_set(Column_Set from_set) {
+	ColEntry *from = from_set.cols;
+	int max_size = from_set.size;
+	GSList *tlist = NULL;
+	int count = 0;
+	for (int i = 0; i < max_size;) {
+		if (from[i].nextEntry > 0) {
+			count++;
+			tlist = g_slist_prepend(tlist, (void*)(long)from[i].value);
+			i = from[i].nextEntry;
+		} else if (from[i].nextEntry < 0) {
+			i = -from[i].nextEntry;
+		} else {
+			fprintf(stderr, "nextEntry was 0\n");
+		}
+	}
+
+	tlist = g_slist_reverse(tlist);
+	int length = g_slist_length(tlist);
+	Column_Set new_set;
+	new_set.size = length;
+	new_set.cols = malloc(length*sizeof(ColEntry));
+	count = 0;
+	for (GSList *temp = tlist; temp != NULL; temp = temp->next) {
+		new_set.cols[count].value = (int)(long)temp->data;
+		new_set.cols[count].nextEntry = count + 1;
+		count++;
+	}
+
+	return new_set;
+}
+
+void fancy_col_remove(Column_Set set, int entry) {
+	ColEntry *cols = set.cols;
+	// find the next +ve entry
+	int next_positive = cols[entry].nextEntry;
+	while (next_positive < 0)
+		next_positive = cols[-next_positive].nextEntry;
+	cols[entry].nextEntry = -next_positive;
+}
+
+int fancy_col_next_positive_entry(Column_Set colset, int initial_col) {
+	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) > 0)
+		initial_col = abs(colset.cols[initial_col].nextEntry);
+	if (initial_col < 0)
+		fprintf(stderr, "next positive entry was negative, something has gone wrong!\n");
+	return initial_col;
+}
+
+Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+	Beta_Sets beta_sets;
+
+	int remaining_columns = actual_p_int;
+	int found_columns = 0;
+	int removed_index = 0;
+	int iteration_count = 0;
+	int *allowable_columns = malloc(actual_p_int*sizeof(int));
+	int n_allowable_columns = actual_p_int;
+	//int *todo_columns = malloc(actual_p_int*sizeof(int));
+	Column_Set todo_columns_fancy;
+	todo_columns_fancy.size = actual_p_int;
+	todo_columns_fancy.cols = malloc(actual_p_int*sizeof(ColEntry));;
+	int n_todo_columns = actual_p_int;
+	int ypos, xpos;
+	//for (int i = 0; i < actual_p_int; i++) {
+	//	allowable_columns[i] = 1;
+	//	todo_columns[i] = 1;
+	//}
+
+	GList *all_sets = NULL;
+
+	printw("doing set stuff: ");
+	refresh();
+	getyx(stdscr, ypos, xpos);
+	for (int i = 0; i < actual_p_int; i++) {
+		if (i%100 == 0 && omp_get_thread_num() == 0) {
+			move(ypos, xpos);
+			printw("%.1f%%", (float)100*i/actual_p_int);
+			refresh();
+		}
+		todo_columns_fancy.cols[i].nextEntry = i+1;
+		todo_columns_fancy.cols[i].value = i;
+	}
+	if (VERBOSE)
+		printf("todo_cols_list length is %d, should be %d\n", n_todo_columns, actual_p_int);
+	GList *current_set = NULL;
+	//current_set = g_list_copy(todo_cols_list);
+	Column_Set current_set_fancy = copy_column_set(todo_columns_fancy);
+	printw("\ndone set stuff\n");
+	refresh();
+	//int *removed_indices = malloc(actual_p_int*sizeof(int));
+
+	//GList *remove_list_thread[NumCores];
+
+	getyx(stdscr, ypos, xpos);
+	// do one iteration only
+	while (remaining_columns > 0) {
+		move(ypos, xpos);
+		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
+		refresh();
+		removed_index = 0;
+		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
+		//TODO: row passes take a long time when current_set is full, can we avoid finding the same things over and over to save time?
+		//#pragma omp parallel for shared(x2col, x2row, allowable_columns, todo_columns, current_set, todo_cols_list, removed_indices, remove_list_thread) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns, removed_index) num_threads(NumCores)
+		for (int row = 0; row < n; row++) {
+			if (row%100 == 0 && omp_get_thread_num() == 0) {
+				move(ypos+2, xpos);
+				printw("row: %.0f%%\n", ((float)row*100)/n);
+				refresh();
+			}
+			if (x2row.row_nz[row] == 0)
+				continue;
+			//move(ypos+1, xpos);
+			if (VERBOSE)
+				printf("\nrow %d", row);
+			//refresh();
+			//printf("\nchecking row %d\n", row);
+			int removed_one = 0;
+			int current_col_ind = 0;
+			for (int col_ind = 0; col_ind < x2row.row_nz[row] && current_col_ind < current_set_fancy.size;) {
+				int col = x2row.row_nz_indices[row][col_ind];
+
+				// if this value is not allowed, find the next one that is.
+				if (current_set_fancy.cols[current_col_ind].nextEntry < 0)
+					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+
+				if (current_set_fancy.cols[current_col_ind].value < col) {
+				// we need to move current_col_ind forward until it reaches or exceeds col
+				while (current_set_fancy.cols[current_col_ind].value < col) {
+					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+				}
+				} else if (current_set_fancy.cols[current_col_ind].value > col) {
+				// we need to move col forward until it reaches or exceeds current_col_ind
+				while (x2row.row_nz_indices[row][col_ind] < current_set_fancy.cols[current_col_ind].value) {
+					col_ind++;
+					if (col_ind >= x2row.row_nz[row]) {
+						if (VERBOSE) {
+							printf("hit end of row\n");
+						}
+						break;
+					}
+				}
+				} else if (current_set_fancy.cols[current_col_ind].value == col) {
+				// if this is the first entry we hit, keep it. otherwise, remove it.
+					if (removed_one == 0)
+						removed_one++;
+					else {
+						if (VERBOSE)
+							printf("removing column %d (actual value %d)\n", current_col_ind, col);
+						fancy_col_remove(current_set_fancy, current_col_ind);
+						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+					}
+				}
+			}
+
+
+			if (VERBOSE) {
+				printf("  allowed columns: ");
+				{
+					int col_ind = 0;
+					for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
+						printf("%d ", current_set_fancy.cols[col_ind]);
+					}
+					if (col_ind < 0)
+						fprintf(stderr, "col_ind was <0!!\n");
+					printf("\n");
+				}
+			}
+		}
+
+		//TODO: manually allocate a copy?
+	}
+
+
+
+	//int current_col = 0;
+	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
+	//	int row = x2col.col_nz_indices[current_col][row_ind];
+	//	for (int compare_col_ind = 0; compare_col_ind < x2row.row_nz[row]; compare_col_ind++) {
+	//		int compare_col = x2row.row_nz_indices[row][compare_col_ind];
+	//		if (compare_col == current_col)
+	//			continue;
+	//		allowable_columns[compare_col] = 0;
+	//	}
+	//}
+
+	return beta_sets;
+}
+
+Beta_Sets find_beta_sets_old(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Beta_Sets beta_sets;
 
 	int remaining_columns = actual_p_int;
@@ -77,8 +267,8 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
 		refresh();
 		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
-		//#pragma omp parallel for shared(allowable_columns, todo_columns) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns)
 		//TODO: row passes take a long time when current_set is full, can we avoid finding the same things over and over to save time?
+		#pragma omp parallel for shared(x2col, x2row, allowable_columns, todo_columns, current_set, todo_cols_list) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns) num_threads(1)
 		for (int row = 0; row < n; row++) {
 			if (row%100 == 0) {
 				move(ypos+2, xpos);
@@ -133,9 +323,10 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 						//allowable_columns[col] = 0;
 						temp_tempcol = tempcol;
 						tempcol = tempcol->next;
+						//#pragma omp critical
 						g_list_delete_link(current_set, temp_tempcol);
 						//g_list_remove(current_set, (void*)(long)iter_col);
-						n_allowable_columns--;
+						//n_allowable_columns--;
 					}
 				}
 			}
@@ -167,7 +358,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 				todo_cols_list = todo_cols_list->next;
 				if (todo_cols_list != NULL)
 					todo_cols_list->prev = NULL;
-			} else if (i == g_list_last(todo_cols_list)->data) {
+			} else if (i == (int)(long)g_list_last(todo_cols_list)->data) {
 				//initial_todo_cols_list[i-1].next = NULL;
 				(initial_todo_cols_list[i].prev)->next = NULL;
 				tempcol = NULL;
@@ -221,6 +412,10 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 	free(allowable_columns);
 	free(initial_todo_cols_list);
 	return beta_sets;
+}
+
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+	return find_beta_sets_new(x2col, x2row, actual_p_int, n);
 }
 
 XMatrix read_x_csv(char *fn, int n, int p) {
@@ -582,9 +777,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
 	move(7,0);
-	printw("calculating sparse interaction matrix\n");
+	printw("calculating sparse interaction matrix (cols): \n");
 	refresh();
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT);
+	printw("calculating sparse interaction matrix (rows): \n");
 	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
 	int p_int = p*(p+1)/2;
@@ -675,9 +871,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			total_col += X2.col_nz[i];
 		}
 	}
-	move(9,0);
-	printw("largest column has %d non-zero entries (out of %d)\n", largest_col, n);
-	move(10,0);
+	//move(9,0);
+	printw("\nlargest column has %d non-zero entries (out of %d)\n", largest_col, n);
+	//move(10,0);
 	printw("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
 	refresh();
 
@@ -728,6 +924,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				//printf("set %d size: %d\n", i, beta_sets.sets[i].set_size);
 				int counter = 0;
+				//TODO: we could attempt to traverse the linked list with openmp (using tasks?) or convert it to an array.
 				for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
 					cols_to_update[counter++] = (int)(long)temp_list->data;
 					//printf("updating k %d\n", (int)(long)temp_list->data);
@@ -877,7 +1074,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 		}
 		iter_done++;
 		if (omp_get_thread_num() == 0) {
-			move(7,40);
+			move(7,48);
 			printw("%.1f%%\n", (float)iter_done*100/p);
 			refresh();
 		}
@@ -890,11 +1087,12 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 	XMatrix_sparse_row X2;
 	int rowno, val, length, colno;
 	int p_int = (p*(p+1))/2;
+	int iter_done = 0;
 
 	X2.row_nz_indices = malloc(n*sizeof(int *));
 	X2.row_nz = malloc(n*sizeof(int));
 
-	#pragma omp parallel for shared(X2, X) private(length, val, colno)
+	#pragma omp parallel for shared(X2, X) private(length, val, colno) shared(iter_done)
 	for (int rowno = 0; rowno < n; rowno++) {
 		GSList *current_row = NULL;
 		// only include main effects (where i==j) unless USE_INT is set.
@@ -929,6 +1127,12 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 
 		g_slist_free(current_row);
 		current_row = NULL;
+		iter_done += 1;
+		if (omp_get_thread_num() == 0) {
+			move(8,48);
+			printw("%.1f%%\n", (float)iter_done*100/n);
+			refresh();
+		}
 	}
 	return X2;
 }

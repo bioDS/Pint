@@ -216,7 +216,7 @@ static void test_find_beta_sets() {
 
 	printf("checking find_beta for testX\n");
 	n = 1000;
-	p = 100;
+	p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1);
@@ -244,6 +244,61 @@ static void test_find_beta_sets() {
 	return;
 }
 
+static void test_column_set_operations() {
+	Column_Set test_set1;
+	test_set1.size = 10;
+	test_set1.cols = malloc(10*sizeof(ColEntry));
+
+	for (int i = 0; i < 10; i++) {
+		test_set1.cols[i].value = i;
+		test_set1.cols[i].nextEntry = i+1;
+	}
+
+	Column_Set test_set2 = copy_column_set(test_set1);
+	printf("checking set1.size (%d) == set2.size (%d)\n", test_set1.size, test_set2.size);
+	g_assert_true(test_set2.size == test_set1.size);
+
+	for (int i = 0; i < test_set1.size; i++) {
+		printf("checking set1[%d] = (%d,%d) == set2[%d] (%d,%d)\n", i, test_set1.cols[i].value, test_set1.cols[i].nextEntry,
+																	i, test_set2.cols[i].value, test_set2.cols[i].nextEntry);
+		g_assert_true(test_set2.cols[i].value == test_set1.cols[i].value);
+		g_assert_true(test_set2.cols[i].nextEntry == test_set1.cols[i].nextEntry);
+	}
+
+	fancy_col_remove(test_set1, 4);
+	for (int i = 0; i < 10; i++) {
+		if (i == 4)
+			g_assert_true(test_set1.cols[i].nextEntry == -5);
+		else
+			g_assert_true(test_set1.cols[i].nextEntry == i+1);
+		g_assert_true(test_set1.cols[i].value == i);
+	}
+
+	fancy_col_remove(test_set1, 0);
+	for (int i = 0; i < 10; i++) {
+		if (i == 0)
+			g_assert_true(test_set1.cols[i].nextEntry == -1);
+		else if (i == 4)
+			g_assert_true(test_set1.cols[i].nextEntry == -5);
+		else
+			g_assert_true(test_set1.cols[i].nextEntry == i+1);
+		g_assert_true(test_set1.cols[i].value == i);
+	}
+
+	fancy_col_remove(test_set1, 9);
+	for (int i = 0; i < 10; i++) {
+		if (i == 0)
+			g_assert_true(test_set1.cols[i].nextEntry == -1);
+		else if (i == 4)
+			g_assert_true(test_set1.cols[i].nextEntry == -5);
+		else if (i == 9)
+			g_assert_true(test_set1.cols[i].nextEntry == -10);
+		else
+			g_assert_true(test_set1.cols[i].nextEntry == i+1);
+		g_assert_true(test_set1.cols[i].value == i);
+	}
+}
+
 int main (int argc, char *argv[]) {
 	setlocale (LC_ALL, "");
 	g_test_init (&argc, &argv, NULL);
@@ -258,6 +313,7 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-main", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_main, update_beta_fixture_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-find-beta-sets", test_find_beta_sets);
+	g_test_add_func("/func/test-column-set-operations", test_column_set_operations);
 
 	return g_test_run();
 }

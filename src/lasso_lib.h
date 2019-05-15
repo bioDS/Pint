@@ -27,6 +27,16 @@ typedef struct XMatrix {
 	int actual_cols;
 } XMatrix;
 
+typedef struct column_set_entry {
+	int value;
+	int nextEntry;
+} ColEntry;
+
+typedef struct Column_Set {
+	int size;
+	ColEntry *cols;
+} Column_Set;
+
 typedef struct XMatrix_sparse {
 	int **col_nz_indices;
 	int *col_nz;
@@ -64,3 +74,5 @@ double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(int num, int p);
 Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n);
+Column_Set copy_column_set(Column_Set from);
+void fancy_col_remove(Column_Set set, int entry);
