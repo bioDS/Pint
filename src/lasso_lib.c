@@ -61,14 +61,16 @@ void fancy_col_remove(Column_Set set, int entry) {
 	ColEntry *cols = set.cols;
 	// find the next +ve entry
 	int next_positive = cols[entry].nextEntry;
-	while (next_positive < 0)
-		next_positive = cols[-next_positive].nextEntry;
-	cols[entry].nextEntry = -next_positive;
+	while (cols[abs(next_positive)].nextEntry < 0)
+		next_positive = cols[abs(next_positive)].nextEntry;
+	cols[entry].nextEntry = -abs(next_positive);
 }
 
 int fancy_col_next_positive_entry(Column_Set colset, int initial_col) {
-	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) > 0)
+	do {
 		initial_col = abs(colset.cols[initial_col].nextEntry);
+	}
+	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) >= 0);
 	if (initial_col < 0)
 		fprintf(stderr, "next positive entry was negative, something has gone wrong!\n");
 	return initial_col;
