@@ -66,11 +66,31 @@ void fancy_col_remove(Column_Set set, int entry) {
 	cols[entry].nextEntry = -abs(next_positive);
 }
 
+void fancy_col_remove_value(Column_Set set, int entry_value) {
+	ColEntry *cols = set.cols;
+	int entry = -1;
+	for (int i = 0; i < set.size; i++) {
+		if (cols[i].value == entry_value) {
+			entry = i;
+			break;
+		}
+	}
+	if (entry == -1) {
+		fprintf(stderr, "attempted to remove an entry that was not found\n");
+		return;
+	}
+	// find the next +ve entry
+	int next_positive = cols[entry].nextEntry;
+	while (cols[abs(next_positive)].nextEntry < 0)
+		next_positive = cols[abs(next_positive)].nextEntry;
+	cols[entry].nextEntry = -abs(next_positive);
+}
+
 int fancy_col_next_positive_entry(Column_Set colset, int initial_col) {
 	do {
 		initial_col = abs(colset.cols[initial_col].nextEntry);
 	}
-	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) >= 0);
+	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) >= 0 && abs(initial_col) < colset.size);
 	if (initial_col < 0)
 		fprintf(stderr, "next positive entry was negative, something has gone wrong!\n");
 	return initial_col;
@@ -141,22 +161,34 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 				continue;
 			//move(ypos+1, xpos);
 			if (VERBOSE)
-				printf("\nrow %d", row);
+				printf("\nrow %d\n", row);
 			//refresh();
 			//printf("\nchecking row %d\n", row);
 			int removed_one = 0;
 			int current_col_ind = 0;
-			for (int col_ind = 0; col_ind < x2row.row_nz[row] && current_col_ind < current_set_fancy.size;) {
+			for (int col_ind = 0; col_ind < x2row.row_nz[row] && current_col_ind < current_set_fancy.size && n_todo_columns > 1;) {
 				int col = x2row.row_nz_indices[row][col_ind];
 
 				// if this value is not allowed, find the next one that is.
-				if (current_set_fancy.cols[current_col_ind].nextEntry < 0)
+				if (current_set_fancy.cols[current_col_ind].nextEntry < 0) {
+					int temp = current_col_ind;
 					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+					// there is no next entry
+					if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
+						current_col_ind = current_set_fancy.size;
+						goto quick_hack_done;
+					}
+				}
 
 				if (current_set_fancy.cols[current_col_ind].value < col) {
 				// we need to move current_col_ind forward until it reaches or exceeds col
 				while (current_set_fancy.cols[current_col_ind].value < col) {
+					int temp = current_col_ind;
 					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+					if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
+						current_col_ind = current_set_fancy.size;
+						goto quick_hack_done;
+					}
 				}
 				} else if (current_set_fancy.cols[current_col_ind].value > col) {
 				// we need to move col forward until it reaches or exceeds current_col_ind
@@ -171,36 +203,79 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 				}
 				} else if (current_set_fancy.cols[current_col_ind].value == col) {
 				// if this is the first entry we hit, keep it. otherwise, remove it.
-					if (removed_one == 0)
+					if (removed_one == 0) {
 						removed_one++;
+						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+					}
 					else {
 						if (VERBOSE)
 							printf("removing column %d (actual value %d)\n", current_col_ind, col);
 						fancy_col_remove(current_set_fancy, current_col_ind);
+						n_todo_columns--;
 						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
 					}
 				}
 			}
-
-
+quick_hack_done:
 			if (VERBOSE) {
 				printf("  allowed columns: ");
-				{
-					int col_ind = 0;
-					for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
-						printf("%d ", current_set_fancy.cols[col_ind]);
-					}
-					if (col_ind < 0)
-						fprintf(stderr, "col_ind was <0!!\n");
-					printf("\n");
+				int col_ind = 0;
+				for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
+					if (current_set_fancy.cols[col_ind].nextEntry >= 0)
+						printf("%d ", current_set_fancy.cols[col_ind].value);
 				}
 			}
 		}
+
+		if (VERBOSE) {
+			printf("  allowed columns: ");
+		}
+		int col_ind = 0;
+		for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
+			if (current_set_fancy.cols[col_ind].nextEntry >= 0) {
+				remaining_columns--;
+				fancy_col_remove_value(todo_columns_fancy, current_set_fancy.cols[col_ind].value);
+				if (VERBOSE)
+					printf("%d ", current_set_fancy.cols[col_ind].value);
+			}
+		}
+		if (col_ind < 0)
+			fprintf(stderr, "col_ind was <0!!\n");
+		printf("\n");
+
+		Column_Set *append_set = malloc(sizeof(Column_Set));
+		Column_Set temp_set = copy_column_set(current_set_fancy);
+		memcpy(append_set, &temp_set, sizeof(Column_Set));
+		all_sets = g_list_prepend(all_sets, append_set);
+		beta_sets.number_of_sets++;
+
+		current_set_fancy = copy_column_set(todo_columns_fancy);
+		n_todo_columns = current_set_fancy.size;
+
 
 		//TODO: manually allocate a copy?
 	}
 
 
+	all_sets = g_list_reverse(all_sets);
+
+	beta_sets.sets = malloc(beta_sets.number_of_sets*sizeof(struct Beta_Set));
+	GList *temp_set_pointer = all_sets;
+	int counter = 0;
+	while (temp_set_pointer != NULL) {
+		//printf("\n");
+		Column_Set *colset = temp_set_pointer->data;
+		//printf("reading list %d (length %d)\n", counter, g_list_length(temp_set_pointer));
+		//struct Beta_Set temp_beta_set = malloc(sizeof(struct Beta_Set));
+		beta_sets.sets[counter] = *colset;
+		//while (temp_val_pointer != NULL) {
+		//	printf("%ld ", (long)temp_val_pointer->data);
+
+		//	temp_val_pointer = temp_val_pointer->next;
+		//}
+		temp_set_pointer = temp_set_pointer->next;
+		counter++;
+	}
 
 	//int current_col = 0;
 	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
@@ -389,8 +464,8 @@ Beta_Sets find_beta_sets_old(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 		GList *temp_val_pointer = temp_set_pointer->data;
 		//printf("reading list %d (length %d)\n", counter, g_list_length(temp_set_pointer));
 		//struct Beta_Set temp_beta_set = malloc(sizeof(struct Beta_Set));
-		beta_sets.sets[counter].set = temp_set_pointer->data;
-		beta_sets.sets[counter].set_size = g_list_length(temp_set_pointer->data);
+		//beta_sets.sets[counter].set = temp_set_pointer->data;
+		//beta_sets.sets[counter].set_size = g_list_length(temp_set_pointer->data);
 		//while (temp_val_pointer != NULL) {
 		//	printf("%ld ", (long)temp_val_pointer->data);
 
@@ -927,14 +1002,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				//printf("set %d size: %d\n", i, beta_sets.sets[i].set_size);
 				int counter = 0;
 				//TODO: we could attempt to traverse the linked list with openmp (using tasks?) or convert it to an array.
-				for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
-					cols_to_update[counter++] = (int)(long)temp_list->data;
-					//printf("updating k %d\n", (int)(long)temp_list->data);
-					//int k = (int)(long)temp_list->data;
-					//if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
-						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, (int)(long)temp_list->data, dBMax, intercept, USE_INT, precalc_get_num);
-					//}
-				}
+				//for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
+				//	cols_to_update[counter++] = (int)(long)temp_list->data;
+				//	//printf("updating k %d\n", (int)(long)temp_list->data);
+				//	//int k = (int)(long)temp_list->data;
+				//	//if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+				//		dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, (int)(long)temp_list->data, dBMax, intercept, USE_INT, precalc_get_num);
+				//	//}
+				//}
 				//for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 				//	int k = cols_to_update[j];
 				//	printf("updating col %d\n", k);

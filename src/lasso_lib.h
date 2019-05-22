@@ -57,7 +57,7 @@ struct Beta_Set {
 };
 
 typedef struct Beta_Sets {
-	struct Beta_Set *sets;
+	struct Column_Set *sets;
 	int number_of_sets;
 } Beta_Sets;
 
