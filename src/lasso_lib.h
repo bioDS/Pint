@@ -76,3 +76,4 @@ int_pair get_num(int num, int p);
 Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n);
 Column_Set copy_column_set(Column_Set from);
 void fancy_col_remove(Column_Set set, int entry);
+int fancy_col_find_entry_value_or_next(Column_Set colset, int value);

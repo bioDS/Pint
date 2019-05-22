@@ -96,8 +96,34 @@ int fancy_col_next_positive_entry(Column_Set colset, int initial_col) {
 	return initial_col;
 }
 
+// binary search for the first entry whose value is greater than or equal to value
+int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
+	int prev_index = -1;
+	int index = colset.size/2;
+	int reduction = colset.size/4;
+	if (reduction < 1)
+		reduction = 1;
+
+	for (int count = 0; count < colset.size; count++) {
+		if (colset.cols[index].value > value) {
+			// we have found the same greater value twice
+			if (prev_index == index)
+				return index;
+			prev_index = index;
+			index -= reduction;
+		} else if (colset.cols[index].value < value) {
+			index += reduction;
+		} else {
+			return index;
+		}
+		if (reduction != 1)
+			reduction /= 2;
+	}
+}
+
 Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Beta_Sets beta_sets;
+	beta_sets.number_of_sets = 0;
 
 	int remaining_columns = actual_p_int;
 	int found_columns = 0;
@@ -142,7 +168,8 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 	//GList *remove_list_thread[NumCores];
 
 	getyx(stdscr, ypos, xpos);
-	// do one iteration only
+	// TODO: partition rows into (numCores) sets to be processed? (assuming the algorithm will find nearby things anyway).
+	// - this would probably also reduce the number of things that has to be redundantly removed
 	while (remaining_columns > 0) {
 		move(ypos, xpos);
 		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
@@ -182,14 +209,15 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 
 				if (current_set_fancy.cols[current_col_ind].value < col) {
 				// we need to move current_col_ind forward until it reaches or exceeds col
-				while (current_set_fancy.cols[current_col_ind].value < col) {
-					int temp = current_col_ind;
-					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-					if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
-						current_col_ind = current_set_fancy.size;
-						goto quick_hack_done;
-					}
-				}
+				current_col_ind = fancy_col_find_entry_value_or_next(current_set_fancy, col);
+				//while (current_set_fancy.cols[current_col_ind].value < col) {
+				//	int temp = current_col_ind;
+				//	current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
+				//	if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
+				//		current_col_ind = current_set_fancy.size;
+				//		goto quick_hack_done;
+				//	}
+				//}
 				} else if (current_set_fancy.cols[current_col_ind].value > col) {
 				// we need to move col forward until it reaches or exceeds current_col_ind
 				while (x2row.row_nz_indices[row][col_ind] < current_set_fancy.cols[current_col_ind].value) {
@@ -201,7 +229,7 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 						break;
 					}
 				}
-				} else if (current_set_fancy.cols[current_col_ind].value == col) {
+				} else if (current_set_fancy.cols[current_col_ind].value == col && current_set_fancy.cols[current_col_ind].nextEntry > 0) {
 				// if this is the first entry we hit, keep it. otherwise, remove it.
 					if (removed_one == 0) {
 						removed_one++;
@@ -211,9 +239,13 @@ Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int
 						if (VERBOSE)
 							printf("removing column %d (actual value %d)\n", current_col_ind, col);
 						fancy_col_remove(current_set_fancy, current_col_ind);
+						//current_set_fancy.cols[current_col_ind].nextEntry = -current_set_fancy.cols[current_col_ind].nextEntry;
 						n_todo_columns--;
 						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
 					}
+				} else if (current_set_fancy.cols[current_col_ind].nextEntry < 0) {
+					fprintf(stderr, "used a negative column, this shouldn't happen\n");
+					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
 				}
 			}
 quick_hack_done:
@@ -231,9 +263,12 @@ quick_hack_done:
 			printf("  allowed columns: ");
 		}
 		int col_ind = 0;
+		int first_entry, last_entry;
 		for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
 			if (current_set_fancy.cols[col_ind].nextEntry >= 0) {
+				last_entry = current_set_fancy.cols[col_ind].value;
 				remaining_columns--;
+				//TODO: slow
 				fancy_col_remove_value(todo_columns_fancy, current_set_fancy.cols[col_ind].value);
 				if (VERBOSE)
 					printf("%d ", current_set_fancy.cols[col_ind].value);
@@ -248,6 +283,9 @@ quick_hack_done:
 		memcpy(append_set, &temp_set, sizeof(Column_Set));
 		all_sets = g_list_prepend(all_sets, append_set);
 		beta_sets.number_of_sets++;
+
+		move(ypos+3, xpos);
+		printw("found %d from index %d to %d\n", temp_set.size, current_set_fancy.cols[fancy_col_next_positive_entry(current_set_fancy, 0)].value, last_entry);
 
 		current_set_fancy = copy_column_set(todo_columns_fancy);
 		n_todo_columns = current_set_fancy.size;
@@ -287,6 +325,9 @@ quick_hack_done:
 	//		allowable_columns[compare_col] = 0;
 	//	}
 	//}
+
+	move(1,0);
+	printw("mean size: %.1f\n", (float)actual_p_int/beta_sets.number_of_sets);
 
 	return beta_sets;
 }

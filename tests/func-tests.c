@@ -264,6 +264,12 @@ static void test_column_set_operations() {
 		g_assert_true(test_set2.cols[i].nextEntry == test_set1.cols[i].nextEntry);
 	}
 
+	for (int i = 0; i < test_set1.size; i++) {
+		int found_ind = fancy_col_find_entry_value_or_next(test_set2, i);
+		printf("checking found_ind: %d == actual location: %d\n", found_ind, i);
+		g_assert_true(found_ind == i);
+	}
+
 	fancy_col_remove(test_set1, 4);
 	for (int i = 0; i < 10; i++) {
 		if (i == 4)
