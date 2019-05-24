@@ -52,12 +52,12 @@ typedef struct {
 } int_pair;
 
 struct Beta_Set {
-	GList *set;
+	int *set;
 	int set_size;
 };
 
 typedef struct Beta_Sets {
-	struct Column_Set *sets;
+	struct Beta_Set *sets;
 	int number_of_sets;
 } Beta_Sets;
 

@@ -121,419 +121,151 @@ int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
 	}
 }
 
-Beta_Sets find_beta_sets_new(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
-	Beta_Sets beta_sets;
-	beta_sets.number_of_sets = 0;
+/* every 1 (after the first one) found in a row, that belongs to the same set, begins a new set.
+ * merging neighouring sets gives us simultaneously updateable neighbours. There are expected to be, on average, a few.
+ * Possibly break smaller sets up placing their columns in larger sets until every set (or as many as we
+ * can manage) has ~~ numCores elements. To do this reasonably, sets should be sorted after the first pass.
+ */
+//Beta_Sets find_beta_sets_1pass(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+//	GList *starting_points = g_list_prepend(NULL, (void*)(int)0);
+//	int found_one_in_set = 0;
+//	int col = 0;
+//	GList *current_starting_point = starting_points;
+//
+//	// TODO: this just adds every second one in the row to the starting_points list.
+//	//		- except when we pass into another set....
+//	for (int row = 0; row < n; row++) {
+//		found_one_in_set = 0;
+//		for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
+//			col = x2row.row_nz_indices[row][col_ind];
+//			if (current_starting_point->next != NULL && col >= (int)(long)(current_starting_point->next)->data) {
+//				current_starting_point = current_starting_point->next;
+//			}
+//			if (found_one_in_set == 1 && (current_starting_point->next == NULL ||
+//										 (int)(long)current_starting_point->next->data != col)) {
+//				current_starting_point = starting_points;
+//			} else {
+//				found_one_in_set = 1;
+//			}
+//		}
+//	}
+//}
 
-	int remaining_columns = actual_p_int;
-	int found_columns = 0;
-	int removed_index = 0;
-	int iteration_count = 0;
-	int *allowable_columns = malloc(actual_p_int*sizeof(int));
-	int n_allowable_columns = actual_p_int;
-	//int *todo_columns = malloc(actual_p_int*sizeof(int));
-	Column_Set todo_columns_fancy;
-	todo_columns_fancy.size = actual_p_int;
-	todo_columns_fancy.cols = malloc(actual_p_int*sizeof(ColEntry));;
-	int n_todo_columns = actual_p_int;
-	int ypos, xpos;
-	//for (int i = 0; i < actual_p_int; i++) {
-	//	allowable_columns[i] = 1;
-	//	todo_columns[i] = 1;
-	//}
+typedef struct Mergeset {
+	int size;
+	int *entries;
+} Mergeset;
 
-	GList *all_sets = NULL;
+int can_merge(Mergeset *all_sets, int i1, int i2) {
+	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
+		return TRUE;
 
-	printw("doing set stuff: ");
-	refresh();
-	getyx(stdscr, ypos, xpos);
-	for (int i = 0; i < actual_p_int; i++) {
-		if (i%100 == 0 && omp_get_thread_num() == 0) {
-			move(ypos, xpos);
-			printw("%.1f%%", (float)100*i/actual_p_int);
-			refresh();
+	int ti1 = 0, ti2 = 0;
+	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
+		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
+			ti1++;
 		}
-		todo_columns_fancy.cols[i].nextEntry = i+1;
-		todo_columns_fancy.cols[i].value = i;
+		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
+			ti2++;
+		}
+		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2])
+			return FALSE;
 	}
-	if (VERBOSE)
-		printf("todo_cols_list length is %d, should be %d\n", n_todo_columns, actual_p_int);
-	GList *current_set = NULL;
-	//current_set = g_list_copy(todo_cols_list);
-	Column_Set current_set_fancy = copy_column_set(todo_columns_fancy);
-	printw("\ndone set stuff\n");
-	refresh();
-	//int *removed_indices = malloc(actual_p_int*sizeof(int));
-
-	//GList *remove_list_thread[NumCores];
-
-	getyx(stdscr, ypos, xpos);
-	// TODO: partition rows into (numCores) sets to be processed? (assuming the algorithm will find nearby things anyway).
-	// - this would probably also reduce the number of things that has to be redundantly removed
-	while (remaining_columns > 0) {
-		move(ypos, xpos);
-		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
-		refresh();
-		removed_index = 0;
-		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
-		//TODO: row passes take a long time when current_set is full, can we avoid finding the same things over and over to save time?
-		//#pragma omp parallel for shared(x2col, x2row, allowable_columns, todo_columns, current_set, todo_cols_list, removed_indices, remove_list_thread) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns, removed_index) num_threads(NumCores)
-		for (int row = 0; row < n; row++) {
-			if (row%100 == 0 && omp_get_thread_num() == 0) {
-				move(ypos+2, xpos);
-				printw("row: %.0f%%\n", ((float)row*100)/n);
-				refresh();
-			}
-			if (x2row.row_nz[row] == 0)
-				continue;
-			//move(ypos+1, xpos);
-			if (VERBOSE)
-				printf("\nrow %d\n", row);
-			//refresh();
-			//printf("\nchecking row %d\n", row);
-			int removed_one = 0;
-			int current_col_ind = 0;
-			for (int col_ind = 0; col_ind < x2row.row_nz[row] && current_col_ind < current_set_fancy.size && n_todo_columns > 1;) {
-				int col = x2row.row_nz_indices[row][col_ind];
-
-				// if this value is not allowed, find the next one that is.
-				if (current_set_fancy.cols[current_col_ind].nextEntry < 0) {
-					int temp = current_col_ind;
-					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-					// there is no next entry
-					if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
-						current_col_ind = current_set_fancy.size;
-						goto quick_hack_done;
-					}
-				}
-
-				if (current_set_fancy.cols[current_col_ind].value < col) {
-				// we need to move current_col_ind forward until it reaches or exceeds col
-				current_col_ind = fancy_col_find_entry_value_or_next(current_set_fancy, col);
-				//while (current_set_fancy.cols[current_col_ind].value < col) {
-				//	int temp = current_col_ind;
-				//	current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-				//	if (current_col_ind == temp || current_col_ind == current_set_fancy.size) {
-				//		current_col_ind = current_set_fancy.size;
-				//		goto quick_hack_done;
-				//	}
-				//}
-				} else if (current_set_fancy.cols[current_col_ind].value > col) {
-				// we need to move col forward until it reaches or exceeds current_col_ind
-				while (x2row.row_nz_indices[row][col_ind] < current_set_fancy.cols[current_col_ind].value) {
-					col_ind++;
-					if (col_ind >= x2row.row_nz[row]) {
-						if (VERBOSE) {
-							printf("hit end of row\n");
-						}
-						break;
-					}
-				}
-				} else if (current_set_fancy.cols[current_col_ind].value == col && current_set_fancy.cols[current_col_ind].nextEntry > 0) {
-				// if this is the first entry we hit, keep it. otherwise, remove it.
-					if (removed_one == 0) {
-						removed_one++;
-						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-					}
-					else {
-						if (VERBOSE)
-							printf("removing column %d (actual value %d)\n", current_col_ind, col);
-						fancy_col_remove(current_set_fancy, current_col_ind);
-						//current_set_fancy.cols[current_col_ind].nextEntry = -current_set_fancy.cols[current_col_ind].nextEntry;
-						n_todo_columns--;
-						current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-					}
-				} else if (current_set_fancy.cols[current_col_ind].nextEntry < 0) {
-					fprintf(stderr, "used a negative column, this shouldn't happen\n");
-					current_col_ind = fancy_col_next_positive_entry(current_set_fancy, current_col_ind);
-				}
-			}
-quick_hack_done:
-			if (VERBOSE) {
-				printf("  allowed columns: ");
-				int col_ind = 0;
-				for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
-					if (current_set_fancy.cols[col_ind].nextEntry >= 0)
-						printf("%d ", current_set_fancy.cols[col_ind].value);
-				}
-			}
-		}
-
-		if (VERBOSE) {
-			printf("  allowed columns: ");
-		}
-		int col_ind = 0;
-		int first_entry, last_entry;
-		for (col_ind = 0; col_ind < current_set_fancy.size && col_ind >= 0; col_ind = abs(current_set_fancy.cols[col_ind].nextEntry)) {
-			if (current_set_fancy.cols[col_ind].nextEntry >= 0) {
-				last_entry = current_set_fancy.cols[col_ind].value;
-				remaining_columns--;
-				//TODO: slow
-				fancy_col_remove_value(todo_columns_fancy, current_set_fancy.cols[col_ind].value);
-				if (VERBOSE)
-					printf("%d ", current_set_fancy.cols[col_ind].value);
-			}
-		}
-		if (col_ind < 0)
-			fprintf(stderr, "col_ind was <0!!\n");
-		printf("\n");
-
-		Column_Set *append_set = malloc(sizeof(Column_Set));
-		Column_Set temp_set = copy_column_set(current_set_fancy);
-		memcpy(append_set, &temp_set, sizeof(Column_Set));
-		all_sets = g_list_prepend(all_sets, append_set);
-		beta_sets.number_of_sets++;
-
-		move(ypos+3, xpos);
-		printw("found %d from index %d to %d\n", temp_set.size, current_set_fancy.cols[fancy_col_next_positive_entry(current_set_fancy, 0)].value, last_entry);
-
-		current_set_fancy = copy_column_set(todo_columns_fancy);
-		n_todo_columns = current_set_fancy.size;
-
-
-		//TODO: manually allocate a copy?
-	}
-
-
-	all_sets = g_list_reverse(all_sets);
-
-	beta_sets.sets = malloc(beta_sets.number_of_sets*sizeof(struct Beta_Set));
-	GList *temp_set_pointer = all_sets;
-	int counter = 0;
-	while (temp_set_pointer != NULL) {
-		//printf("\n");
-		Column_Set *colset = temp_set_pointer->data;
-		//printf("reading list %d (length %d)\n", counter, g_list_length(temp_set_pointer));
-		//struct Beta_Set temp_beta_set = malloc(sizeof(struct Beta_Set));
-		beta_sets.sets[counter] = *colset;
-		//while (temp_val_pointer != NULL) {
-		//	printf("%ld ", (long)temp_val_pointer->data);
-
-		//	temp_val_pointer = temp_val_pointer->next;
-		//}
-		temp_set_pointer = temp_set_pointer->next;
-		counter++;
-	}
-
-	//int current_col = 0;
-	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
-	//	int row = x2col.col_nz_indices[current_col][row_ind];
-	//	for (int compare_col_ind = 0; compare_col_ind < x2row.row_nz[row]; compare_col_ind++) {
-	//		int compare_col = x2row.row_nz_indices[row][compare_col_ind];
-	//		if (compare_col == current_col)
-	//			continue;
-	//		allowable_columns[compare_col] = 0;
-	//	}
-	//}
-
-	move(1,0);
-	printw("mean size: %.1f\n", (float)actual_p_int/beta_sets.number_of_sets);
-
-	return beta_sets;
+	return TRUE;
 }
 
-Beta_Sets find_beta_sets_old(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
-	Beta_Sets beta_sets;
+// merges set i2 into set i1
+void merge_sets(Mergeset *all_sets, int i1, int i2) {
+	int indices[all_sets[i1].size + all_sets[i2].size];
+	int used_cols = 0;
 
-	int remaining_columns = actual_p_int;
-	int found_columns = 0;
-	int iteration_count = 0;
-	int *allowable_columns = malloc(actual_p_int*sizeof(int));
-	int n_allowable_columns = actual_p_int;
-	int *todo_columns = malloc(actual_p_int*sizeof(int));
-	int ypos, xpos;
-	//for (int i = 0; i < actual_p_int; i++) {
-	//	allowable_columns[i] = 1;
-	//	todo_columns[i] = 1;
-	//}
-
-	GList *all_sets = NULL;
-	GList *todo_cols_list = NULL;
-
-	printw("doing set stuff: ");
-	refresh();
-	getyx(stdscr, ypos, xpos);
-	todo_cols_list = malloc(actual_p_int*sizeof(GList));
-	GList *initial_todo_cols_list = todo_cols_list;
-	todo_cols_list[0].data = (void*)(int)0;
-	todo_cols_list[0].prev = NULL;
-	todo_cols_list[0].next = &todo_cols_list[1];
-	for (int i = 1; i < actual_p_int - 1; i++) {
-		move(ypos, xpos);
-		if (i%100 == 0)
-			printw("%.1f%%", (float)100*i/actual_p_int);
-		refresh();
-		//todo_cols_list = g_list_append(todo_cols_list, (void*)(long)i);
-		todo_cols_list[i].next = &todo_cols_list[i+1];
-		todo_cols_list[i].prev = &todo_cols_list[i-1];
-		todo_cols_list[i].data = (void*)(long)i;
+	int ti1 = 0, ti2 = 0;
+	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
+		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
+			indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
+			used_cols++;
+		}
+		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
+			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
+			used_cols++;
+		}
 	}
-	todo_cols_list[actual_p_int - 1].data = (void*)(long)(actual_p_int - 1);
-	todo_cols_list[actual_p_int - 1].prev = &todo_cols_list[actual_p_int - 2];
-	todo_cols_list[actual_p_int - 1].next = NULL;
-	if (VERBOSE)
-		printf("todo_cols_list length is %d, should be %d\n", g_list_length(todo_cols_list), actual_p_int);
-	GList *current_set = NULL;
-	current_set = g_list_copy(todo_cols_list);
-	printw("\ndone set stuff\n");
-	refresh();
+	// we've done the overlap, now read in the rest
+	while (ti1 < all_sets[i1].size) {
+		indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
+		used_cols++;
+	}
+	while (ti2 < all_sets[i2].size) {
+		indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
+		used_cols++;
+	}
 
-	getyx(stdscr, ypos, xpos);
-	// do one iteration only
-	while (remaining_columns > 0) {
-		move(ypos, xpos);
-		printw("\nremaining columns: %d \t (%.2f%%)\n", remaining_columns, (double)remaining_columns*100/actual_p_int);
-		refresh();
-		//printf("beginning iteration %d, remaining_columns %d\n", iteration_count++, remaining_columns);
-		//TODO: row passes take a long time when current_set is full, can we avoid finding the same things over and over to save time?
-		#pragma omp parallel for shared(x2col, x2row, allowable_columns, todo_columns, current_set, todo_cols_list) reduction(-:remaining_columns, n_allowable_columns) reduction(+:found_columns) num_threads(1)
-		for (int row = 0; row < n; row++) {
-			if (row%100 == 0) {
-				move(ypos+2, xpos);
-				printw("row: %.0f%%\n", ((float)row*100)/n);
-				refresh();
-			}
-			if (x2row.row_nz[row] == 0)
-				continue;
-			//move(ypos+1, xpos);
-			if (VERBOSE)
-				printf("\nrow %d", row);
-			//refresh();
-			//printf("\nchecking row %d\n", row);
-			int removed_one = 0;
-			int next_one_in_row_ind = 0;
-			GList *temp_tempcol;
-			GList *tempcol = current_set;
-			for (int col_ind = 0; col_ind < x2row.row_nz[row] && tempcol != NULL; col_ind++) {
+	int *actual_indices = malloc(used_cols*sizeof(int));
+	memcpy(actual_indices, indices, used_cols*sizeof(int));
+	free(all_sets[i1].entries);
+	all_sets[i1].entries = actual_indices;
+	all_sets[i1].size = used_cols;
+}
 
-//			for (GList *temp_tempcol = NULL, *tempcol = current_set; tempcol != NULL;) {
-				int tempcol_col = (int)(long)tempcol->data;
-				int iter_col = x2row.row_nz_indices[row][col_ind];
-				if (VERBOSE)
-					printf("\t checking column %d (current tempcol %d)\n", iter_col, tempcol_col);
-				// remove this column from those allowed to be updated at the same time as the set so far
-				// (if it is currently allowed)
-				while (iter_col > tempcol_col && tempcol != NULL) {
-					tempcol = tempcol->next;
-					if (tempcol != NULL)
-						tempcol_col = (int)(long)tempcol->data;
-				}
-				if (VERBOSE)
-					printf("after loop tempcol was %d\n", tempcol_col);
-				if (iter_col < tempcol_col) {
-					continue;
-				} else if (iter_col == tempcol_col && tempcol != NULL) {
-					if (VERBOSE)
-						printf("tempcol is now equal to iter_col, actually checking\n");
-					//next_one_in_row_ind++;
-					if (removed_one == 0) {
-						if (VERBOSE)
-							printf("\t keeping column %d\n", iter_col);
-						removed_one++;
-						tempcol = tempcol->next;
-						//move(ypos+3, xpos);
-						//printw("current_set length: %d\n", g_list_length(current_set));
-						//refresh();
-					}
-					else {
-						if (VERBOSE)
-							printf("\t removing column %d\n", iter_col);
-						//allowable_columns[col] = 0;
-						temp_tempcol = tempcol;
-						tempcol = tempcol->next;
-						//#pragma omp critical
-						g_list_delete_link(current_set, temp_tempcol);
-						//g_list_remove(current_set, (void*)(long)iter_col);
-						//n_allowable_columns--;
-					}
-				}
-			}
+//TODO: don't allocate so many arrays on the stack?
+Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
+	int valid_mergesets[actual_p_int];
+	int actual_set_sizes[actual_p_int];
+	int mergeset_count = actual_p_int;
+	int new_mergeset_count;
+	Beta_Sets return_sets;
 
-			if (VERBOSE) {
-				printf("  allowed columns: ");
-				for (GList *tempcol = current_set; tempcol != NULL; tempcol = tempcol->next) {
-					printf("%d ", (int)(long)tempcol->data);
-				}
-				printf("\n");
-			}
+
+	for (int i = 0; i < actual_p_int; i++)
+		valid_mergesets[i] = TRUE;
+
+	for (int i = 0; i < mergeset_count; i++) {
+		all_sets[i].size = x2col.col_nz[i];
+		all_sets[i].entries = malloc(all_sets[i].size*sizeof(int));
+		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(int));
+		actual_set_sizes[i] = 1;
+	}
+
+	// let's start with one pass
+	new_mergeset_count = mergeset_count;
+	for (int i = 0; i+1 < mergeset_count;) {
+		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
+			merge_sets(all_sets, i, i+1);
+			actual_set_sizes[i]++;
+			valid_mergesets[i+1] = FALSE;
+			new_mergeset_count--;
+			i += 2;
+		} else {
+			i++;
+		}
+	}
+	mergeset_count = new_mergeset_count;
+
+	printf("some useful statistics:\n");
+	printf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
+
+	//TODO: only works for contiguous sets at the moment (if there)
+	int set_size, cur_set = 0;
+	return_sets.number_of_sets = mergeset_count;
+	return_sets.sets = malloc(mergeset_count*sizeof(struct Beta_Set));
+	for (int i = 0; i < actual_p_int; i++) {
+		if (valid_mergesets[i] == FALSE)
+			continue;
+		return_sets.sets[cur_set].set_size = actual_set_sizes[i];
+		return_sets.sets[cur_set].set = malloc(all_sets[i].size*sizeof(int));
+		for (int j = 0; j < actual_set_sizes[i]; j++) {
+			return_sets.sets[cur_set].set[j] = i + j;
 		}
 
-		//printf("allowed at the same time: \n");
-		//for (int i = 0; i < actual_p_int; i++) {
-		int maxcols = 32;
-		int foundcols = 0;
-		GList *tempcol = current_set;
-		for (GList *temp_tempcol = NULL; tempcol != NULL;) {
-			if (foundcols > maxcols)
-				break;
-			int i = (int)(long)tempcol->data;
-			remaining_columns--;
-
-			temp_tempcol = tempcol;
-			tempcol = tempcol->next;
-
-			if (temp_tempcol->data == todo_cols_list->data) {
-				todo_cols_list = todo_cols_list->next;
-				if (todo_cols_list != NULL)
-					todo_cols_list->prev = NULL;
-			} else if (i == (int)(long)g_list_last(todo_cols_list)->data) {
-				//initial_todo_cols_list[i-1].next = NULL;
-				(initial_todo_cols_list[i].prev)->next = NULL;
-				tempcol = NULL;
-			} else {
-				initial_todo_cols_list[i].prev->next = initial_todo_cols_list[i].next;
-				initial_todo_cols_list[i].next->prev = initial_todo_cols_list[i].prev;
-			}
-			//foundcols++;
-		}
-		//printf("\n");
-		all_sets = g_list_prepend(all_sets, g_list_copy(current_set));
-		g_list_free(current_set);
-		//TODO: manually allocate a copy?
-		current_set = g_list_copy(todo_cols_list);
+		cur_set++;
 	}
 
-
-	all_sets = g_list_reverse(all_sets);
-	beta_sets.number_of_sets = g_list_length(all_sets);
-	//printf("printing values from list (length %d):\n", beta_sets.number_of_sets);
-	beta_sets.sets = malloc(beta_sets.number_of_sets*sizeof(struct Beta_Set));
-	GList *temp_set_pointer = all_sets;
-	int counter = 0;
-	while (temp_set_pointer != NULL) {
-		//printf("\n");
-		GList *temp_val_pointer = temp_set_pointer->data;
-		//printf("reading list %d (length %d)\n", counter, g_list_length(temp_set_pointer));
-		//struct Beta_Set temp_beta_set = malloc(sizeof(struct Beta_Set));
-		//beta_sets.sets[counter].set = temp_set_pointer->data;
-		//beta_sets.sets[counter].set_size = g_list_length(temp_set_pointer->data);
-		//while (temp_val_pointer != NULL) {
-		//	printf("%ld ", (long)temp_val_pointer->data);
-
-		//	temp_val_pointer = temp_val_pointer->next;
-		//}
-		temp_set_pointer = temp_set_pointer->next;
-		counter++;
-	}
-
-	//int current_col = 0;
-	//for (int row_ind = 0; row_ind < x2col.col_nz[current_col]; row_ind++) {
-	//	int row = x2col.col_nz_indices[current_col][row_ind];
-	//	for (int compare_col_ind = 0; compare_col_ind < x2row.row_nz[row]; compare_col_ind++) {
-	//		int compare_col = x2row.row_nz_indices[row][compare_col_ind];
-	//		if (compare_col == current_col)
-	//			continue;
-	//		allowable_columns[compare_col] = 0;
-	//	}
-	//}
-
-	free(allowable_columns);
-	free(initial_todo_cols_list);
-	return beta_sets;
+	return return_sets;
 }
 
 Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
-	return find_beta_sets_new(x2col, x2row, actual_p_int, n);
+	return merge_find_beta_sets(x2col, x2row, actual_p_int, n);
 }
 
 XMatrix read_x_csv(char *fn, int n, int p) {
@@ -882,6 +614,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
  * This is probably assuming that the population doesn't grow, which we may
  * not want.
  * TODO: add an intercept
+ * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
 double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose) {
 	// TODO: until converged
@@ -1034,34 +767,21 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//	}
 
 			// update the predictor \Beta_k
-			// TODO: this check is currently slower than just calculating every non-zero column (for non-huge lambda)
-			// TODO: is there any way to keep a running total of the sum of the n largest lambda?
-			for (int i = 0; i < p_int; i++)
-				cols_to_update[i] = -1;
-			//printf("number of sets: %d\n", beta_sets.number_of_sets);
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
-				//printf("set %d size: %d\n", i, beta_sets.sets[i].set_size);
 				int counter = 0;
-				//TODO: we could attempt to traverse the linked list with openmp (using tasks?) or convert it to an array.
-				//for (GList *temp_list = beta_sets.sets[i].set; temp_list != NULL; temp_list = temp_list->next) {
-				//	cols_to_update[counter++] = (int)(long)temp_list->data;
-				//	//printf("updating k %d\n", (int)(long)temp_list->data);
-				//	//int k = (int)(long)temp_list->data;
-				//	//if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
-				//		dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, (int)(long)temp_list->data, dBMax, intercept, USE_INT, precalc_get_num);
-				//	//}
-				//}
-				//for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
-				//	int k = cols_to_update[j];
-				//	printf("updating col %d\n", k);
-				//	if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
-				//		dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
-				//	}
-				//	else {
-				//		skipped_updates += X2.col_nz[k];
-				//		total_updates += X2.col_nz[k];
-				//	}
-				//}
+				//#pragma omp parallel for
+				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
+					int k = beta_sets.sets[i].set[j];
+					if (VERBOSE == 1)
+						printf("updating col %d out of %d\n", k, p_int);
+					if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+					}
+					else {
+						skipped_updates += X2.col_nz[k];
+						total_updates += X2.col_nz[k];
+					}
+				}
 			}
 		//}
 		haschanged = 0;

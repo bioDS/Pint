@@ -202,10 +202,10 @@ static void test_find_beta_sets() {
 	int val_counter = 0;
 	for (int set = 0; set < beta_sets.number_of_sets; set++) {
 		//GList *temp_set = beta_sets.sets[set].set;
-		Column_Set colset = beta_sets.sets[set];
-		g_assert_true(colset.size == correct_set_sizes[set]);
-		for (int entry = 0; entry < colset.size; entry++) {
-			int val = colset.cols[entry].value;
+		struct Beta_Set colset = beta_sets.sets[set];
+		g_assert_true(colset.set_size == correct_set_sizes[set]);
+		for (int entry = 0; entry < colset.set_size; entry++) {
+			int val = colset.set[entry];
 			printf("comparing set %d, entry %d: %d == %d\n", set, entry, val, correct_cols_for_set[val_counter]);
 			g_assert_true(val == correct_cols_for_set[val_counter++]);
 		}
@@ -227,9 +227,9 @@ static void test_find_beta_sets() {
 	int found[p_int];
 		memset(found, 0, p_int*sizeof(int));
 	for (int i = 0; i < beta_sets.number_of_sets; i++) {
-		Column_Set colset = beta_sets.sets[i];
-		for (int entry = 0; entry < colset.size; entry++) {
-			int k = colset.cols[entry].value;
+		struct Beta_Set colset = beta_sets.sets[i];
+		for (int entry = 0; entry < colset.set_size; entry++) {
+			int k = colset.set[entry];
 			g_assert_true(k >= 0);
 			g_assert_true(k < p_int);
 			g_assert_true(found[k] == 0);
