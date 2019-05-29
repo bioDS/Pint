@@ -207,6 +207,22 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	all_sets[i1].size = used_cols;
 }
 
+Mergeset *remove_invalid_sets(Mergeset *all_sets, int *valid_mergesets, int actual_p_int, int new_mergeset_count, int *actual_set_sizes) {
+	Mergeset *all_sets_new = malloc(new_mergeset_count *sizeof(Mergeset));
+
+	int old_counter = 0;
+	for (int i = 0; i < new_mergeset_count; i++) {
+		while(valid_mergesets[old_counter] == FALSE)
+			old_counter++;
+		all_sets_new[i] = all_sets[old_counter];
+		memcpy(&all_sets_new[i], &all_sets[old_counter], sizeof(Mergeset));
+		//actual_set_sizes[i] = actual_set_sizes[old_counter];
+		old_counter++;
+	}
+	free(all_sets);
+	return all_sets_new;
+}
+
 //TODO: don't allocate so many arrays on the stack?
 Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
@@ -229,18 +245,35 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 
 	// let's start with one pass
 	new_mergeset_count = mergeset_count;
-	for (int i = 0; i+1 < mergeset_count;) {
+	#pragma omp parallel for
+	for (int i = 0; i < mergeset_count - 2; i += 2) {
 		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
 			merge_sets(all_sets, i, i+1);
 			actual_set_sizes[i]++;
 			valid_mergesets[i+1] = FALSE;
 			new_mergeset_count--;
-			i += 2;
+			//i += 2;
 		} else {
-			i++;
+			//i++;
 		}
 	}
 	mergeset_count = new_mergeset_count;
+	new_mergeset_count = mergeset_count;
+	#pragma omp parallel for
+	for (int i = 1; i < mergeset_count - 2; i += 2) {
+		if (valid_mergesets[i+1] && valid_mergesets[i] && can_merge(all_sets, i, i+1)) {
+			merge_sets(all_sets, i, i+1);
+			actual_set_sizes[i] += actual_set_sizes[i+1];
+			valid_mergesets[i+1] = FALSE;
+			new_mergeset_count--;
+			//i += 2;
+		} else {
+			//i++;
+		}
+	}
+	mergeset_count = new_mergeset_count;
+
+	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
 	printf("some useful statistics:\n");
 	printf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
