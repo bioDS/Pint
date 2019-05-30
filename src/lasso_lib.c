@@ -280,8 +280,8 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 
 	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
-	printf("some useful statistics:\n");
-	printf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
+	printw("some useful statistics:\n");
+	printw("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
 
 	//TODO: only works for contiguous sets at the moment (if there)
 	int set_size, cur_set = 0;
@@ -855,9 +855,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			if (beta[i] < -500) {
 				int_pair ip = get_num(i, p);
 				if (ip.i == ip.j)
-					printw("main: %d (%d):\t\t\t %f\n", i, ip.i, beta[i]);
+					printw("main: %d (%d):\t\t\t %f\n", i, ip.i + 1, beta[i]);
 				else
-					printw("int: %d  (%d, %d):\t\t %f\n", i, ip.i, ip.j, beta[i]);
+					printw("int: %d  (%d, %d):\t\t %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 			}
 		}
 		// Be sure to clean up anything extra we allocate

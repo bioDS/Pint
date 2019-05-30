@@ -87,7 +87,8 @@ int main(int argc, char** argv) {
 	//}
 	//printf("\n");
 
-	move(14,0);
+	printw("\n");
+	//move(12,0);
 	printw("indices significantly negative (-500):\n");
 	int sig_beta_count = 0;
 	for (int i = 0; i < nbeta_int; i++) {
