@@ -1,6 +1,8 @@
 #include <glib.h>
 #include "../src/lasso_lib.h"
 #include <locale.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_permutation.h>
 
 /* int **X2_from_X(int **X, int n, int p); */
 /* double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method); */
@@ -52,7 +54,6 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 	fixture->dBMax = 0;
 	fixture->intercept = 0;
 	printf("%d\n", fixture->X[1][0]);
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1);
 	int p_int = (fixture->p*(fixture->p+1))/2;
 	int_pair *precalc_get_num = malloc(p_int*sizeof(int_pair));
 	int offset = 0;
@@ -81,7 +82,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, FALSE);
 	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, 0, fixture->precalc_get_num);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
@@ -116,6 +117,7 @@ static void test_X2_from_X() {
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconstpointer user_data) {
 	fixture->n = 1000;
+	fixture->p = 100;
 	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
 	fixture->lambda = 20;
 	fixture->k = 27;
@@ -128,13 +130,15 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->p = 630;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX2Small.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, TRUE);
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0);
 
-	double acceptable_diff = 1.5;
+	double acceptable_diff = 5;
 	for (int i = 0; i < fixture->p; i++) {
-		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[i]);
-		g_assert_true(fixture->beta[i] < small_X2_correct_beta[i] + acceptable_diff);
-		g_assert_true(fixture->beta[i] > small_X2_correct_beta[i] - acceptable_diff);
+		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[k]);
+		g_assert_true(fixture->beta[i] < small_X2_correct_beta[k] + acceptable_diff);
+		g_assert_true(fixture->beta[i] > small_X2_correct_beta[k] - acceptable_diff);
 	}
 }
 
@@ -144,13 +148,15 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	int p_int = fixture->p*(fixture->p+1)/2;
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, TRUE);
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0);
 
-	double acceptable_diff = 1.5;
+	double acceptable_diff = 5;
 	for (int i = 0; i < p_int; i++) {
-		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[i]);
-		g_assert_true(fixture->beta[i] < small_X2_correct_beta[i] + acceptable_diff);
-		g_assert_true(fixture->beta[i] > small_X2_correct_beta[i] - acceptable_diff);
+		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[k]);
+		g_assert_true(fixture->beta[i] < small_X2_correct_beta[k] + acceptable_diff);
+		g_assert_true(fixture->beta[i] > small_X2_correct_beta[k] - acceptable_diff);
 	}
 }
 
@@ -177,7 +183,7 @@ static void test_find_beta_sets() {
 		X[i] = malloc(n*sizeof(int));
 		memcpy(X[i], Xt[i], n*sizeof(int));
 	}
-	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0);
+	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0, FALSE);
 	XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
 
 	printf("\nsparse row 0 (%d entries):\n", x2row.row_nz[0]);
@@ -217,7 +223,7 @@ static void test_find_beta_sets() {
 	p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1);
+	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
 	x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
 	beta_sets = find_beta_sets(x2col, x2row, p_int, n);
 

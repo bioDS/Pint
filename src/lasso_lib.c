@@ -2,6 +2,8 @@
 #include <omp.h>
 #include <glib-2.0/glib.h>
 #include <ncurses.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_permutation.h>
 
 #define NumCores 1
 
@@ -15,6 +17,9 @@ static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
 static double max_rowsum = 0;
+
+static gsl_permutation *global_permutation;
+static gsl_permutation *global_permutation_inverse;
 
 
 //TODO: try using dancing links
@@ -500,9 +505,10 @@ int_pair get_num(int num, int p) {
 	int_pair ip;
 	ip.i = -1;
 	ip.j = -1;
+	int num_post_permutation = gsl_permutation_get(global_permutation, num);
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
-			if (offset == num) {
+			if (offset == num_post_permutation) {
 				ip.i = i;
 				ip.j = j;
 				return ip;
@@ -663,7 +669,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	move(7,0);
 	printw("calculating sparse interaction matrix (cols): \n");
 	refresh();
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
 	printw("calculating sparse interaction matrix (rows): \n");
 	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
@@ -682,8 +688,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		int offset = 0;
 		for (int i = 0; i < p; i++) {
 			for (int j = i; j < p; j++) {
-				precalc_get_num[offset].i = i;
-				precalc_get_num[offset].j = j;
+				precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].i = i;
+				precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].j = j;
 				offset++;
 			}
 		}
@@ -891,18 +897,21 @@ int **X2_from_X(int **X, int n, int p) {
 
 
 // TODO: write a test comparing this to non-sparse X2
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle) {
 	XMatrix_sparse X2;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
 	int iter_done = 0;
+	int actual_p_int = 0;
 
 	if (!USE_INT) {
 		X2.col_nz_indices = malloc(p*sizeof(int *));
 		X2.col_nz = malloc(p*sizeof(int));
+		actual_p_int = p;
 	} else {
 		X2.col_nz_indices = malloc(p_int*sizeof(int *));
 		X2.col_nz = malloc(p_int*sizeof(int));
+		actual_p_int = p_int;
 	}
 
 	//TODO: iter_done isn't exactly being updated safely
@@ -950,6 +959,32 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 			refresh();
 		}
 	}
+
+	int shuffle_order[p_int];
+	gsl_rng *r;
+	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
+	gsl_permutation_init(permutation);
+	gsl_rng_env_setup();
+	const gsl_rng_type *T = gsl_rng_default;
+	r = gsl_rng_alloc(T);
+	if (shuffle == TRUE)
+		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
+	int **permuted_indices = malloc(actual_p_int * sizeof(int*));
+	int *permuted_nz = malloc(actual_p_int * sizeof(int));
+	for (int i = 0; i < actual_p_int; i++) {
+		permuted_indices[i] = X2.col_nz_indices[permutation->data[i]];
+		permuted_nz[i] = X2.col_nz[permutation->data[i]];
+	}
+	free(X2.col_nz_indices);
+	free(X2.col_nz);
+	free(r);
+	X2.col_nz_indices = permuted_indices;
+	X2.col_nz = permuted_nz;
+	X2.permutation = permutation;
+	global_permutation = permutation;
+	global_permutation_inverse = gsl_permutation_alloc(permutation->size);
+	gsl_permutation_inverse(global_permutation_inverse, permutation);
+
 	return X2;
 }
 

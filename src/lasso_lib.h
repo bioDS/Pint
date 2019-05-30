@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <glib-2.0/glib.h>
+#include <gsl/gsl_permutation.h>
 
 #define VECTOR_SIZE 3
 // are all ids the same size?
@@ -40,6 +41,7 @@ typedef struct Column_Set {
 typedef struct XMatrix_sparse {
 	int **col_nz_indices;
 	int *col_nz;
+	gsl_permutation *permutation;
 } XMatrix_sparse;
 
 typedef struct XMatrix_sparse_row {
@@ -62,7 +64,7 @@ typedef struct Beta_Sets {
 } Beta_Sets;
 
 int **X2_from_X(int **X, int n, int p);
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT);
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int permute);
 XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
