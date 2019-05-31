@@ -556,7 +556,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	} else {
 		sumn = colsum[k];
 	}
-	total_updates += xmatrix_sparse.col_nz[k];
+	total_updates++;
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -576,7 +576,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 				max_rowsum = rowsum[i];
 		}
 	} else {
-		zero_updates += xmatrix_sparse.col_nz[k];
+		zero_updates++;
 	}
 
 
@@ -817,8 +817,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 					}
 					else {
-						skipped_updates += X2.col_nz[k];
-						total_updates += X2.col_nz[k];
+						skipped_updates++;
+						total_updates++;
 					}
 				}
 			}
