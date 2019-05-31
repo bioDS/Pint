@@ -90,9 +90,12 @@ int main(int argc, char** argv) {
 	printw("\n");
 	//move(12,0);
 	printw("indices significantly negative (-500):\n");
+	int printed = 0;
 	int sig_beta_count = 0;
-	for (int i = 0; i < nbeta_int; i++) {
+	//TODO: remove hack to avoid printing too much for the terminal
+	for (int i = 0; i < nbeta_int && printed < 10; i++) {
 		if (beta[i] < -500) {
+			printed++;
 			sig_beta_count++;
 			int_pair ip = get_num(i, nbeta);
 			if (ip.i == ip.j)
