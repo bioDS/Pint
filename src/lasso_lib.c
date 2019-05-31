@@ -5,7 +5,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
 
-#define NumCores 1
+#define NumCores 4
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -160,8 +160,10 @@ int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
 //}
 
 typedef struct Mergeset {
-	int size;
+	int size; //number of rows/entries in supercolumns (should really be renamed)
 	int *entries;
+	int ncols;
+	int *cols;
 } Mergeset;
 
 int can_merge(Mergeset *all_sets, int i1, int i2) {
@@ -185,34 +187,43 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 // merges set i2 into set i1
 void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	int indices[all_sets[i1].size + all_sets[i2].size];
-	int used_cols = 0;
+	int used_rows = 0;
 
 	int ti1 = 0, ti2 = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
 			indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
-			used_cols++;
+			used_rows++;
 		}
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
 			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
-			used_cols++;
+			used_rows++;
 		}
 	}
 	// we've done the overlap, now read in the rest
 	while (ti1 < all_sets[i1].size) {
 		indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
-		used_cols++;
+		used_rows++;
 	}
 	while (ti2 < all_sets[i2].size) {
 		indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
-		used_cols++;
+		used_rows++;
 	}
 
-	int *actual_indices = malloc(used_cols*sizeof(int));
-	memcpy(actual_indices, indices, used_cols*sizeof(int));
+	int *actual_indices = malloc(used_rows*sizeof(int));
+	memcpy(actual_indices, indices, used_rows*sizeof(int));
 	free(all_sets[i1].entries);
 	all_sets[i1].entries = actual_indices;
-	all_sets[i1].size = used_cols;
+	all_sets[i1].size = used_rows;
+
+	int *new_cols = malloc((all_sets[i1].ncols + all_sets[i2].ncols)*sizeof(int));
+	memcpy(new_cols, all_sets[i1].cols, all_sets[i1].ncols*sizeof(int));
+	memcpy(&new_cols[all_sets[i1].ncols], all_sets[i2].cols, all_sets[i2].ncols*sizeof(int));
+	free(all_sets[i1].cols);
+	free(all_sets[i2].cols);
+	all_sets[i1].cols = new_cols;
+	all_sets[i2].cols = NULL;
+	all_sets[i1].ncols = all_sets[i1].ncols + all_sets[i2].ncols;
 }
 
 Mergeset *remove_invalid_sets(Mergeset *all_sets, int *valid_mergesets, int actual_p_int, int new_mergeset_count, int *actual_set_sizes) {
@@ -235,7 +246,8 @@ Mergeset *remove_invalid_sets(Mergeset *all_sets, int *valid_mergesets, int actu
 Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
 	int valid_mergesets[actual_p_int];
-	int actual_set_sizes[actual_p_int];
+	//int actual_set_sizes[actual_p_int+1];
+	int valid_mergeset_indices[actual_p_int];
 	int mergeset_count = actual_p_int;
 	int new_mergeset_count;
 	Beta_Sets return_sets;
@@ -244,20 +256,24 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	for (int i = 0; i < actual_p_int; i++)
 		valid_mergesets[i] = TRUE;
 
-	for (int i = 0; i < mergeset_count; i++) {
+	for (int i = 0; i < actual_p_int; i++) {
 		all_sets[i].size = x2col.col_nz[i];
+		all_sets[i].cols = malloc(sizeof(int));
+		all_sets[i].cols[0] = i;
+		all_sets[i].ncols = 1;
 		all_sets[i].entries = malloc(all_sets[i].size*sizeof(int));
 		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(int));
-		actual_set_sizes[i] = 1;
+		//actual_set_sizes[i] = 1;
 	}
+	//actual_set_sizes[actual_p_int] = 0; // so we don't add garbage to the size of the last set
 
 	// let's start with one pass
 	new_mergeset_count = mergeset_count;
-	#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
+	//#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
 	for (int i = 0; i < actual_p_int - 2; i += 2) {
 		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
 			merge_sets(all_sets, i, i+1);
-			actual_set_sizes[i]++;
+			//actual_set_sizes[i]++;
 			valid_mergesets[i+1] = FALSE;
 			new_mergeset_count--;
 			//i += 2;
@@ -267,11 +283,11 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	}
 	mergeset_count = new_mergeset_count;
 	new_mergeset_count = mergeset_count;
-	#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
+	//#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
 	for (int i = 1; i < actual_p_int - 2; i += 2) {
 		if (valid_mergesets[i+1] && valid_mergesets[i] && can_merge(all_sets, i, i+1)) {
 			merge_sets(all_sets, i, i+1);
-			actual_set_sizes[i] += actual_set_sizes[i+1];
+			//actual_set_sizes[i] += actual_set_sizes[i+1];
 			valid_mergesets[i+1] = FALSE;
 			new_mergeset_count--;
 			//i += 2;
@@ -280,6 +296,79 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		}
 	}
 	mergeset_count = new_mergeset_count;
+
+	// place sets in their appropriate bin
+
+	// indices of sets that are of particular sizes on total.
+	int set_bins_of_size[NumCores+1][actual_p_int];
+	//int num_bins_of_size[NumCores+2];
+	int *num_bins_of_size = malloc(NumCores*sizeof(int));
+
+	for (int i = 0; i <= NumCores+1; i++)
+		num_bins_of_size[i] = 0;
+
+	int count = 0;
+	for (int i = 0; i < actual_p_int; i++) {
+		if (valid_mergesets[i]) {
+			int set_size = all_sets[i].ncols;
+			if (set_size > NumCores+1)
+				set_size = NumCores+1;
+			valid_mergeset_indices[count] = i;
+			set_bins_of_size[set_size][num_bins_of_size[set_size]] = i;
+			num_bins_of_size[set_size]++;
+		}
+	}
+
+	printw("\nbins of size: ");
+	for (int i = 0; i <= NumCores+1; i++) {
+		printw("[%d]: %d, ", i, num_bins_of_size[i]);
+	}
+	printw("\n");
+
+	if (NumCores > 1) {
+		// remove all sets of size 1
+		for (int iter = 0; iter < 5; iter++)
+			for (int clear_sets_of_size = 1; clear_sets_of_size < NumCores; clear_sets_of_size++) {
+				int new_num_bins_of_size_k = num_bins_of_size[clear_sets_of_size];
+				for (int i = 0; i < num_bins_of_size[clear_sets_of_size]; i++) {
+					int small_set = set_bins_of_size[clear_sets_of_size][i];
+					if (valid_mergesets[small_set] == FALSE)
+						continue;
+
+					// find a larger set to put this in. Failing that, find another set of size 1.
+					for (int move_to_set_size = NumCores-1; move_to_set_size >= clear_sets_of_size; move_to_set_size--) {
+						for (int j = 0; j < num_bins_of_size[move_to_set_size]; j++) {
+							int large_set = set_bins_of_size[move_to_set_size][j];
+							if (valid_mergesets[large_set] == FALSE)
+								continue;
+							if (can_merge(all_sets, large_set, small_set) == TRUE) {
+								merge_sets(all_sets, large_set, small_set);
+								set_bins_of_size[clear_sets_of_size][i] = -1;
+								new_num_bins_of_size_k--;
+								if (move_to_set_size <= NumCores) {
+									num_bins_of_size[move_to_set_size]--;
+									num_bins_of_size[move_to_set_size+1]++;
+								}
+								valid_mergesets[small_set] = FALSE;
+								mergeset_count--;
+								break;
+							}
+						}
+						if (set_bins_of_size[clear_sets_of_size][i] == -1)
+							break;
+					}
+					//if (set_bins_of_size[clear_sets_of_size][i] != -1)
+					//	printw("counld match set %d\n", i);
+				}
+				num_bins_of_size[clear_sets_of_size] = new_num_bins_of_size_k;
+			}
+	}
+
+	printw("after: bins of size: ");
+	for (int i = 0; i <= NumCores+1; i++) {
+		printw("[%d]: %d, ", i, num_bins_of_size[i]);
+	}
+	printw("\n");
 
 	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
@@ -293,10 +382,10 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	for (int i = 0; i < actual_p_int; i++) {
 		if (valid_mergesets[i] == FALSE)
 			continue;
-		return_sets.sets[cur_set].set_size = actual_set_sizes[i];
-		return_sets.sets[cur_set].set = malloc(all_sets[i].size*sizeof(int));
-		for (int j = 0; j < actual_set_sizes[i]; j++) {
-			return_sets.sets[cur_set].set[j] = i + j;
+		return_sets.sets[cur_set].set_size = all_sets[i].ncols;
+		return_sets.sets[cur_set].set = malloc(all_sets[i].ncols*sizeof(int));
+		for (int j = 0; j < all_sets[i].ncols; j++) {
+			return_sets.sets[cur_set].set[j] = all_sets[i].cols[j];
 		}
 
 		cur_set++;
@@ -813,7 +902,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(2) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
+				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)

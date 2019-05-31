@@ -133,7 +133,7 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, TRUE);
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0);
 
-	double acceptable_diff = 5;
+	double acceptable_diff = 8;
 	for (int i = 0; i < fixture->p; i++) {
 		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[k]);
@@ -151,7 +151,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, TRUE);
 	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0);
 
-	double acceptable_diff = 5;
+	double acceptable_diff = 8;
 	for (int i = 0; i < p_int; i++) {
 		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[k]);
