@@ -808,7 +808,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				//#pragma omp parallel for
+				#pragma omp parallel for num_threads(2) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
