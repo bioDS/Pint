@@ -535,8 +535,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		error /= n;
 		printw("mean squared error is now %f, w/ intercept %f\n", error, intercept);
 		printw("indices significantly negative (-500):\n");
-		for (int i = 0; i < p_int; i++) {
+		int printed = 0;
+		//TODO: remove hack to prevent printing too many for the terminal
+		for (int i = 0; i < p_int && printed < 10; i++) {
 			if (beta[i] < -500) {
+				printed++;
 				int_pair ip = get_num(i, p);
 				if (ip.i == ip.j)
 					printw("main: %d (%d):\t\t\t %f\n", i, ip.i, beta[i]);
