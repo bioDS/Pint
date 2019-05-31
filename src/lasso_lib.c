@@ -254,7 +254,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	// let's start with one pass
 	new_mergeset_count = mergeset_count;
 	#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
-	for (int i = 0; i < mergeset_count - 2; i += 2) {
+	for (int i = 0; i < actual_p_int - 2; i += 2) {
 		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
 			merge_sets(all_sets, i, i+1);
 			actual_set_sizes[i]++;
@@ -268,7 +268,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	mergeset_count = new_mergeset_count;
 	new_mergeset_count = mergeset_count;
 	#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
-	for (int i = 1; i < mergeset_count - 2; i += 2) {
+	for (int i = 1; i < actual_p_int - 2; i += 2) {
 		if (valid_mergesets[i+1] && valid_mergesets[i] && can_merge(all_sets, i, i+1)) {
 			merge_sets(all_sets, i, i+1);
 			actual_set_sizes[i] += actual_set_sizes[i+1];
