@@ -10,9 +10,12 @@
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
 int total_updates = 0;
+int skipped_updates_entries = 0;
+int total_updates_entries = 0;
+static int zero_updates = 0;
+static int zero_updates_entries = 0;
 
 static int VERBOSE = 1;
-static int zero_updates = 0;
 static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
@@ -557,6 +560,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		sumn = colsum[k];
 	}
 	total_updates++;
+	total_updates_entries += xmatrix_sparse.col_nz[k];
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -577,6 +581,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		}
 	} else {
 		zero_updates++;
+		zero_updates_entries += xmatrix_sparse.col_nz[k];
 	}
 
 
@@ -819,6 +824,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 					else {
 						skipped_updates++;
 						total_updates++;
+						skipped_updates_entries += X2.col_nz[k];
+						total_updates_entries += X2.col_nz[k];
 					}
 				}
 			}
@@ -874,12 +881,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		clrtobot();
 	}
 
-	if (USE_INT)
-		printw("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
-	else
-		printw("lasso done, skipped_updates %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	printw("lasso done, columns skipped %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	printw("cols: performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	printw("skipped entries %ld out of %ld a.k.a (%f\%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
 	free(precalc_get_num);
-	printw("performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	printw("entries: performed %d zero updates (%f\%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
 	return beta;
 }
