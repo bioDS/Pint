@@ -328,12 +328,21 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	}
 	printw("\n");
 
+	//TODO: rewrite this whole section to update sets in batches, then commit
+	//		the changes all at once (which sounds very openCL friendly)
 	if (NumCores > 1) {
 		// remove all sets of size 1
 		for (int iter = 0; iter < 5; iter++)
 			for (int clear_sets_of_size = 1; clear_sets_of_size < NumCores; clear_sets_of_size++) {
+				printw("clearing sets of size: %d\n", clear_sets_of_size);
+				refresh();
+				int ypos, xpos;
+				getyx(stdscr, ypos, xpos);
 				int new_num_bins_of_size_k = num_bins_of_size[clear_sets_of_size];
 				for (int i = 0; i < num_bins_of_size[clear_sets_of_size]; i++) {
+					move (ypos, xpos);
+					printw("%d remaining\n", new_num_bins_of_size_k);
+					refresh();
 					int small_set = set_bins_of_size[clear_sets_of_size][i];
 					if (valid_mergesets[small_set] == FALSE)
 						continue;
@@ -350,7 +359,9 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 								new_num_bins_of_size_k--;
 								if (move_to_set_size <= NumCores) {
 									num_bins_of_size[move_to_set_size]--;
-									num_bins_of_size[move_to_set_size+1]++;
+									//num_bins_of_size[move_to_set_size+1]++;
+									// add the new extra large set to it's appropriate bin
+									//set_bins_of_size[move_to_set_size+1]
 								}
 								valid_mergesets[small_set] = FALSE;
 								mergeset_count--;
