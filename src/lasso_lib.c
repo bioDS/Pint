@@ -300,9 +300,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	// place sets in their appropriate bin
 
 	// indices of sets that are of particular sizes on total.
-	int set_bins_of_size[NumCores+1][actual_p_int];
+	//int set_bins_of_size[NumCores+1][actual_p_int];
+	int *set_bins_of_size[NumCores+1];
+	for (int i = 0; i < NumCores+1; i++)
+		set_bins_of_size[i] = malloc(actual_p_int*sizeof(int));
 	//int num_bins_of_size[NumCores+2];
-	int *num_bins_of_size = malloc(NumCores*sizeof(int));
+	int *num_bins_of_size = malloc((NumCores+1)*sizeof(int));
 
 	for (int i = 0; i <= NumCores+1; i++)
 		num_bins_of_size[i] = 0;
