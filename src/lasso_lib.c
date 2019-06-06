@@ -4,6 +4,8 @@
 #include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
+#include <CL/opencl.h>
+#include <errno.h>
 
 #define NumCores 4
 
@@ -159,12 +161,6 @@ int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
 //	}
 //}
 
-typedef struct Mergeset {
-	int size; //number of rows/entries in supercolumns (should really be renamed)
-	int *entries;
-	int ncols;
-	int *cols;
-} Mergeset;
 
 int can_merge(Mergeset *all_sets, int i1, int i2) {
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
@@ -198,6 +194,13 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
 			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
 			used_rows++;
+		}
+		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2]) {
+			fprintf(stderr, "attempted to merge unmergeable sets\n");
+			fprintf(stderr, "set %d entry %d = %d, set %d entry %d = %d\n", i1, ti1, all_sets[i1].entries[ti1], i2, ti2, all_sets[i2].entries[ti2]);
+			return;
+			//(*(int*)0)++;
+			//TODO: don't leave this in here
 		}
 	}
 	// we've done the overlap, now read in the rest
@@ -244,12 +247,22 @@ Mergeset *remove_invalid_sets(Mergeset *all_sets, int *valid_mergesets, int actu
 
 // check the first n elements of set_bins_of_size[small] against the (offset +) first n of set_bins_of_size[large]
 // (modulo their respective sizes the indices of those that can be merged are placed in sets_to_merge.
-int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int offset) {
+// TODO: allow different offsets for small and large (to allow small == large)
+int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset) {
 	int num_bins_to_merge = 0;
 	int small_set_no, large_set_no;
+	small_offset = small_offset%num_bins_of_size[small];
+	large_offset = large_offset%num_bins_of_size[large];
+	if (small == large && small_offset == large_offset) {
+		fprintf(stderr, "comparing a set with itself using the same offset won't work\n");
+		return 0;
+	}
+
+	#pragma omp parallel for shared(set_bins_of_size, valid_mergesets) private(small_set_no, large_set_no) reduction(+:num_bins_to_merge)
 	for (int i = 0; i < n; i++) {
-		small_set_no = set_bins_of_size[small][(i + offset) %num_bins_of_size[small]];
-		large_set_no = set_bins_of_size[large][(i + offset) %num_bins_of_size[large]];
+		small_set_no = set_bins_of_size[small][(i + small_offset) %num_bins_of_size[small]];
+		large_set_no = set_bins_of_size[large][(i + large_offset) %num_bins_of_size[large]];
+		//TODO: we shouldn't need the valid_mergesets check here if everything is working
 		if (valid_mergesets[small_set_no] == TRUE && valid_mergesets[large_set_no] == TRUE && can_merge(all_sets, small_set_no, large_set_no) == TRUE) {
 			sets_to_merge[i] = 1;
 			num_bins_to_merge++;
@@ -261,11 +274,15 @@ int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, 
 }
 
 // if we wrap around either the large or small set, the new version will preserve the order, but not the starting position.
-void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int offset, int num_bins_to_merge) {
-	if (small == large) {
-		// this isn't implemented yet, segfault
-		(*(int*)0)++;
-	}
+// TODO: allow merging with the same set size (very important)
+// TODO: allow merging with the max set size (not so important)
+void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, int num_bins_to_merge) {
+	large_offset = large_offset%num_bins_of_size[large];
+	small_offset = small_offset%num_bins_of_size[small];
+	//if (small == large) {
+	//	// this isn't implemented yet, segfault
+	//	(*(int*)0)++;
+	//}
 
 	if (num_bins_to_merge == 0)
 		return;
@@ -288,31 +305,32 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 
 
 		// if we wrapped around the set, copy middle, otherwise copy the beginning and end separately
-		int end_pos_small = (offset+n)%num_bins_of_size[small];
-		int end_pos_large = (offset+n)%num_bins_of_size[large];
-		int small_offset = offset, large_offset = offset;
+		int end_pos_small = (small_offset+n)%num_bins_of_size[small];
+		int end_pos_large = (large_offset+n)%num_bins_of_size[large];
 
-		if (end_pos_small == offset)
-			small_offset = 0;
-		if (end_pos_large == offset)
-			large_offset = 0;
+		int new_small_offset = 0;
+		int new_large_offset = 0;
+		if (end_pos_small == small_offset)
+			new_small_offset = -small_offset;
+		if (end_pos_large == large_offset)
+			new_large_offset = -large_offset;
 
-		if (end_pos_small > offset)
-			memcpy(new_small_bin, &set_bins_of_size[small][0], offset*sizeof(int));
+		if (end_pos_small > small_offset)
+			memcpy(new_small_bin, &set_bins_of_size[small][0], small_offset*sizeof(int));
 			// copy the rest later to preserve the order of elements being merged.
-		else
-			memcpy(new_small_bin, &set_bins_of_size[small][end_pos_small], (offset-end_pos_small)*sizeof(int));
+		else if (small_offset < end_pos_small)
+			memcpy(new_small_bin, &set_bins_of_size[small][end_pos_small], (small_offset-end_pos_small)*sizeof(int)); //invalid read TODO
 
-		if (end_pos_large > offset)
-			memcpy(new_large_bin, &set_bins_of_size[large][0], offset*sizeof(int));
+		if (end_pos_large > large_offset)
+			memcpy(new_large_bin, &set_bins_of_size[large][0], large_offset*sizeof(int));
 			// copy the rest later to preserve the order of elements being merged.
-		else
-			memcpy(new_large_bin, &set_bins_of_size[large][end_pos_large], (offset-end_pos_large)*sizeof(int));
+		else if (large_offset < end_pos_large)
+			memcpy(new_large_bin, &set_bins_of_size[large][end_pos_large], (large_offset-end_pos_large)*sizeof(int));
 
 		int merged_count = 0, unmerged_count = 0;
 		for (int i = 0; i < n; i++) {
-			small_set_no = set_bins_of_size[small][(i+offset)%num_bins_of_size[small]];
-			large_set_no = set_bins_of_size[large][(i+offset)%num_bins_of_size[large]];
+			small_set_no = set_bins_of_size[small][(i+small_offset)%num_bins_of_size[small]];
+			large_set_no = set_bins_of_size[large][(i+large_offset)%num_bins_of_size[large]];
 			if (sets_to_merge[i] == 1) {
 				//printf("merging %d,%d\n", small_set_no, large_set_no);
 				merge_sets(all_sets, small_set_no, large_set_no);
@@ -320,23 +338,34 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 				merged_count++;
 				valid_mergesets[large_set_no] = FALSE;
 			} else {
-				new_small_bin[(small_offset+unmerged_count)] = small_set_no;
-				new_large_bin[(large_offset+unmerged_count)] = large_set_no;
+				if (small != large) {
+					//printf("writing to %d out of %d\n", small_offset+unmerged_count + new_small_offset,
+					//									num_bins_of_size[small] - num_bins_to_merge);
+					if ((small_offset+unmerged_count) + new_small_offset > num_bins_of_size[small] - num_bins_to_merge)
+						(*(int*)0)++;
+					new_small_bin[(small_offset+unmerged_count) + new_small_offset] = small_set_no;
+					new_large_bin[(large_offset+unmerged_count) + new_large_offset] = large_set_no;
+				} else { //the two are the same set, don't duplicate entries
+					new_small_bin[(small_offset+unmerged_count++) + new_small_offset] = small_set_no;
+					new_large_bin[(large_offset+unmerged_count) + new_large_offset] = large_set_no;
+				}
 				unmerged_count++;
 			}
 		}
 
 		// copy the rest of the initial list if there is any
-		if (end_pos_small > offset)
-			memcpy(&new_small_bin[small_offset+unmerged_count], &set_bins_of_size[small][offset+n], (num_bins_of_size[small] - n - offset)*sizeof(int));
-		if (end_pos_large > offset)
-			memcpy(&new_large_bin[large_offset+unmerged_count], &set_bins_of_size[large][offset+n], (num_bins_of_size[large] - n - offset)*sizeof(int));
+		if (end_pos_small > small_offset)
+			memcpy(&new_small_bin[small_offset+unmerged_count], &set_bins_of_size[small][small_offset+n], (num_bins_of_size[small] - n - small_offset)*sizeof(int));
+		if (end_pos_large > large_offset)
+			memcpy(&new_large_bin[large_offset+unmerged_count], &set_bins_of_size[large][large_offset+n], (num_bins_of_size[large] - n - large_offset)*sizeof(int));
 
-		free(set_bins_of_size[small]);
+		if (small != large) {
+			free(set_bins_of_size[small]);
+			set_bins_of_size[small] = new_small_bin;
+		}
 		free(set_bins_of_size[large]);
 		free(set_bins_of_size[max_set_size]);
 
-		set_bins_of_size[small] = new_small_bin;
 		set_bins_of_size[large] = new_large_bin;
 		set_bins_of_size[max_set_size] = new_xl_bin;
 		num_bins_of_size[small] -= num_bins_to_merge;
@@ -448,6 +477,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		int *sets_to_merge = malloc(actual_p_int*sizeof(int));
 		memset(sets_to_merge, 0, actual_p_int*sizeof(int));
 
+		for (int iter2 = 0; iter2 < 20; iter2++)
 		for (int small_set = 1; small_set < NumCores - 1; small_set++) {
 			move(ypos, xpos);
 			printw("current state: ");
@@ -455,7 +485,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 				printw("[%d]: %d, ", i, num_bins_of_size[i]);
 			printw("\nclearing set_size %d\n", small_set);
 			refresh();
-			for (int iter = 0; iter < 10; iter++) {
+			for (int iter = 0; iter < 20; iter++) {
 				move(ypos+1, xpos);
 				printw("iter %d\n", iter);
 				refresh();
@@ -467,10 +497,16 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 						n = num_bins_of_size[small_set];
 					else
 						n = num_bins_of_size[large_set];
-					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter);
-					merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, num_bins_to_merge);
+					//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
+					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
+					merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
 					mergeset_count -= num_bins_to_merge;
 				}
+				// merge with same set, ensure no overlap
+				n = num_bins_of_size[small_set]/2;
+				num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
+				merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
+				mergeset_count -= num_bins_to_merge;
 			}
 		}
 	}

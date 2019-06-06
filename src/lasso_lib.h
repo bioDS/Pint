@@ -63,6 +63,13 @@ typedef struct Beta_Sets {
 	int number_of_sets;
 } Beta_Sets;
 
+typedef struct Mergeset {
+	int size; //number of rows/entries in supercolumns (should really be renamed)
+	int *entries;
+	int ncols;
+	int *cols;
+} Mergeset;
+
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int permute);
 XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);

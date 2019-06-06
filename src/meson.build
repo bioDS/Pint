@@ -5,6 +5,7 @@ lasso_lib_deps = [
 	dependency('openmp'),
 	dependency('glib-2.0'),
 	dependency('ncurses'),
+	dependency('OpenCL'),
 ]
 
 lasso_lib = shared_library('lasso_lib', 'lasso_lib.c', 'lasso_lib.h',
@@ -19,4 +20,7 @@ lasso_exe = executable('lasso_exe', 'lasso_exe.c', link_with: lasso_lib,
 	install: true,
 	install_rpath: libdir_abs
 )
+
+test_opencl_exe = executable('test_opencl_exe', 'test_opencl.c', link_with: lasso_lib, dependencies: lasso_lib_deps)
+
 x2fx_exe = executable('X2_from_X', 'X2_from_X.c', link_with: lasso_lib, dependencies: lasso_lib_deps)
