@@ -37,7 +37,6 @@ typedef struct {
 	int **set_bins_of_size;
 	int *num_bins_of_size;
 	int *valid_mergesets;
-	int *sets_to_merge;
 	int p_int;
 } Merge_Fixture;
 
@@ -434,13 +433,13 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 
 static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
 	int *sets_to_merge = malloc(fx->p_int*sizeof(int));
-	printf("bins of size 1: %d, size 2: %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2]);
+	printf("bins of size 1: %d, size 2: %d, size 3 %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2], fx->num_bins_of_size[3]);
 	int n = fx->num_bins_of_size[1];
 	if (fx->num_bins_of_size[2] < n)
 		n = fx->num_bins_of_size[2];
 	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
-	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, fx->sets_to_merge, 1, 2, n, 0, 0, no_sets_to_merge);
-	printf("bins of size 1: %d, size 2: %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2]);
+	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, sets_to_merge, 1, 2, n, 0, 0, no_sets_to_merge);
+	printf("bins of size 1: %d, size 2: %d, size 3 %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2], fx->num_bins_of_size[3]);
 }
 
 int main (int argc, char *argv[]) {
