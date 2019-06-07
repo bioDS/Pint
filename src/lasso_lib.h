@@ -86,3 +86,7 @@ Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int act
 Column_Set copy_column_set(Column_Set from);
 void fancy_col_remove(Column_Set set, int entry);
 int fancy_col_find_entry_value_or_next(Column_Set colset, int value);
+void merge_sets(Mergeset *all_sets, int i, int j);
+int can_merge(Mergeset *all_sets, int i, int j);
+int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset);
+void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, int num_bins_to_merge);
