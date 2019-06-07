@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 4
+#define NumCores 8
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -859,8 +859,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	} else {
 		sumn = colsum[k];
 	}
-	total_updates++;
-	total_updates_entries += xmatrix_sparse.col_nz[k];
+	//total_updates++;
+	//total_updates_entries += xmatrix_sparse.col_nz[k];
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -1117,13 +1117,15 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(1) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
+				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
 						printf("updating col %d out of %d\n", k, p_int);
 					if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
 						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+						total_updates++;
+						total_updates_entries += X2.col_nz[k];
 					}
 					else {
 						skipped_updates++;
