@@ -14,6 +14,8 @@
 /* double *read_y_csv(char *fn, int n); */
 /* XMatrix read_x_csv(char *fn, int n, int p); */
 
+#define NumCores 4
+
 typedef struct {
 	int n;
 	int p;
@@ -36,6 +38,7 @@ typedef struct {
 	int *num_bins_of_size;
 	int *valid_mergesets;
 	int *sets_to_merge;
+	int p_int;
 } Merge_Fixture;
 
 const static double small_X2_correct_beta[630] = {-83.112248,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-39.419762,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-431.597831,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-56.125867,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-54.818886,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-144.076649,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-64.023489,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-33.646329,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-62.705188,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-334.676519,0.000000,0.000000,-215.196793,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-165.866118,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-112.678381,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-1.284220,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-58.031513,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,3.916624,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-73.009253,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,6.958046,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-120.529141,0.000000,0.000000,0.000000,0.000000,-80.263024};
@@ -319,15 +322,11 @@ static void test_column_set_operations() {
 }
 
 static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data) {
-	int size = 100;
-	Mergeset *all_sets = malloc(size*sizeof(Mergeset));
-	int *valid_mergesets = malloc(size*sizeof(int));
-
 	int n = 1000;
 	int p = 35;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	int **X = xmatrix.X;
-	int *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
 	int *rowsum = malloc(n*sizeof(double));
 	int lambda = 6.46;
 	int *beta = malloc(p*sizeof(double));
@@ -345,30 +344,103 @@ static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data
 			offset++;
 		}
 	}
-	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(X, n, p, 0, FALSE);
+	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(X, n, p, 1, FALSE);
+	Mergeset *all_sets = malloc(p_int*sizeof(Mergeset));
+	int *valid_mergesets = malloc(p_int*sizeof(int));
 
-	for (int i = 0; i < size; i++) {
-		all_sets[i].entries = xmatrix_sparse.col_nz_indices[i];
+	for (int i = 0; i < p_int; i++) {
 		all_sets[i].size = xmatrix_sparse.col_nz[i];
 		all_sets[i].cols = malloc(sizeof(int));
 		all_sets[i].cols[0] = i;
 		all_sets[i].ncols = 1;
+		all_sets[i].entries = malloc(xmatrix_sparse.col_nz[i]*sizeof(int));
+		memcpy(all_sets[i].entries, xmatrix_sparse.col_nz_indices[i], all_sets[i].size*sizeof(int));
 		valid_mergesets[i] = TRUE;
+	}
+
+	int new_mergeset_count = p_int;
+	for (int i = 0; i < p_int - 2; i += 2) {
+		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
+			merge_sets(all_sets, i, i+1);
+			valid_mergesets[i+1] = FALSE;
+			new_mergeset_count--;
+		}
+	}
+
+	int **set_bins_of_size = malloc((NumCores+1)*sizeof(int*));
+	for (int i = 0; i < NumCores+1; i++)
+		set_bins_of_size[i] = malloc(p_int*sizeof(int));
+	//int num_bins_of_size[NumCores+2];
+	int *num_bins_of_size = malloc((NumCores+1)*sizeof(int));
+	int valid_mergeset_indices[p_int];
+
+	for (int i = 0; i <= NumCores+1; i++)
+		num_bins_of_size[i] = 0;
+
+	int count = 0;
+	for (int i = 0; i < p_int; i++) {
+		if (valid_mergesets[i]) {
+			int set_size = all_sets[i].ncols;
+			if (set_size > NumCores+1)
+				set_size = NumCores+1;
+			valid_mergeset_indices[count] = i;
+			set_bins_of_size[set_size][num_bins_of_size[set_size]] = i;
+			num_bins_of_size[set_size]++;
+		}
 	}
 
 	fixture->all_sets = all_sets;
 	fixture->valid_mergesets = valid_mergesets;
-	fixture->num_bins_of_size;
+	fixture->num_bins_of_size = num_bins_of_size;
+	fixture->set_bins_of_size = set_bins_of_size;
+	fixture->p_int = p_int;
 }
 
 static void check_merge_n_tear_down(Merge_Fixture *fixture, gconstpointer user_data) {
+	return;
+	for (int i = 0; i < fixture->p_int; i++) {
+		free(fixture->all_sets[i].entries);
+		free(fixture->all_sets[i].cols);
+	}
+	free(fixture->all_sets);
+	free(fixture->valid_mergesets);
+	free(fixture->num_bins_of_size);
+	for (int i = 0; i < NumCores+1; i++)
+		free(fixture->set_bins_of_size[i]);
+	free(fixture->set_bins_of_size);
 }
 
-static void test_check_n(Merge_Fixture *fixture, gconstpointer user_data) {
+static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
+	int *sets_to_merge = malloc(fx->p_int*sizeof(int));
+	printf("bins of size 1: %d, size 2: %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2]);
+	int n = fx->num_bins_of_size[1];
+	if (fx->num_bins_of_size[2] < n)
+		n = fx->num_bins_of_size[2];
+	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
 
+	int *nothing = malloc(10*sizeof(int));
+	int successful_merge_count = 0;
+	for (int i = 0; i < n; i++) {
+		if (sets_to_merge[i] == 1) {
+			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[1][i], fx->set_bins_of_size[2][i]));
+			successful_merge_count++;
+		}
+		else
+			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[1][i], fx->set_bins_of_size[2][i]));
+	}
+	g_assert_true(no_sets_to_merge = successful_merge_count);
+	printf("compare_n succeeded on distinct sets\n");
 }
 
-static void test_merge_n(Merge_Fixture *fixture, gconstpointer user_data) {
+static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
+	int *sets_to_merge = malloc(fx->p_int*sizeof(int));
+	printf("bins of size 1: %d, size 2: %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2]);
+	int n = fx->num_bins_of_size[1];
+	if (fx->num_bins_of_size[2] < n)
+		n = fx->num_bins_of_size[2];
+	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
+	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, fx->sets_to_merge, 1, 2, n, 0, 0, no_sets_to_merge);
+	printf("bins of size 1: %d, size 2: %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2]);
 }
 
 int main (int argc, char *argv[]) {
@@ -386,6 +458,8 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-find-beta-sets", test_find_beta_sets);
 	g_test_add_func("/func/test-column-set-operations", test_column_set_operations);
+	g_test_add("/func/test-check-n", Merge_Fixture, NULL, check_merge_n_set_up, test_check_n, check_merge_n_tear_down);
+	g_test_add("/func/test-merge-n", Merge_Fixture, NULL, check_merge_n_set_up, test_merge_n, check_merge_n_tear_down);
 
 	return g_test_run();
 }
