@@ -415,17 +415,46 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 	int n = fx->num_bins_of_size[1];
 	if (fx->num_bins_of_size[2] < n)
 		n = fx->num_bins_of_size[2];
-	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
+	int offset_small = 17, offset_large = 81;
+	int small = 1;
+	int large = 2;
+	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, large, n, offset_small, offset_large);
 
-	int *nothing = malloc(10*sizeof(int));
 	int successful_merge_count = 0;
 	for (int i = 0; i < n; i++) {
+		int small_no = (i + offset_small) % fx->num_bins_of_size[small];
+		int large_no = (i + offset_large) % fx->num_bins_of_size[large];
 		if (sets_to_merge[i] == 1) {
-			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[1][i], fx->set_bins_of_size[2][i]));
+			printf("confirming [%d][%d] merges with [%d][%d]...", small, small_no, large, large_no);
+			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
 			successful_merge_count++;
+			printf(" OK\n");
 		}
 		else
-			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[1][i], fx->set_bins_of_size[2][i]));
+			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+	}
+	g_assert_true(no_sets_to_merge == successful_merge_count);
+	printf("compare_n succeeded on distinct sets\n");
+
+	printf("running compare_n on sections of the same set\n");
+	n = fx->num_bins_of_size[small];
+	offset_small = 23;
+	offset_large = n/2 + 23;
+	small = large = 1;
+	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, small, n/2, offset_small, offset_large);
+
+	successful_merge_count = 0;
+	for (int i = 0; i < n/2; i++) {
+		int small_no = (i + offset_small) % fx->num_bins_of_size[small];
+		int large_no = (i + offset_large) % fx->num_bins_of_size[large];
+		if (sets_to_merge[i] == 1) {
+			printf("confirming [%d][%d] merges with [%d][%d]...", small, small_no, large, large_no);
+			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+			successful_merge_count++;
+			printf(" OK\n");
+		}
+		else
+			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
 	}
 	g_assert_true(no_sets_to_merge = successful_merge_count);
 	printf("compare_n succeeded on distinct sets\n");
