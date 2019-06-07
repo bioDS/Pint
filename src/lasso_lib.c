@@ -534,41 +534,45 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		int *sets_to_merge = malloc(actual_p_int*sizeof(int));
 		memset(sets_to_merge, 0, actual_p_int*sizeof(int));
 
-		for (int iter2 = 0; iter2 < 20; iter2++)
-		for (int small_set = 1; small_set < NumCores - 1; small_set++) {
-			move(ypos, xpos);
-			printw("current state: ");
-			for (int i = 0; i <= NumCores+1; i++)
-				printw("[%d]: %d, ", i, num_bins_of_size[i]);
-			printw("\nclearing set_size %d\n", small_set);
-			refresh();
-			for (int iter = 0; iter < 20; iter++) {
-				move(ypos+1, xpos);
-				printw("iter %d\n", iter);
+		int moved_something = 1;
+		for (int iter2 = 0; iter2 < 5 && moved_something; iter2++) {
+			moved_something = 0;
+			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
+				move(ypos, xpos);
+				printw("current state: ");
+				for (int i = 0; i <= NumCores+1; i++)
+					printw("[%d]: %d, ", i, num_bins_of_size[i]);
+				printw("\nclearing set_size %d\n", small_set);
 				refresh();
-				// compare the first n columns of the `1' bin, w/ the first n of the last, to see
-				// if they can be merged.
-				int n;
-				for (int large_set = NumCores-1; large_set > small_set; large_set--) {
-					if (num_bins_of_size[small_set] < num_bins_of_size[large_set])
-						n = num_bins_of_size[small_set];
-					else
-						n = num_bins_of_size[large_set];
-					if (n == 0)
-						continue;
-					//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
-					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
-					if (num_bins_to_merge > 0) {
-						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
+				for (int iter = 0; iter < 100 && (iter < num_bins_of_size[small_set]); iter++) {
+					move(ypos+1, xpos);
+					printw("iter %d\n", iter);
+					refresh();
+					// compare the first n columns of the `1' bin, w/ the first n of the last, to see
+					// if they can be merged.
+					int n;
+					for (int large_set = NumCores-1; large_set > small_set; large_set--) {
+						if (num_bins_of_size[small_set] < num_bins_of_size[large_set])
+							n = num_bins_of_size[small_set];
+						else
+							n = num_bins_of_size[large_set];
+						if (n == 0)
+							continue;
+						//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
+						if (num_bins_to_merge > 0) {
+							moved_something = 1;
+							merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
+							mergeset_count -= num_bins_to_merge;
+						}
+					}
+					// merge with same set, ensure no overlap
+					n = num_bins_of_size[small_set]/2;
+					if (n != 0) {
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
+						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
 						mergeset_count -= num_bins_to_merge;
 					}
-				}
-				// merge with same set, ensure no overlap
-				n = num_bins_of_size[small_set]/2;
-				if (n != 0) {
-					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
-					merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
-					mergeset_count -= num_bins_to_merge;
 				}
 			}
 		}
