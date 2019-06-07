@@ -377,7 +377,7 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 		small_set_no = set_bins_of_size[small][(i+small_offset)%num_bins_of_size[small]];
 		large_set_no = set_bins_of_size[large][(i+large_offset)%num_bins_of_size[large]];
 		if (sets_to_merge[i] == 1) {
-			printf("merging %d,%d\n", small_set_no, large_set_no);
+			//printf("merging %d,%d\n", small_set_no, large_set_no);
 			merge_sets(all_sets, small_set_no, large_set_no);
 			new_xl_bin[num_bins_of_size[max_set_size]+merged_count] = small_set_no;
 			merged_count++;
