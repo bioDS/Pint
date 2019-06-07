@@ -550,12 +550,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 				// if they can be merged.
 				int n;
 				for (int large_set = NumCores-1; large_set > small_set; large_set--) {
-					if (num_bins_of_size[large_set] == 0)
-						continue;
 					if (num_bins_of_size[small_set] < num_bins_of_size[large_set])
 						n = num_bins_of_size[small_set];
 					else
 						n = num_bins_of_size[large_set];
+					if (n == 0)
+						continue;
 					//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
 					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
 					if (num_bins_to_merge > 0) {
