@@ -460,15 +460,72 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 	printf("compare_n succeeded on distinct sets\n");
 }
 
+void check_sets_occur_once(Merge_Fixture *fx) {
+	int found_col[fx->p_int];
+	memset(found_col, 0, fx->p_int*sizeof(int));
+	printf("counting column occurances in result... ");
+	for (int i = 0; i < NumCores + 1; i++) {
+		for (int j = 0; j < fx->num_bins_of_size[i]; j++) {
+			int set = fx->set_bins_of_size[i][j];
+			g_assert_true(set >= 0 && set < fx->p_int);
+			if (fx->valid_mergesets[set])
+				for (int k = 0; k < fx->all_sets[set].ncols; k++) {
+					int col = fx->all_sets[set].cols[k];
+					found_col[col]++;
+					if (col==20) {
+						printf("\ncol20 found at [%d][%d]\n", i, j);
+					}
+				}
+		}
+	}
+	printf("done\n");
+
+
+	printf("checking every column occures exactly once... ");
+	for (int i = 0; i < fx->p_int; i++) {
+		g_assert_true(found_col[i] == 1);
+	}
+	printf("done\n");
+}
+
 static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
 	int *sets_to_merge = malloc(fx->p_int*sizeof(int));
-	printf("bins of size 1: %d, size 2: %d, size 3 %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2], fx->num_bins_of_size[3]);
+	printf("\nchecking distinct sets\n");
+
+	printf("bins of size");
+	for (int i = 0; i < NumCores+1; i++) {
+		printf(" [%d]: %d,", i, fx->num_bins_of_size[i]);
+	}
+	printf("\n");
+
 	int n = fx->num_bins_of_size[1];
 	if (fx->num_bins_of_size[2] < n)
 		n = fx->num_bins_of_size[2];
 	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
 	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, sets_to_merge, 1, 2, n, 0, 0, no_sets_to_merge);
-	printf("bins of size 1: %d, size 2: %d, size 3 %d\n", fx->num_bins_of_size[1], fx->num_bins_of_size[2], fx->num_bins_of_size[3]);
+
+	printf("bins of size");
+	for (int i = 0; i < NumCores+1; i++) {
+		printf(" [%d]: %d,", i, fx->num_bins_of_size[i]);
+	}
+	printf("\n");
+
+	printf("\nchecking the same set\n");
+
+	check_sets_occur_once(fx);
+
+	n = fx->num_bins_of_size[2];
+	int offset = 23;
+	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 2, 2, n/2, offset, n/2+offset);
+	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, sets_to_merge, 2, 2, n/2, offset, n/2+offset, no_sets_to_merge);
+
+	printf("bins of size");
+	for (int i = 0; i < NumCores+1; i++) {
+		printf(" [%d]: %d,", i, fx->num_bins_of_size[i]);
+	}
+	printf("\n");
+
+	check_sets_occur_once(fx);
 }
 
 int main (int argc, char *argv[]) {
