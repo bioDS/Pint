@@ -6,8 +6,9 @@
 #include <gsl/gsl_permutation.h>
 #include <CL/opencl.h>
 #include <errno.h>
+#include <sys/time.h>
 
-#define NumCores 6
+#define NumCores 4
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -364,7 +365,7 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 			// copy the rest later to preserve the order of elements being merged.
 		else if (end_pos_small < small_offset) {
 			memcpy(new_small_bin, &set_bins_of_size[small][end_pos_small], (small_offset-end_pos_small)*sizeof(int));
-			new_small_offset = -(small_offset - end_pos_small);
+			new_small_offset = -end_pos_small;
 		}
 
 		if (end_pos_large > large_offset)
@@ -372,7 +373,7 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 			// copy the rest later to preserve the order of elements being merged.
 		else if (end_pos_large < large_offset) {
 			memcpy(new_large_bin, &set_bins_of_size[large][end_pos_large], (large_offset-end_pos_large)*sizeof(int));
-			new_large_offset = -(large_offset - end_pos_large);
+			new_large_offset = -end_pos_large;
 		}
 	}
 
@@ -393,6 +394,8 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 				if ((small_offset+unmerged_count) + new_small_offset > num_bins_of_size[small] - num_bins_to_merge)
 					(*(int*)0)++;
 				new_small_bin[(small_offset+unmerged_count) + new_small_offset] = small_set_no;
+				if ((large_offset+unmerged_count) + new_large_offset > num_bins_of_size[large] - num_bins_to_merge)
+					(*(int*)0)++;
 				new_large_bin[(large_offset+unmerged_count) + new_large_offset] = large_set_no;
 			} else { //the two are the same set, don't duplicate entries
 				new_small_bin[(small_beginning+unmerged_count++) + new_small_offset] = small_set_no;
@@ -495,7 +498,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	for (int i = 0; i < NumCores+1; i++)
 		set_bins_of_size[i] = malloc(actual_p_int*sizeof(int));
 	//int num_bins_of_size[NumCores+2];
-	int *num_bins_of_size = malloc((NumCores+1)*sizeof(int));
+	int *num_bins_of_size = malloc((NumCores+2)*sizeof(int));
 
 	for (int i = 0; i <= NumCores+1; i++)
 		num_bins_of_size[i] = 0;
@@ -1082,7 +1085,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int scrx, scry;
 	getyx(stdscr, scry, scrx);
 
+	struct timespec start, end;
+	double cpu_time_used;
+
 	int *cols_to_update = malloc(p_int*sizeof(int));
+	clock_gettime(CLOCK_REALTIME, &start);
 	for (int iter = 0; iter < max_iter; iter++) {
 		refresh();
 		prev_error = error;
@@ -1110,7 +1117,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
+				#pragma omp parallel for num_threads(1) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
@@ -1178,7 +1185,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		clrtobot();
 	}
 
-	printw("lasso done, columns skipped %ld out of %ld a.k.a (%f\%)\n", skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	clock_gettime(CLOCK_REALTIME, &end);
+	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
+
+	printw("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f\%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
 	printw("cols: performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
 	printw("skipped entries %ld out of %ld a.k.a (%f\%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
 	free(precalc_get_num);
