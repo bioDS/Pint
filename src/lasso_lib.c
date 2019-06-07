@@ -370,8 +370,10 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 		if (end_pos_large > large_offset)
 			memcpy(new_large_bin, &set_bins_of_size[large][0], large_offset*sizeof(int));
 			// copy the rest later to preserve the order of elements being merged.
-		else if (large_offset < end_pos_large)
+		else if (large_offset < end_pos_large) {
 			memcpy(new_large_bin, &set_bins_of_size[large][end_pos_large], (large_offset-end_pos_large)*sizeof(int));
+			new_large_offset = -(large_offset - end_pos_large);
+		}
 	}
 
 	int merged_count = 0, unmerged_count = 0;
