@@ -7,7 +7,7 @@
 #include <CL/opencl.h>
 #include <errno.h>
 
-#define NumCores 4
+#define NumCores 6
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -370,7 +370,7 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 		if (end_pos_large > large_offset)
 			memcpy(new_large_bin, &set_bins_of_size[large][0], large_offset*sizeof(int));
 			// copy the rest later to preserve the order of elements being merged.
-		else if (large_offset < end_pos_large) {
+		else if (end_pos_large < large_offset) {
 			memcpy(new_large_bin, &set_bins_of_size[large][end_pos_large], (large_offset-end_pos_large)*sizeof(int));
 			new_large_offset = -(large_offset - end_pos_large);
 		}
@@ -547,20 +547,26 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 				// if they can be merged.
 				int n;
 				for (int large_set = NumCores-1; large_set > small_set; large_set--) {
+					if (num_bins_of_size[large_set] == 0)
+						continue;
 					if (num_bins_of_size[small_set] < num_bins_of_size[large_set])
 						n = num_bins_of_size[small_set];
 					else
 						n = num_bins_of_size[large_set];
 					//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
 					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
-					merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
-					mergeset_count -= num_bins_to_merge;
+					if (num_bins_to_merge > 0) {
+						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
+						mergeset_count -= num_bins_to_merge;
+					}
 				}
 				// merge with same set, ensure no overlap
 				n = num_bins_of_size[small_set]/2;
-				num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
-				merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
-				mergeset_count -= num_bins_to_merge;
+				if (n != 0) {
+					num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
+					merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
+					mergeset_count -= num_bins_to_merge;
+				}
 			}
 		}
 	}
