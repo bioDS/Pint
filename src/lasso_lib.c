@@ -172,9 +172,13 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
 			ti1++;
 		}
+		if (ti1 >= all_sets[i1].size)
+			return TRUE;
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
 			ti2++;
 		}
+		if (ti2 >= all_sets[i2].size)
+			return TRUE;
 		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2])
 			return FALSE;
 	}
@@ -192,10 +196,14 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 			indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
 			used_rows++;
 		}
+		if (ti1 >= all_sets[i1].size)
+			break;
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
 			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
 			used_rows++;
 		}
+		if (ti2 >= all_sets[i2].size)
+			break;
 		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2]) {
 			fprintf(stderr, "attempted to merge unmergeable sets\n");
 			fprintf(stderr, "set %d entry %d = %d, set %d entry %d = %d\n", i1, ti1, all_sets[i1].entries[ti1], i2, ti2, all_sets[i2].entries[ti2]);
