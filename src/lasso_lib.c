@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 8
+#define NumCores 64
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
