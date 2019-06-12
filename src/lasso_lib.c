@@ -193,13 +193,15 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	int ti1 = 0, ti2 = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
-			indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
+			indices[ti1 + ti2] = all_sets[i1].entries[ti1];
+			ti1++;
 			used_rows++;
 		}
 		if (ti1 >= all_sets[i1].size)
 			break;
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
-			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
+			indices[ti1 + ti2] = all_sets[i2].entries[ti2];
+			ti2++;
 			used_rows++;
 		}
 		if (ti2 >= all_sets[i2].size)
