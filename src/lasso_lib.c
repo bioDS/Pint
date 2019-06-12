@@ -4,7 +4,7 @@
 #include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
-#include <CL/opencl.h>
+//#include <CL/opencl.h>
 #include <errno.h>
 #include <sys/time.h>
 
