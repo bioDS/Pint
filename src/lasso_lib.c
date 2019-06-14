@@ -27,6 +27,13 @@ static double max_rowsum = 0;
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
 
+int min(int a, int b) {
+	if (a < b)
+		return a;
+	return b;
+}
+
+static int N;
 
 //TODO: try using dancing links
 //TODO: stop after |set| = numCores?
@@ -162,12 +169,16 @@ int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
 //	}
 //}
 
-
+//TODO: don't bother merging sets with too many elements?
 int can_merge(Mergeset *all_sets, int i1, int i2) {
+	if ((all_sets[i1].size > N/20) || (all_sets[i2].size > N/20))
+	//if ((all_sets[i1].size > N/20 && all_sets[i1].ncols == 1) || (all_sets[i2].size > N/20 && all_sets[i2].ncols == 1))
+		return FALSE;
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int ti1 = 0, ti2 = 0;
+	int allowable_overlap = 0;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
 			ti1++;
@@ -180,7 +191,8 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 		if (ti2 >= all_sets[i2].size)
 			return TRUE;
 		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2])
-			return FALSE;
+			if (used_overlap++ > allowable_overlap)
+				return FALSE;
 	}
 	return TRUE;
 }
@@ -284,11 +296,6 @@ int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, 
 	return num_bins_to_merge;
 }
 
-int min(int a, int b) {
-	if (a < b)
-		return a;
-	return b;
-}
 
 int max(int a, int b) {
 	if (a > b)
@@ -545,7 +552,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		memset(sets_to_merge, 0, actual_p_int*sizeof(int));
 
 		int moved_something = 1;
-		for (int iter2 = 0; iter2 < 5 && moved_something; iter2++) {
+		for (int iter2 = 0; iter2 < 20 && moved_something; iter2++) {
 			moved_something = 0;
 			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
 				move(ypos, xpos);
@@ -554,7 +561,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 					printw("[%d]: %d, ", i, num_bins_of_size[i]);
 				printw("\nclearing set_size %d\n", small_set);
 				refresh();
-				for (int iter = 0; iter < 100 && (iter < num_bins_of_size[small_set]); iter++) {
+				for (int iter = 0; iter < 50 && (iter < num_bins_of_size[small_set]); iter++) {
 					move(ypos+1, xpos);
 					printw("iter %d\n", iter);
 					refresh();
@@ -569,18 +576,19 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 						if (n == 0)
 							continue;
 						//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
-						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+1);
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+50*iter2+1);
 						if (num_bins_to_merge > 0) {
 							moved_something = 1;
-							merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+1, num_bins_to_merge);
+							merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+50*iter2+1, num_bins_to_merge);
 							mergeset_count -= num_bins_to_merge;
 						}
 					}
 					// merge with same set, ensure no overlap
 					n = num_bins_of_size[small_set]/2;
 					if (n != 0) {
-						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter);
-						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + iter, n + iter, num_bins_to_merge);
+						int offset = (iter + 50*iter2)%n;
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + offset, n + offset);
+						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + offset, n + offset, num_bins_to_merge);
 						mergeset_count -= num_bins_to_merge;
 					}
 				}
@@ -864,18 +872,24 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	// From here on things should behave the same (this is set mostly for testing)
 	USE_INT = 1;
 
-	int i, j, row;
-	//#pragma omp parallel for num_threads(1) private(i) shared(X, Y, xmatrix_sparse, rowsum) reduction (+:sumn, sumk, total_updates)
-	if (haschanged == 1) {
-		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-			// TODO: avoid unnecessary calculations for large lambda.
-			i = xmatrix_sparse.col_nz_indices[k][e];
-			// TODO: assumes X is binary
-			sumn += Y[i] - intercept - rowsum[i];
-		}
-	} else {
-		sumn = colsum[k];
+	int j, row;
+	//if (__builtin_expect(xmatrix_sparse.col_nz[k] > 2000, 1)) {
+	#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(4)
+	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+		int i;
+		// TODO: avoid unnecessary calculations for large lambda.
+		i = xmatrix_sparse.col_nz_indices[k][e];
+		// TODO: assumes X is binary
+		sumn += Y[i] - intercept - rowsum[i];
 	}
+	//} else {
+	//	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+	//		// TODO: avoid unnecessary calculations for large lambda.
+	//		i = xmatrix_sparse.col_nz_indices[k][e];
+	//		// TODO: assumes X is binary
+	//		sumn += Y[i] - intercept - rowsum[i];
+	//	}
+	//}
 	//total_updates++;
 	//total_updates_entries += xmatrix_sparse.col_nz[k];
 
@@ -891,7 +905,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	if (Bk_diff != 0) {
 		haschanged = 1;
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-			i = xmatrix_sparse.col_nz_indices[k][e];
+			int i = xmatrix_sparse.col_nz_indices[k][e];
 			rowsum[i] += Bk_diff;
 			if (rowsum[i] < max_rowsum)
 				max_rowsum = rowsum[i];
@@ -987,6 +1001,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int_pair *precalc_get_num;
 	int **X = xmatrix.X;
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
+	N = n;
 
 	move(7,0);
 	printw("calculating sparse interaction matrix (cols): \n");
@@ -1083,10 +1098,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			total_col += X2.col_nz[i];
 		}
 	}
-	//move(9,0);
+	int main_sum = 0;
+	for (int i = 0; i < p; i++)
+		for (int j = 0; j < n; j++)
+			main_sum += X[i][j];
+	move(9,0);
 	printw("\nlargest column has %d non-zero entries (out of %d)\n", largest_col, n);
-	//move(10,0);
-	printw("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
+	move(10,0);
+	printw("mean column has %f (%f main) non-zero entries (out of %d)\n", (double)total_col/n, (double)main_sum/n, n);
 	refresh();
 
 	printw("finding simultaneously updateable beta sets... ");
