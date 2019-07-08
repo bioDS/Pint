@@ -86,7 +86,7 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int allowable_overlap = 50;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int allowable_overlap = 5;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
@@ -100,8 +100,11 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 		if (ti2 >= all_sets[i2].size)
 			return TRUE;
 		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2])
-			if (used_overlap++ > allowable_overlap)
+			if (used_overlap++ > allowable_overlap) {
 				return FALSE;
+			} else {
+				ti1++; ti2++;
+			}
 	}
 	return TRUE;
 }
@@ -128,10 +131,12 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 		if (ti2 >= all_sets[i2].size)
 			break;
 		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2]) {
-			fprintf(stderr, "attempted to merge unmergeable sets\n");
-			fprintf(stderr, "set %d entry %d = %d, set %d entry %d = %d\n", i1, ti1, all_sets[i1].entries[ti1], i2, ti2, all_sets[i2].entries[ti2]);
-			return;
-			//(*(int*)0)++;
+			//fprintf(stderr, "attempted to merge unmergeable sets\n");
+			//fprintf(stderr, "set %d entry %d = %d, set %d entry %d = %d\n", i1, ti1, all_sets[i1].entries[ti1], i2, ti2, all_sets[i2].entries[ti2]);
+			//return;
+			ti1++;
+			ti2++;
+		///(*(int*)0)++;
 			//TODO: don't leave this in here
 		}
 	}
@@ -1115,7 +1120,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(3) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
