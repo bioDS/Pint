@@ -196,13 +196,15 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	int ti1 = 0, ti2 = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
-			indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
+			indices[ti1 + ti2] = all_sets[i1].entries[ti1];
+			ti1++;
 			used_rows++;
 		}
 		if (ti1 >= all_sets[i1].size)
 			break;
 		while (ti2 < all_sets[i2].size && all_sets[i2].entries[ti2] < all_sets[i1].entries[ti1]) {
-			indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
+			indices[ti1 + ti2] = all_sets[i2].entries[ti2];
+			ti2++;
 			used_rows++;
 		}
 		if (ti2 >= all_sets[i2].size)
@@ -449,9 +451,9 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 //TODO: don't allocate so many arrays on the stack?
 Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
-	int valid_mergesets[actual_p_int];
+	int *valid_mergesets = malloc(actual_p_int*sizeof(int));
 	//int actual_set_sizes[actual_p_int+1];
-	int valid_mergeset_indices[actual_p_int];
+	int *valid_mergeset_indices = malloc(actual_p_int*sizeof(int));
 	int mergeset_count = actual_p_int;
 	int new_mergeset_count;
 	Beta_Sets return_sets;
@@ -616,6 +618,9 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 
 		cur_set++;
 	}
+
+	free(valid_mergesets);
+	free(valid_mergeset_indices);
 
 	return return_sets;
 }
