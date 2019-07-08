@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 32
+#define NumCores 1024
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -86,7 +86,7 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int allowable_overlap = 5;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int allowable_overlap = 0;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
@@ -465,12 +465,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	}
 
 
-	printw("\nbins of size: ");
-	for (int i = 0; i <= NumCores+1; i++) {
-		printw("[%d]: %d, ", i, num_bins_of_size[i]);
-	}
-	printw("\n");
-	refresh();
+	//printw("\nbins of size: ");
+	//for (int i = 0; i <= NumCores+1; i++) {
+	//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
+	//}
+	//printw("\n");
+	//refresh();
 	int xpos, ypos;
 	getyx(stdscr, ypos, xpos);
 	int *nothing = malloc(mergeset_count*sizeof(struct Beta_Set));
@@ -487,12 +487,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		for (int iter2 = 0; iter2 < 2 && moved_something; iter2++) {
 			moved_something = 0;
 			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
-				move(ypos, xpos);
-				printw("current state: ");
-				for (int i = 0; i <= NumCores+1; i++)
-					printw("[%d]: %d, ", i, num_bins_of_size[i]);
-				printw("\nclearing set_size %d\n", small_set);
-				refresh();
+				//move(ypos, xpos);
+				//printw("current state: ");
+				//for (int i = 0; i <= NumCores+1; i++)
+				//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
+				//printw("\nclearing set_size %d\n", small_set);
+				//refresh();
 				for (int iter = 0; iter < 5 && (iter < num_bins_of_size[small_set]); iter++) {
 					move(ypos+1, xpos);
 					printw("iter %d\n", iter);
@@ -528,12 +528,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		}
 	}
 
-	printw("\nafter: bins of size: ");
-	for (int i = 0; i <= NumCores+1; i++) {
-		printw("[%d]: %d, ", i, num_bins_of_size[i]);
-	}
-	printw("\n");
-	refresh();
+	//printw("\nafter: bins of size: ");
+	//for (int i = 0; i <= NumCores+1; i++) {
+	//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
+	//}
+	//printw("\n");
+	//refresh();
 
 	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
