@@ -4,11 +4,10 @@
 #include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
-#include <CL/opencl.h>
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 8
+#define NumCores 32
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -22,7 +21,11 @@ static int VERBOSE = 1;
 static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
-static double max_rowsum = 0;
+//static double max_rowsum = 0;
+
+#define NUM_MAX_ROWSUMS 1
+static double max_rowsums[NUM_MAX_ROWSUMS];
+static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
@@ -543,7 +546,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		memset(sets_to_merge, 0, actual_p_int*sizeof(int));
 
 		int moved_something = 1;
-		for (int iter2 = 0; iter2 < 5 && moved_something; iter2++) {
+		for (int iter2 = 0; iter2 < 2 && moved_something; iter2++) {
 			moved_something = 0;
 			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
 				move(ypos, xpos);
@@ -552,7 +555,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 					printw("[%d]: %d, ", i, num_bins_of_size[i]);
 				printw("\nclearing set_size %d\n", small_set);
 				refresh();
-				for (int iter = 0; iter < 100 && (iter < num_bins_of_size[small_set]); iter++) {
+				for (int iter = 0; iter < 50 && (iter < num_bins_of_size[small_set]); iter++) {
 					move(ypos+1, xpos);
 					printw("iter %d\n", iter);
 					refresh();
@@ -834,6 +837,30 @@ int_pair get_num(int num, int p) {
 	return ip;
 }
 
+void update_max_rowsums(double new_value) {
+	if (new_value < max_rowsums[NUM_MAX_ROWSUMS])
+		return;
+
+	//TODO: reasonable search algorithm.
+	int i = NUM_MAX_ROWSUMS;
+	for (; i > 0; i--) {
+		if (new_value < max_rowsums[i])
+			break;
+	}
+
+	// i is the index of the smallest value greater than our new one.
+	// shift everything else down
+	for (int j = i; j > NUM_MAX_ROWSUMS - 1; j++) {
+		max_rowsums[j+1] = max_rowsums[j];
+	}
+	max_rowsums[i] = new_value;
+
+	max_cumulative_rowsums[0] = max_rowsums[0];
+	for (int i = 1; i < NUM_MAX_ROWSUMS; i++) {
+		max_cumulative_rowsums[i] = max_cumulative_rowsums[i-1] + max_rowsums[i];
+	}
+}
+
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
@@ -860,16 +887,12 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	USE_INT = 1;
 
 	int i, j, row;
-	//#pragma omp parallel for num_threads(1) private(i) shared(X, Y, xmatrix_sparse, rowsum) reduction (+:sumn, sumk, total_updates)
-	if (haschanged == 1) {
-		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-			// TODO: avoid unnecessary calculations for large lambda.
-			i = xmatrix_sparse.col_nz_indices[k][e];
-			// TODO: assumes X is binary
-			sumn += Y[i] - intercept - rowsum[i];
-		}
-	} else {
-		sumn = colsum[k];
+	//#pragma omp parallel for num_threads(4) private(i) shared(X, Y, xmatrix_sparse, rowsum) reduction (+:sumn, sumk, total_updates)
+	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+		// TODO: avoid unnecessary calculations for large lambda.
+		i = xmatrix_sparse.col_nz_indices[k][e];
+		// TODO: assumes X is binary
+		sumn += Y[i] - intercept - rowsum[i];
 	}
 	//total_updates++;
 	//total_updates_entries += xmatrix_sparse.col_nz[k];
@@ -888,8 +911,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			i = xmatrix_sparse.col_nz_indices[k][e];
 			rowsum[i] += Bk_diff;
-			if (rowsum[i] < max_rowsum)
-				max_rowsum = rowsum[i];
+			update_max_rowsums(rowsum[i]);
 		}
 	} else {
 		zero_updates++;
@@ -964,6 +986,13 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
 	return dBMax;
 }
 
+int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
+	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.
@@ -989,6 +1018,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
 	printw("calculating sparse interaction matrix (rows): \n");
 	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
+
+	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
+		max_rowsums[i] = 0;
+		max_cumulative_rowsums[i] = 0;
+	}
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -1129,12 +1163,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries)
+				#pragma omp parallel for num_threads(2) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
 						printf("updating col %d out of %d\n", k, p_int);
-					if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+					if (worth_updating(col_ysum, X2, k, n, lambda)) {
 						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 						total_updates++;
 						total_updates_entries += X2.col_nz[k];
