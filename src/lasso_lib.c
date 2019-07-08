@@ -75,109 +75,15 @@ Column_Set copy_column_set(Column_Set from_set) {
 	return new_set;
 }
 
-void fancy_col_remove(Column_Set set, int entry) {
-	ColEntry *cols = set.cols;
-	// find the next +ve entry
-	int next_positive = cols[entry].nextEntry;
-	while (cols[abs(next_positive)].nextEntry < 0)
-		next_positive = cols[abs(next_positive)].nextEntry;
-	cols[entry].nextEntry = -abs(next_positive);
-}
-
-void fancy_col_remove_value(Column_Set set, int entry_value) {
-	ColEntry *cols = set.cols;
-	int entry = -1;
-	for (int i = 0; i < set.size; i++) {
-		if (cols[i].value == entry_value) {
-			entry = i;
-			break;
-		}
-	}
-	if (entry == -1) {
-		fprintf(stderr, "attempted to remove an entry that was not found\n");
-		return;
-	}
-	// find the next +ve entry
-	int next_positive = cols[entry].nextEntry;
-	while (cols[abs(next_positive)].nextEntry < 0)
-		next_positive = cols[abs(next_positive)].nextEntry;
-	cols[entry].nextEntry = -abs(next_positive);
-}
-
-int fancy_col_next_positive_entry(Column_Set colset, int initial_col) {
-	do {
-		initial_col = abs(colset.cols[initial_col].nextEntry);
-	}
-	while (colset.cols[initial_col].nextEntry < 0 && abs(initial_col) >= 0 && abs(initial_col) < colset.size);
-	if (initial_col < 0)
-		fprintf(stderr, "next positive entry was negative, something has gone wrong!\n");
-	return initial_col;
-}
-
-// binary search for the first entry whose value is greater than or equal to value
-int fancy_col_find_entry_value_or_next(Column_Set colset, int value) {
-	int prev_index = -1;
-	int index = colset.size/2;
-	int reduction = colset.size/4;
-	if (reduction < 1)
-		reduction = 1;
-
-	for (int count = 0; count < colset.size; count++) {
-		if (colset.cols[index].value > value) {
-			// we have found the same greater value twice
-			if (prev_index == index)
-				return index;
-			prev_index = index;
-			index -= reduction;
-		} else if (colset.cols[index].value < value) {
-			index += reduction;
-		} else {
-			return index;
-		}
-		if (reduction != 1)
-			reduction /= 2;
-	}
-}
-
-/* every 1 (after the first one) found in a row, that belongs to the same set, begins a new set.
- * merging neighouring sets gives us simultaneously updateable neighbours. There are expected to be, on average, a few.
- * Possibly break smaller sets up placing their columns in larger sets until every set (or as many as we
- * can manage) has ~~ numCores elements. To do this reasonably, sets should be sorted after the first pass.
- */
-//Beta_Sets find_beta_sets_1pass(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
-//	GList *starting_points = g_list_prepend(NULL, (void*)(int)0);
-//	int found_one_in_set = 0;
-//	int col = 0;
-//	GList *current_starting_point = starting_points;
-//
-//	// TODO: this just adds every second one in the row to the starting_points list.
-//	//		- except when we pass into another set....
-//	for (int row = 0; row < n; row++) {
-//		found_one_in_set = 0;
-//		for (int col_ind = 0; col_ind < x2row.row_nz[row]; col_ind++) {
-//			col = x2row.row_nz_indices[row][col_ind];
-//			if (current_starting_point->next != NULL && col >= (int)(long)(current_starting_point->next)->data) {
-//				current_starting_point = current_starting_point->next;
-//			}
-//			if (found_one_in_set == 1 && (current_starting_point->next == NULL ||
-//										 (int)(long)current_starting_point->next->data != col)) {
-//				current_starting_point = starting_points;
-//			} else {
-//				found_one_in_set = 1;
-//			}
-//		}
-//	}
-//}
-
 //TODO: don't bother merging sets with too many elements?
 int can_merge(Mergeset *all_sets, int i1, int i2) {
-	if ((all_sets[i1].size > N/20) || (all_sets[i2].size > N/20))
-	//if ((all_sets[i1].size > N/20 && all_sets[i1].ncols == 1) || (all_sets[i2].size > N/20 && all_sets[i2].ncols == 1))
-		return FALSE;
+	//if ((all_sets[i1].size > 20) || (all_sets[i2].size > 20))
+	////if ((all_sets[i1].size > N/20 && all_sets[i1].ncols == 1) || (all_sets[i2].size > N/20 && all_sets[i2].ncols == 1))
+	//	return FALSE;
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int allowable_overlap = 0;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int allowable_overlap = 50;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
@@ -463,10 +369,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	Beta_Sets return_sets;
 
 
+	long total_col_nz = 0;
 	for (int i = 0; i < actual_p_int; i++)
 		valid_mergesets[i] = TRUE;
 
 	for (int i = 0; i < actual_p_int; i++) {
+		total_col_nz += x2col.col_nz[i];
 		all_sets[i].size = x2col.col_nz[i];
 		all_sets[i].cols = malloc(sizeof(int));
 		all_sets[i].cols[0] = i;
@@ -475,7 +383,16 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(int));
 		//actual_set_sizes[i] = 1;
 	}
+	printw("mean col_nz: %f\n", (float)total_col_nz/actual_p_int);
+	refresh();
 	//actual_set_sizes[actual_p_int] = 0; // so we don't add garbage to the size of the last set
+	long total_set_size = 0;
+	for (int i = 0; i < actual_p_int; i++) {
+		if (valid_mergesets[i])
+			total_set_size += all_sets[i].size;
+	}
+	printw("mean set size: %f\n", (float)total_set_size/mergeset_count);
+	refresh();
 
 	// let's start with one pass
 	new_mergeset_count = mergeset_count;
@@ -507,6 +424,13 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	}
 	mergeset_count = new_mergeset_count;
 
+	total_set_size = 0;
+	for (int i = 0; i < actual_p_int; i++) {
+		if (valid_mergesets[i])
+			total_set_size += all_sets[i].size;
+	}
+	printw("mean set size: %f\n", (float)total_set_size/mergeset_count);
+	refresh();
 	// place sets in their appropriate bin
 
 	// indices of sets that are of particular sizes on total.
@@ -552,7 +476,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		memset(sets_to_merge, 0, actual_p_int*sizeof(int));
 
 		int moved_something = 1;
-		for (int iter2 = 0; iter2 < 20 && moved_something; iter2++) {
+		for (int iter2 = 0; iter2 < 2 && moved_something; iter2++) {
 			moved_something = 0;
 			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
 				move(ypos, xpos);
@@ -561,7 +485,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 					printw("[%d]: %d, ", i, num_bins_of_size[i]);
 				printw("\nclearing set_size %d\n", small_set);
 				refresh();
-				for (int iter = 0; iter < 50 && (iter < num_bins_of_size[small_set]); iter++) {
+				for (int iter = 0; iter < 5 && (iter < num_bins_of_size[small_set]); iter++) {
 					move(ypos+1, xpos);
 					printw("iter %d\n", iter);
 					refresh();
@@ -1095,8 +1019,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	for (int i = 0; i < p_int; i++) {
 		if (X2.col_nz[i] > largest_col) {
 			largest_col = X2.col_nz[i];
-			total_col += X2.col_nz[i];
 		}
+		total_col += X2.col_nz[i];
 	}
 	int main_sum = 0;
 	for (int i = 0; i < p; i++)
@@ -1105,7 +1029,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	move(9,0);
 	printw("\nlargest column has %d non-zero entries (out of %d)\n", largest_col, n);
 	move(10,0);
-	printw("mean column has %f (%f main) non-zero entries (out of %d)\n", (double)total_col/n, (double)main_sum/n, n);
+	printw("mean column has %f (%f main) non-zero entries (out of %d)\n", (double)total_col/p_int, (double)main_sum/p, n);
 	refresh();
 
 	printw("finding simultaneously updateable beta sets... ");
@@ -1153,7 +1077,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				int counter = 0;
-				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries)
+				#pragma omp parallel for num_threads(3) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)

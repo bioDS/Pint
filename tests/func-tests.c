@@ -259,67 +259,6 @@ static void test_find_beta_sets() {
 	return;
 }
 
-static void test_column_set_operations() {
-	Column_Set test_set1;
-	test_set1.size = 10;
-	test_set1.cols = malloc(10*sizeof(ColEntry));
-
-	for (int i = 0; i < 10; i++) {
-		test_set1.cols[i].value = i;
-		test_set1.cols[i].nextEntry = i+1;
-	}
-
-	Column_Set test_set2 = copy_column_set(test_set1);
-	printf("checking set1.size (%d) == set2.size (%d)\n", test_set1.size, test_set2.size);
-	g_assert_true(test_set2.size == test_set1.size);
-
-	for (int i = 0; i < test_set1.size; i++) {
-		printf("checking set1[%d] = (%d,%d) == set2[%d] (%d,%d)\n", i, test_set1.cols[i].value, test_set1.cols[i].nextEntry,
-																	i, test_set2.cols[i].value, test_set2.cols[i].nextEntry);
-		g_assert_true(test_set2.cols[i].value == test_set1.cols[i].value);
-		g_assert_true(test_set2.cols[i].nextEntry == test_set1.cols[i].nextEntry);
-	}
-
-	for (int i = 0; i < test_set1.size; i++) {
-		int found_ind = fancy_col_find_entry_value_or_next(test_set2, i);
-		printf("checking found_ind: %d == actual location: %d\n", found_ind, i);
-		g_assert_true(found_ind == i);
-	}
-
-	fancy_col_remove(test_set1, 4);
-	for (int i = 0; i < 10; i++) {
-		if (i == 4)
-			g_assert_true(test_set1.cols[i].nextEntry == -5);
-		else
-			g_assert_true(test_set1.cols[i].nextEntry == i+1);
-		g_assert_true(test_set1.cols[i].value == i);
-	}
-
-	fancy_col_remove(test_set1, 0);
-	for (int i = 0; i < 10; i++) {
-		if (i == 0)
-			g_assert_true(test_set1.cols[i].nextEntry == -1);
-		else if (i == 4)
-			g_assert_true(test_set1.cols[i].nextEntry == -5);
-		else
-			g_assert_true(test_set1.cols[i].nextEntry == i+1);
-		g_assert_true(test_set1.cols[i].value == i);
-	}
-
-	fancy_col_remove(test_set1, 9);
-	for (int i = 0; i < 10; i++) {
-		if (i == 0)
-			g_assert_true(test_set1.cols[i].nextEntry == -1);
-		else if (i == 4)
-			g_assert_true(test_set1.cols[i].nextEntry == -5);
-		else if (i == 9)
-			g_assert_true(test_set1.cols[i].nextEntry == -10);
-		else
-			g_assert_true(test_set1.cols[i].nextEntry == i+1);
-		g_assert_true(test_set1.cols[i].value == i);
-	}
-}
-
 static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data) {
 	int n = 1000;
 	int p = 35;
@@ -542,7 +481,6 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-main", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_main, update_beta_fixture_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-find-beta-sets", test_find_beta_sets);
-	g_test_add_func("/func/test-column-set-operations", test_column_set_operations);
 	g_test_add("/func/test-check-n", Merge_Fixture, NULL, check_merge_n_set_up, test_check_n, check_merge_n_tear_down);
 	g_test_add("/func/test-merge-n", Merge_Fixture, NULL, check_merge_n_set_up, test_merge_n, check_merge_n_tear_down);
 
