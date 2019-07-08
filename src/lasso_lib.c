@@ -4,11 +4,10 @@
 #include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
-//#include <CL/opencl.h>
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 64
+#define NumCores 32
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -22,7 +21,11 @@ static int VERBOSE = 1;
 static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
-static double max_rowsum = 0;
+//static double max_rowsum = 0;
+
+#define NUM_MAX_ROWSUMS 1
+static double max_rowsums[NUM_MAX_ROWSUMS];
+static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
@@ -771,6 +774,30 @@ int_pair get_num(int num, int p) {
 	return ip;
 }
 
+void update_max_rowsums(double new_value) {
+	if (new_value < max_rowsums[NUM_MAX_ROWSUMS])
+		return;
+
+	//TODO: reasonable search algorithm.
+	int i = NUM_MAX_ROWSUMS;
+	for (; i > 0; i--) {
+		if (new_value < max_rowsums[i])
+			break;
+	}
+
+	// i is the index of the smallest value greater than our new one.
+	// shift everything else down
+	for (int j = i; j > NUM_MAX_ROWSUMS - 1; j++) {
+		max_rowsums[j+1] = max_rowsums[j];
+	}
+	max_rowsums[i] = new_value;
+
+	max_cumulative_rowsums[0] = max_rowsums[0];
+	for (int i = 1; i < NUM_MAX_ROWSUMS; i++) {
+		max_cumulative_rowsums[i] = max_cumulative_rowsums[i-1] + max_rowsums[i];
+	}
+}
+
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
@@ -831,8 +858,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			int i = xmatrix_sparse.col_nz_indices[k][e];
 			rowsum[i] += Bk_diff;
-			if (rowsum[i] < max_rowsum)
-				max_rowsum = rowsum[i];
+			update_max_rowsums(rowsum[i]);
 		}
 	} else {
 		zero_updates++;
@@ -907,6 +933,13 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
 	return dBMax;
 }
 
+int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
+	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.
@@ -933,6 +966,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
 	printw("calculating sparse interaction matrix (rows): \n");
 	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
+
+	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
+		max_rowsums[i] = 0;
+		max_cumulative_rowsums[i] = 0;
+	}
 
 	int p_int = p*(p+1)/2;
 	double *beta;
@@ -1082,7 +1120,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 					int k = beta_sets.sets[i].set[j];
 					if (VERBOSE == 1)
 						printf("updating col %d out of %d\n", k, p_int);
-					if (fabs(col_ysum[k] - X2.col_nz[k]*max_rowsum) > n*lambda/2) {
+					if (worth_updating(col_ysum, X2, k, n, lambda)) {
 						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 						total_updates++;
 						total_updates_entries += X2.col_nz[k];
