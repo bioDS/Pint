@@ -1,0 +1,3 @@
+default:
+	gcc-8 src/lasso_lib.c -o build/lasso_lib.o -I /usr/local/opt/gsl/include/ -I /usr/local/opt/glib/include/glib-2.0/ -I /usr/local/opt/glib/include/ -I /usr/local/opt/glib/lib/glib-2.0/include/ -lcurses -fopenmp -lm -L /usr/local/opt/gsl/lib/ -lgsl -L /usr/local/opt/glib/lib/ -lglib-2.0 -shared
+	gcc-8 src/lasso_exe.c -o build/lasso_exe -I /usr/local/opt/gsl/include/ -I /usr/local/opt/glib/include/glib-2.0/ -I /usr/local/opt/glib/include/ -I /usr/local/opt/glib/lib/glib-2.0/include/ -lcurses -fopenmp -lm -L /usr/local/opt/gsl/lib/ -lgsl -L /usr/local/opt/glib/lib/ -lglib-2.0 -L ./build -llasso_lib.o -Wall
