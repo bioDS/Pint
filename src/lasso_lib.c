@@ -1114,6 +1114,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		move(scry, scrx);
 		printw("\n\n");
 
+		error = 0;
 		// caculate cumulative error after update
 		if (USE_INT == 0)
 			for (int row = 0; row < n; row++) {
@@ -1125,16 +1126,26 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				e_diff *= e_diff;
 				error += e_diff;
 			}
-		else
-			for (int row = 0; row < n; row++) {
+		else {
+			double *row_err_sums = malloc(n*sizeof(double));
+			memset(row_err_sums, 0, n*sizeof(double));
+			for (int col = 0; col < p_int; col++) {
 				double sum = 0;
-				for (int k = 0; k < p; k++) {
-					sum += X[k][row]*beta[k];
+				for (int row_ind = 0; row_ind < X2.col_nz[col]; row_ind++) {
+					row_err_sums[X2.col_nz_indices[col][row_ind]] += beta[col];
 				}
-				double e_diff = Y[row] - intercept - sum;
-				e_diff *= e_diff;
-				error += e_diff;
 			}
+
+			for (int row = 0; row < n; row++) {
+				double row_err = Y[row] - intercept - row_err_sums[row];
+				if (row_err_sums[row] < -0.1) {
+//					printf("row %d, Y: %f err: %f\n", row, Y[row], row_err_sums[row]);
+				}
+				error += row_err*row_err;
+			}
+
+			free(row_err_sums);
+		}
 		error /= n;
 		printw("mean squared error is now %f, w/ intercept %f\n", error, intercept);
 		printw("indices significantly negative (-500):\n");
