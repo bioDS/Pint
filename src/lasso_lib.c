@@ -713,37 +713,6 @@ double soft_threshold(double z, double gamma) {
 		return val;
 }
 
-//TODO: applies when the x variables are standardized to have unit variance, is this the case?
-//TODO: glmnet also standardizes Y before computing its lambda sequence.
-double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept) {
-	double derivative = 0.0;
-	double sumk = 0.0;
-	double sumn = 0.0;
-	double sump;
-	double new_beta;
-
-	for (int i = 0; i < n; i++) {
-		sump = 0.0;
-		for (int j = 0; j < p; j++) {
-			if (j != k)
-				sump += X[i][j]?beta[j]:0.0;
-		}
-		//sumn += (Y[i] - sump)*(double)X[i][k];
-		sumn += X[i][k]?(Y[i] - intercept - sump):0.0;
-		sumk += X[i][k] * X[i][k];
-	}
-
-	new_beta = soft_threshold(sumn/n, lambda);
-	// soft thresholding of n, lambda*[alpha=1]
-
-	if (fabs(beta[k] - new_beta) > dBMax)
-		dBMax = fabs(beta[k] - new_beta);
-	beta[k] = new_beta;
-	if (VERBOSE)
-		printf("beta_%d is now %f\n", k, beta[k]);
-	return dBMax;
-}
-
 // separated to make profiling easier.
 // TODO: this is taking most of the time, worth avoiding.
 //		- has not been adjusted for on the fly X2.
