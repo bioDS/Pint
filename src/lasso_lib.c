@@ -367,7 +367,7 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 }
 
 //TODO: don't allocate so many arrays on the stack?
-Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
+Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
 	int *valid_mergesets = malloc(actual_p_int*sizeof(int));
 	//int actual_set_sizes[actual_p_int+1];
@@ -562,8 +562,8 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	return return_sets;
 }
 
-Beta_Sets find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, int actual_p_int, int n) {
-	return merge_find_beta_sets(x2col, x2row, actual_p_int, n);
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
+	return merge_find_beta_sets(x2col, actual_p_int, n);
 }
 
 XMatrix read_x_csv(char *fn, int n, int p) {
@@ -970,7 +970,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	refresh();
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
 	printw("calculating sparse interaction matrix (rows): \n");
-	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
+	//XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
@@ -1079,9 +1079,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	refresh();
 	Beta_Sets beta_sets;
 	if (USE_INT == 1)
-		beta_sets = find_beta_sets(X2, X2row, p_int, n);
+		beta_sets = find_beta_sets(X2, p_int, n);
 	else
-		beta_sets = find_beta_sets(X2, X2row, p, n);
+		beta_sets = find_beta_sets(X2, p, n);
 	printw(" done\n");
 	refresh();
 
@@ -1238,7 +1238,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	}
 
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(8)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GSList *current_col = NULL;
