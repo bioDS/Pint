@@ -204,7 +204,7 @@ static void test_find_beta_sets() {
 
 
 	//find_beta_sets(x2col, x2row, p*(p+1)/2, n);
-	Beta_Sets beta_sets = find_beta_sets(x2col, x2row, p, n);
+	Beta_Sets beta_sets = find_beta_sets(x2col,  p, n);
 	for (int i = 0; i < 7; i++)
 		free(X[i]);
 
@@ -235,7 +235,7 @@ static void test_find_beta_sets() {
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
 	x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
-	beta_sets = find_beta_sets(x2col, x2row, p_int, n);
+	beta_sets = find_beta_sets(x2col, p_int, n);
 
 	printf("found %d sets\n", beta_sets.number_of_sets);
 	printf("checking every element is present exactly once\n");
