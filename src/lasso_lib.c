@@ -7,7 +7,8 @@
 #include <errno.h>
 #include <sys/time.h>
 
-#define NumCores 1024
+#define NumCores 4
+#define NumSets  1024
 //#define LIMIT_OVERLAP
 
 const static int NORMALISE_Y = 0;
@@ -40,9 +41,9 @@ int min(int a, int b) {
 static int N;
 
 //TODO: try using dancing links
-//TODO: stop after |set| = numCores?
-//		- maybe after numCores*10 (or something) has been allowd through this row
-//TODO: split into GList[numcores] (or similar) (by rows w/ no overlap?)
+//TODO: stop after |set| = NumSets?
+//		- maybe after NumSets*10 (or something) has been allowd through this row
+//TODO: split into GList[NumSets] (or similar) (by rows w/ no overlap?)
 //		OR: pre-allocate GList contents?
 //TODO: rather than linked lists, arrays of structs with offsets might compress better?
 // GQueue?
@@ -233,8 +234,8 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 		return;
 
 	int max_set_size, small_set_no, large_set_no;
-	if (large+small > NumCores)
-		max_set_size = NumCores;
+	if (large+small > NumSets)
+		max_set_size = NumSets;
 	else
 		max_set_size = large+small;
 
@@ -443,22 +444,22 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	// place sets in their appropriate bin
 
 	// indices of sets that are of particular sizes on total.
-	//int set_bins_of_size[NumCores+1][actual_p_int];
-	int *set_bins_of_size[NumCores+1];
-	for (int i = 0; i < NumCores+1; i++)
+	//int set_bins_of_size[NumSets+1][actual_p_int];
+	int *set_bins_of_size[NumSets+1];
+	for (int i = 0; i < NumSets+1; i++)
 		set_bins_of_size[i] = malloc(actual_p_int*sizeof(int));
-	//int num_bins_of_size[NumCores+2];
-	int *num_bins_of_size = malloc((NumCores+2)*sizeof(int));
+	//int num_bins_of_size[NumSets+2];
+	int *num_bins_of_size = malloc((NumSets+2)*sizeof(int));
 
-	for (int i = 0; i <= NumCores+1; i++)
+	for (int i = 0; i <= NumSets+1; i++)
 		num_bins_of_size[i] = 0;
 
 	int count = 0;
 	for (int i = 0; i < actual_p_int; i++) {
 		if (valid_mergesets[i]) {
 			int set_size = all_sets[i].ncols;
-			if (set_size > NumCores+1)
-				set_size = NumCores+1;
+			if (set_size > NumSets+1)
+				set_size = NumSets+1;
 			valid_mergeset_indices[count] = i;
 			set_bins_of_size[set_size][num_bins_of_size[set_size]] = i;
 			num_bins_of_size[set_size]++;
@@ -467,7 +468,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 
 
 	//printw("\nbins of size: ");
-	//for (int i = 0; i <= NumCores+1; i++) {
+	//for (int i = 0; i <= NumSets+1; i++) {
 	//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
 	//}
 	//printw("\n");
@@ -478,7 +479,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 
 	//TODO: rewrite this whole section to update sets in batches, then commit
 	//		the changes all at once (which sounds very openCL friendly)
-	if (NumCores > 1) {
+	if (NumSets > 1) {
 		int num_bins_to_merge = 0;
 		// remove all sets of size 1
 		int *sets_to_merge = malloc(actual_p_int*sizeof(int));
@@ -487,10 +488,10 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 		int moved_something = 1;
 		for (int iter2 = 0; iter2 < 2 && moved_something; iter2++) {
 			moved_something = 0;
-			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
+			for (int small_set = 1; small_set < NumSets - 1; small_set++) {
 				//move(ypos, xpos);
 				//printw("current state: ");
-				//for (int i = 0; i <= NumCores+1; i++)
+				//for (int i = 0; i <= NumSets+1; i++)
 				//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
 				//printw("\nclearing set_size %d\n", small_set);
 				//refresh();
@@ -501,7 +502,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 					// compare the first n columns of the `1' bin, w/ the first n of the last, to see
 					// if they can be merged.
 					int n;
-					for (int large_set = NumCores-1; large_set > small_set; large_set--) {
+					for (int large_set = NumSets-1; large_set > small_set; large_set--) {
 						if (num_bins_of_size[small_set] < num_bins_of_size[large_set])
 							n = num_bins_of_size[small_set];
 						else
@@ -530,7 +531,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	}
 
 	//printw("\nafter: bins of size: ");
-	//for (int i = 0; i <= NumCores+1; i++) {
+	//for (int i = 0; i <= NumSets+1; i++) {
 	//	printw("[%d]: %d, ", i, num_bins_of_size[i]);
 	//}
 	//printw("\n");
@@ -800,7 +801,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 
 	int j, row;
 	//if (__builtin_expect(xmatrix_sparse.col_nz[k] > 2000, 1)) {
-	#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(4)
+	#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(NumCores)
 	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 		int i;
 		// TODO: avoid unnecessary calculations for large lambda.
@@ -1090,13 +1091,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 			// update the predictor \Beta_k
 #ifdef LIMIT_OVERLAP
-			#pragma omp parallel num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+			#pragma omp parallel num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				#pragma omp for 
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 #else
-				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 				for (int k = 0; k < p_int; k++) {
 
 #endif
