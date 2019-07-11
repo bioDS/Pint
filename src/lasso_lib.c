@@ -570,7 +570,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
 	size_t line_size = 0;
 	int **X = malloc(p*sizeof(int*));
-	gsl_spmatrix *X_sparse = gsl_spmatrix_alloc(n, p);
+	//gsl_spmatrix *X_sparse = gsl_spmatrix_alloc(n, p);
 
 	// forces X[...] to be sequential. (and adds some segfaults).
 	//int *Xq = malloc(n*p*sizeof(int));
@@ -607,7 +607,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 			}
 			else if (buf[i] == '1') {
 				X[col][row] = 1;
-				gsl_spmatrix_set(X_sparse, row, col, 1);
+				//gsl_spmatrix_set(X_sparse, row, col, 1);
 			}
 			else {
 				fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n", fn, row, col);
@@ -638,7 +638,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	free(buf);
 	XMatrix xmatrix;
 	xmatrix.X = X;
-	xmatrix.X_sparse = gsl_spmatrix_ccs(X_sparse);
+	//xmatrix.X_sparse = gsl_spmatrix_ccs(X_sparse);
 	xmatrix.actual_cols = actual_cols;
 	return xmatrix;
 }
@@ -811,7 +811,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	double sump;
 	int **X = xmatrix.X;
-	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
+	//gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 	int pairwise_product = 0;
 	int_pair ip;
 	if (USE_INT) {
@@ -962,7 +962,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
 	int **X = xmatrix.X;
-	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
+	//gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 	N = n;
 
 	move(7,0);
@@ -1283,7 +1283,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 		}
 	}
 
-	int shuffle_order[p_int];
+	//int shuffle_order[p_int];
 	gsl_rng *r;
 	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
 	gsl_permutation_init(permutation);

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <gsl/gsl_vector.h>
-#include <gsl/gsl_spmatrix.h>
+//#include <gsl/gsl_spmatrix.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -24,7 +24,6 @@ static int VERBOSE;
 
 typedef struct XMatrix {
 	int **X;
-	gsl_spmatrix *X_sparse;
 	int actual_cols;
 } XMatrix;
 
