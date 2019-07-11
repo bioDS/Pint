@@ -8,6 +8,7 @@
 #include <sys/time.h>
 
 #define NumCores 1024
+//#define LIMIT_OVERLAP
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -86,7 +87,7 @@ int can_merge(Mergeset *all_sets, int i1, int i2) {
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int allowable_overlap = 2000;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int allowable_overlap = 0;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
@@ -1044,6 +1045,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	printw("mean column has %f (%f main) non-zero entries (out of %d)\n", (double)total_col/p_int, (double)main_sum/p, n);
 	refresh();
 
+#ifdef LIMIT_OVERLAP
 	printw("finding simultaneously updateable beta sets... ");
 	refresh();
 	Beta_Sets beta_sets;
@@ -1053,7 +1055,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		beta_sets = find_beta_sets(X2, p, n);
 	printw(" done\n");
 	refresh();
-
+#endif
 	int scrx, scry;
 	getyx(stdscr, scry, scrx);
 
@@ -1087,13 +1089,17 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//	}
 
 			// update the predictor \Beta_k
+#ifdef LIMIT_OVERLAP
 			#pragma omp parallel num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
-				int counter = 0;
 				#pragma omp for 
-				//#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
+#else
+				#pragma omp parallel for num_threads(4) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+				for (int k = 0; k < p_int; k++) {
+
+#endif
 					if (VERBOSE == 1)
 						printf("updating col %d out of %d\n", k, p_int);
 					if (worth_updating(col_ysum, X2, k, n, lambda)) {
@@ -1108,7 +1114,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 						total_updates_entries += X2.col_nz[k];
 					}
 				}
+#ifdef LIMIT_OVERLAP
 			}
+#endif
 		//}
 		haschanged = 0;
 		move(scry, scrx);
