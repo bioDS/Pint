@@ -264,14 +264,14 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 		small_beginning = smallest_offset;
 		if (end_pos_smallest > largest_offset) {
 			fprintf(stderr, "merging overlapping regions (%d-%d) (%d-%d) in the same set (%d), segfaulting instead\n",
-					smallest_offset, end_pos_smallest, largest_offset, end_pos_largest);
+					smallest_offset, end_pos_smallest, largest_offset, end_pos_largest, small);
 			(*(int*)0)++;
 		}
 		if (end_pos_largest < largest_offset) {
 			// the second group has wrapped around
 			if (end_pos_largest > smallest_offset) {
 				fprintf(stderr, "merging overlapping regions (%d-%d) (%d-%d) in the same set (%d), segfaulting instead\n",
-						smallest_offset, end_pos_smallest, largest_offset, end_pos_largest);
+						smallest_offset, end_pos_smallest, largest_offset, end_pos_largest, small);
 				(*(int*)0)++;
 			}
 			// but not too far
