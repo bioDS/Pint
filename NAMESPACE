@@ -1,0 +1,2 @@
+useDynLib(lasso_testing)
+export(CyclicLasso)

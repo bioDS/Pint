@@ -21,6 +21,7 @@ AC_PROG_MKDIR_P
 PKG_CHECK_MODULES(GLIB, glib-2.0)
 PKG_CHECK_MODULES(GSL, gsl)
 PKG_CHECK_MODULES(NCURSES, ncurses)
+PKG_CHECK_MODULES(R, libR)
 # FIXME: Replace `main' with a function in `-largeArrayDims':
 AC_CHECK_LIB([argeArrayDims], [main])
 # FIXME: Replace `main' with a function in `-lgomp':

@@ -1,0 +1,7 @@
+Package: lasso_testing
+Version: 0.0
+Title: wip testing lasso Package
+Author: Kieran Elmes (kelmes@cs.otago.ac.nz)
+Maintainer: Kieran Elmes (kelmes@cs.otago.ac.nz)
+Description: lasso takes an input matrix X, and features Y, and performs lasso regression on the pairwise interactions in X.
+License: GPL (version 2 or later)
