@@ -1,0 +1,9 @@
+bin_PROGRAMS = lassoExe
+lib_LTLIBRARIES = liblasso.la
+liblasso_la_SOURCES = lasso_lib.c
+liblasso_la_CFLAGS = $(GLIB_CFLAGS) $(GSL_CFLAGS) $(NCURSES_CFLAGS)
+liblasso_la_LDFLAGS = $(GLIB_LIBS) $(GSL_LIBS) $(NCURSES_LIBS)
+lassoExe_SOURCES = lasso_exe.c lasso_lib.c
+lassoExe_CFLAGS = $(GLIB_CFLAGS) $(GSL_CFLAGS) $(NCURSES_CFLAGS)
+lassoExe_LDFLAGS = $(GLIB_LIBS) $(GSL_LIBS) $(NCURSES_LIBS)
+lassoExe_LDADD = liblasso.la
