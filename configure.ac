@@ -42,6 +42,8 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([clock_gettime memset pow setlocale sqrt])
 
+AC_CONFIG_LINKS([./src/LassoTesting.so:./src/.libs/LassoTesting.so])
+
 AC_CONFIG_FILES([Makefile
 				 src/Makefile])
 AC_OUTPUT
