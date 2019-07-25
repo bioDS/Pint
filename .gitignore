@@ -1,0 +1,8 @@
+*
+!*.c
+!*.h
+!*.sh
+!*.csv
+!*.mtx
+!configure*
+!.gitignore
