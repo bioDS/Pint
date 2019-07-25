@@ -1,5 +1,5 @@
 #include <gsl/gsl_vector.h>
-#include "liblasso.h"
+#include "../../src/liblasso.h"
 #include <ncurses.h>
 
 int main(int argc, char** argv) {
