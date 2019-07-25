@@ -1,8 +1,8 @@
-#include "lasso_lib.h"
+#include "liblasso.h"
 #include <R.h>
 #include <Rinternals.h>
 
-int lasso(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
+SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 
 	char *method = "cyclic";
 	char *scale = "int";
@@ -62,4 +62,16 @@ int lasso(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 				Rprintf("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
 		}
 	}
+	return ScalarReal(1);
+}
+
+static const R_CallMethodDef CallEntries[] ={
+	{"lasso_", (DL_FUNC) &lasso_, 5},
+	{NULL, NULL, 0}
+};
+
+void R_init_LassoTesting(DllInfo *info) {
+	//R_RegisterCCallable("LassoTesting", "lasso_", (DL_FUNC) &lasso_);
+	R_registerRoutines(info, NULL, CallEntries, NULL, NULL);
+	R_useDynamicSymbols(info, FALSE);
 }

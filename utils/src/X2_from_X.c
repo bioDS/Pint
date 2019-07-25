@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <errno.h>
-#include "lasso_lib.h"
+#include "liblasso.h"
 
 
 void write_x_csv(char *filename, int **X, int n, int p) {

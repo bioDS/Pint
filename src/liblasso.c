@@ -1,4 +1,4 @@
-#include "lasso_lib.h"
+#include "liblasso.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
 #include <ncurses.h>

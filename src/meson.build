@@ -1,6 +1,6 @@
-install_headers('lasso_lib.h')
+install_headers('liblasso.h')
 
-lasso_lib_deps = [
+liblasso_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
 	dependency('glib-2.0'),
@@ -8,19 +8,9 @@ lasso_lib_deps = [
 	dependency('OpenCL'),
 ]
 
-lasso_lib = shared_library('lasso_lib', 'lasso_lib.c', 'lasso_lib.h',
-	dependencies: lasso_lib_deps,
+liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
+	dependencies: liblasso_deps,
 	install: true
 )
 
 libdir_abs = join_paths(get_option('prefix'), get_option('libdir'))
-
-lasso_exe = executable('lasso_exe', 'lasso_exe.c', link_with: lasso_lib,
-	dependencies: lasso_lib_deps,
-	install: true,
-	install_rpath: libdir_abs
-)
-
-test_opencl_exe = executable('test_opencl_exe', 'test_opencl.c', link_with: lasso_lib, dependencies: lasso_lib_deps)
-
-x2fx_exe = executable('X2_from_X', 'X2_from_X.c', link_with: lasso_lib, dependencies: lasso_lib_deps)

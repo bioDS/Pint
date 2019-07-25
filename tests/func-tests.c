@@ -1,5 +1,5 @@
 #include <glib.h>
-#include "../src/lasso_lib.h"
+#include "../src/liblasso.h"
 #include <locale.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
