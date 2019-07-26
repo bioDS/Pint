@@ -2,8 +2,7 @@
 #include <R.h>
 #include <Rinternals.h>
 
-SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
-
+SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_, SEXP frac_overlap_allowed_) {
 	char *method = "cyclic";
 	char *scale = "int";
 	char *verbose = "F";
@@ -12,8 +11,8 @@ SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 	if (strcmp(scale, "int") == 0)
 		USE_INT=1;
 
-	VERBOSE = 0;
-	if (strcmp(verbose, "T") == 0)
+	//VERBOSE = "T";
+	//if (strcmp(verbose, "T") == 0)
 		VERBOSE = 1;
 
 	double lambda = asReal(lambda_);
@@ -22,6 +21,7 @@ SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 	int N = asInteger(N_);
 	int P = asInteger(P_);
 
+	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
 
 	// testing: wip
 	XMatrix xmatrix = read_x_csv(CHAR(asChar(x_fname)), N, P);
@@ -41,7 +41,7 @@ SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 		return 1;
 	}
 
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 10, USE_INT, VERBOSE);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 100, USE_INT, VERBOSE, frac_overlap_allowed);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -57,9 +57,9 @@ SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_) {
 			sig_beta_count++;
 			int_pair ip = get_num(i, nbeta);
 			if (ip.i == ip.j)
-				Rprintf("main: %d (%d):     %f\n", i, ip.i, beta[i]);
+				Rprintf("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
 			else
-				Rprintf("int: %d  (%d, %d): %f\n", i, ip.i, ip.j, beta[i]);
+				Rprintf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 		}
 	}
 	return ScalarReal(1);

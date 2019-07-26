@@ -18,7 +18,7 @@
 //#define N 30
 //#define P 1000
 //#define P 35
-#define HALT_BETA_DIFF 0
+#define HALT_BETA_DIFF 1.000001
 
 static int VERBOSE;
 
@@ -72,7 +72,7 @@ typedef struct Mergeset {
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int permute);
 XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
-double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE);
+double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int VERBOSE, double frac_overlap_allowed);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
 double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num);
@@ -81,11 +81,11 @@ double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(int num, int p);
-Beta_Sets find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n);
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, double frac_overlap_allowed);
 Column_Set copy_column_set(Column_Set from);
 void fancy_col_remove(Column_Set set, int entry);
 int fancy_col_find_entry_value_or_next(Column_Set colset, int value);
 void merge_sets(Mergeset *all_sets, int i, int j);
-int can_merge(Mergeset *all_sets, int i, int j);
-int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset);
+int can_merge(Mergeset *all_sets, int i, int j, double frac_overlap_allowed);
+int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, double frac_overlap_allowed);
 void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, int num_bins_to_merge);

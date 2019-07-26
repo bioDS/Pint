@@ -6,6 +6,7 @@
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <R.h>
 
 #define NumCores 4
 #define NumSets  1024
@@ -25,7 +26,7 @@ static int *colsum;
 static double *col_ysum;
 //static double max_rowsum = 0;
 
-#define NUM_MAX_ROWSUMS 1
+#define NUM_MAX_ROWSUMS 50
 static double max_rowsums[NUM_MAX_ROWSUMS];
 static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
@@ -81,14 +82,20 @@ Column_Set copy_column_set(Column_Set from_set) {
 }
 
 //TODO: don't bother merging sets with too many elements?
-int can_merge(Mergeset *all_sets, int i1, int i2) {
+int can_merge(Mergeset *all_sets, int i1, int i2, double frac_overlap_allowed) {
 	//if ((all_sets[i1].size > 20) || (all_sets[i2].size > 20))
 	////if ((all_sets[i1].size > N/20 && all_sets[i1].ncols == 1) || (all_sets[i2].size > N/20 && all_sets[i2].ncols == 1))
 	//	return FALSE;
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int allowable_overlap = 0;//min(all_sets[i1].size, all_sets[i2].size)/2 + 1;
+	int max_size = 0;
+	if (all_sets[i1].size > all_sets[i2].size)
+		max_size = all_sets[i1].size;
+	else
+		max_size = all_sets[i2].size;
+
+	int allowable_overlap = (int)(frac_overlap_allowed*max_size);
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
@@ -187,7 +194,7 @@ Mergeset *remove_invalid_sets(Mergeset *all_sets, int *valid_mergesets, int actu
 // check the first n elements of set_bins_of_size[small] against the (offset +) first n of set_bins_of_size[large]
 // (modulo their respective sizes the indices of those that can be merged are placed in sets_to_merge.
 // TODO: allow different offsets for small and large (to allow small == large)
-int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset) {
+int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, double frac_overlap_allowed) {
 	int num_bins_to_merge = 0;
 	int small_set_no, large_set_no;
 	small_offset = small_offset%num_bins_of_size[small];
@@ -202,7 +209,7 @@ int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, 
 		small_set_no = set_bins_of_size[small][(i + small_offset) %num_bins_of_size[small]];
 		large_set_no = set_bins_of_size[large][(i + large_offset) %num_bins_of_size[large]];
 		//TODO: we shouldn't need the valid_mergesets check here if everything is working
-		if (valid_mergesets[small_set_no] == TRUE && valid_mergesets[large_set_no] == TRUE && can_merge(all_sets, small_set_no, large_set_no) == TRUE) {
+		if (valid_mergesets[small_set_no] == TRUE && valid_mergesets[large_set_no] == TRUE && can_merge(all_sets, small_set_no, large_set_no, frac_overlap_allowed) == TRUE) {
 			sets_to_merge[i] = 1;
 			num_bins_to_merge++;
 		}
@@ -369,7 +376,8 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 }
 
 //TODO: don't allocate so many arrays on the stack?
-Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
+Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, double frac_overlap_allowed) {
+	Rprintf("allowing overlap of %.2f%% finding beta sets\n", (frac_overlap_allowed*100));
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
 	int *valid_mergesets = malloc(actual_p_int*sizeof(int));
 	//int actual_set_sizes[actual_p_int+1];
@@ -396,19 +404,19 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	//printw("mean col_nz: %f\n", (float)total_col_nz/actual_p_int);
 	//refresh();
 	//actual_set_sizes[actual_p_int] = 0; // so we don't add garbage to the size of the last set
-	long total_set_size = 0;
-	for (int i = 0; i < actual_p_int; i++) {
-		if (valid_mergesets[i])
-			total_set_size += all_sets[i].size;
-	}
-	//printw("mean set size: %f\n", (float)total_set_size/mergeset_count);
+	//long total_set_size = 0;
+	//for (int i = 0; i < actual_p_int; i++) {
+	//	if (valid_mergesets[i])
+	//		total_set_size += all_sets[i].size;
+	//}
+	//Rprintf("mean set size: %f\n", (float)total_set_size/mergeset_count);
 	//refresh();
 
 	// let's start with one pass
 	new_mergeset_count = mergeset_count;
 	//#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
 	for (int i = 0; i < actual_p_int - 2; i += 2) {
-		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
+		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1, frac_overlap_allowed)) {
 			merge_sets(all_sets, i, i+1);
 			//actual_set_sizes[i]++;
 			valid_mergesets[i+1] = FALSE;
@@ -422,7 +430,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	new_mergeset_count = mergeset_count;
 	//#pragma omp parallel for reduction(-:new_mergeset_count) shared(valid_mergesets, actual_set_sizes)
 	for (int i = 1; i < actual_p_int - 2; i += 2) {
-		if (valid_mergesets[i+1] && valid_mergesets[i] && can_merge(all_sets, i, i+1)) {
+		if (valid_mergesets[i+1] && valid_mergesets[i] && can_merge(all_sets, i, i+1, frac_overlap_allowed)) {
 			merge_sets(all_sets, i, i+1);
 			//actual_set_sizes[i] += actual_set_sizes[i+1];
 			valid_mergesets[i+1] = FALSE;
@@ -434,12 +442,12 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	}
 	mergeset_count = new_mergeset_count;
 
-	total_set_size = 0;
-	for (int i = 0; i < actual_p_int; i++) {
-		if (valid_mergesets[i])
-			total_set_size += all_sets[i].size;
-	}
-	//printw("mean set size: %f\n", (float)total_set_size/mergeset_count);
+	//total_set_size = 0;
+	//for (int i = 0; i < actual_p_int; i++) {
+	//	if (valid_mergesets[i])
+	//		total_set_size += all_sets[i].size;
+	//}
+	//Rprintf("mean set size: %f\n", (float)total_set_size/mergeset_count);
 	//refresh();
 	// place sets in their appropriate bin
 
@@ -510,7 +518,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 						if (n == 0)
 							continue;
 						//TODO: don't use iter, iter+1, at least choose from a random distribution instead.
-						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+50*iter2+1);
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, large_set, n, iter, iter+50*iter2+1, frac_overlap_allowed);
 						if (num_bins_to_merge > 0) {
 							moved_something = 1;
 							merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set,  large_set, n, iter, iter+50*iter2+1, num_bins_to_merge);
@@ -521,7 +529,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 					n = num_bins_of_size[small_set]/2;
 					if (n != 0) {
 						int offset = (iter + 50*iter2)%n;
-						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + offset, n + offset);
+						num_bins_to_merge = compare_n(all_sets, valid_mergesets, set_bins_of_size, num_bins_of_size, sets_to_merge, small_set, small_set, n, 0 + offset, n + offset, frac_overlap_allowed);
 						merge_n(all_sets, set_bins_of_size, num_bins_of_size, valid_mergesets, sets_to_merge, small_set, small_set, n, 0 + offset, n + offset, num_bins_to_merge);
 						mergeset_count -= num_bins_to_merge;
 					}
@@ -540,7 +548,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
 	//printw("some useful statistics:\n");
-	//printw("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
+	Rprintf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
 
 	//TODO: only works for contiguous sets at the moment (if there)
 	int set_size, cur_set = 0;
@@ -564,8 +572,8 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
 	return return_sets;
 }
 
-Beta_Sets find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n) {
-	return merge_find_beta_sets(x2col, actual_p_int, n);
+Beta_Sets find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, double frac_overlap_allowed) {
+	return merge_find_beta_sets(x2col, actual_p_int, n, frac_overlap_allowed);
 }
 
 XMatrix read_x_csv(char *fn, int n, int p) {
@@ -776,6 +784,7 @@ void update_max_rowsums(double new_value) {
 
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
+//TODO: max lambda
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
 	double derivative = 0.0;
 	double sumk = xmatrix_sparse.col_nz[k];
@@ -914,7 +923,7 @@ int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda
  * TODO: add an intercept
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
-double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -927,7 +936,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	N = n;
 
 	//move(7,0);
-	//printw("calculating sparse interaction matrix (cols): \n");
+	//Rprintf("calculating sparse interaction matrix (cols): \n");
 	//refresh();
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
 	//printw("calculating sparse interaction matrix (rows): \n");
@@ -979,7 +988,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//	}
 	//printf("should skip %d columns\n", skip_count);
 
-	double error = 0, prev_error;
+	double error = DBL_MAX, prev_error;
 	double intercept = 0.0;
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
@@ -1041,9 +1050,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//refresh();
 	Beta_Sets beta_sets;
 	if (USE_INT == 1)
-		beta_sets = find_beta_sets(X2, p_int, n);
+		beta_sets = find_beta_sets(X2, p_int, n, frac_overlap_allowed);
 	else
-		beta_sets = find_beta_sets(X2, p, n);
+		beta_sets = find_beta_sets(X2, p, n, frac_overlap_allowed);
 	//printw(" done\n");
 	//refresh();
 #endif
@@ -1055,7 +1064,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	int *cols_to_update = malloc(p_int*sizeof(int));
 	clock_gettime(CLOCK_REALTIME, &start);
-	for (int iter = 0; iter < max_iter; iter++) {
+	//TODO: make ratio an option
+	double final_lambda = 0.1*lambda;
+	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
+	int lambda_count = 1;
+	for (int iter = 0; iter < max_iter && lambda > final_lambda; iter++) {
 		//refresh();
 		prev_error = error;
 		error = 0;
@@ -1144,7 +1157,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			free(row_err_sums);
 		}
 		error /= n;
-		Rprintf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		//Rprintf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		//Rprintf("error diff: %.2f\%\n", prev_error/error);
 		//printw("indices significantly negative (-500):\n");
 		//int printed = 0;
 		////TODO: remove hack to prevent printing too many for the terminal
@@ -1160,9 +1174,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (dBMax < HALT_BETA_DIFF) {
-			Rprintf("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
-			return beta;
+		if (prev_error/error < HALT_BETA_DIFF) {
+			//Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
+			Rprintf("done lambda %d after %d iterations, final error %.1f\n", lambda_count, iter + 1, error);
+			lambda_count++;
+			lambda *= 0.9;
 		}
 
 		//printw("done iteration %d\n", iter);
@@ -1172,11 +1188,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	clock_gettime(CLOCK_REALTIME, &end);
 	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
 
-	//printw("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f\%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
-	//printw("cols: performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
-	//printw("skipped entries %ld out of %ld a.k.a (%f\%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
+	Rprintf("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f%%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	Rprintf("cols: performed %d zero updates (%f%%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	Rprintf("skipped entries %ld out of %ld a.k.a (%f%%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
 	free(precalc_get_num);
-	//printw("entries: performed %d zero updates (%f\%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
+	Rprintf("entries: performed %d zero updates (%f%%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
 	return beta;
 }
