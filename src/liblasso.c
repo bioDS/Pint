@@ -6,7 +6,11 @@
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
 #include <sys/time.h>
+#ifdef USE_R
 #include <R.h>
+#else
+#define Rprintf printf
+#endif
 
 #define NumCores 4
 #define NumSets  1024

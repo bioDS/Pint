@@ -141,7 +141,7 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX2Small.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0, 0.0);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < fixture->p; i++) {
@@ -159,7 +159,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	fixture->X = fixture->xmatrix.X;
 	int p_int = fixture->p*(fixture->p+1)/2;
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0, 0.0);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < p_int; i++) {
@@ -204,7 +204,7 @@ static void test_find_beta_sets() {
 
 
 	//find_beta_sets(x2col, x2row, p*(p+1)/2, n);
-	Beta_Sets beta_sets = find_beta_sets(x2col,  p, n);
+	Beta_Sets beta_sets = find_beta_sets(x2col, p, n, 0.0);
 	for (int i = 0; i < 7; i++)
 		free(X[i]);
 
@@ -235,7 +235,7 @@ static void test_find_beta_sets() {
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
 	x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
-	beta_sets = find_beta_sets(x2col, p_int, n);
+	beta_sets = find_beta_sets(x2col, p_int, n, 0.0);
 
 	printf("found %d sets\n", beta_sets.number_of_sets);
 	printf("checking every element is present exactly once\n");
@@ -298,7 +298,7 @@ static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data
 
 	int new_mergeset_count = p_int;
 	for (int i = 0; i < p_int - 2; i += 2) {
-		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1)) {
+		if (valid_mergesets[i+1] && can_merge(all_sets, i, i+1, 0.0)) {
 			merge_sets(all_sets, i, i+1);
 			valid_mergesets[i+1] = FALSE;
 			new_mergeset_count--;
@@ -357,7 +357,7 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 	int offset_small = 17, offset_large = 81;
 	int small = 1;
 	int large = 2;
-	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, large, n, offset_small, offset_large);
+	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, large, n, offset_small, offset_large, 0.0);
 
 	int successful_merge_count = 0;
 	for (int i = 0; i < n; i++) {
@@ -365,12 +365,12 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 		int large_no = (i + offset_large) % fx->num_bins_of_size[large];
 		if (sets_to_merge[i] == 1) {
 			printf("confirming [%d][%d] merges with [%d][%d]...", small, small_no, large, large_no);
-			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no], 0.0));
 			successful_merge_count++;
 			printf(" OK\n");
 		}
 		else
-			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no], 0.0));
 	}
 	g_assert_true(no_sets_to_merge == successful_merge_count);
 	printf("compare_n succeeded on distinct sets\n");
@@ -380,7 +380,7 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 	offset_small = 23;
 	offset_large = n/2 + 23;
 	small = large = 1;
-	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, small, n/2, offset_small, offset_large);
+	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, small, small, n/2, offset_small, offset_large, 0.0);
 
 	successful_merge_count = 0;
 	for (int i = 0; i < n/2; i++) {
@@ -388,12 +388,12 @@ static void test_check_n(Merge_Fixture *fx, gconstpointer user_data) {
 		int large_no = (i + offset_large) % fx->num_bins_of_size[large];
 		if (sets_to_merge[i] == 1) {
 			printf("confirming [%d][%d] merges with [%d][%d]...", small, small_no, large, large_no);
-			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+			g_assert_true(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no], 0.0));
 			successful_merge_count++;
 			printf(" OK\n");
 		}
 		else
-			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no]));
+			g_assert_false(can_merge(fx->all_sets, fx->set_bins_of_size[small][small_no], fx->set_bins_of_size[large][large_no], 0.0));
 	}
 	g_assert_true(no_sets_to_merge = successful_merge_count);
 	printf("compare_n succeeded on distinct sets\n");
@@ -440,7 +440,7 @@ static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
 	int n = fx->num_bins_of_size[1];
 	if (fx->num_bins_of_size[2] < n)
 		n = fx->num_bins_of_size[2];
-	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0);
+	int no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 1, 2, n, 0, 0, 0.0);
 	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, sets_to_merge, 1, 2, n, 0, 0, no_sets_to_merge);
 
 	printf("bins of size");
@@ -455,7 +455,7 @@ static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
 
 	n = fx->num_bins_of_size[2];
 	int offset = 23;
-	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 2, 2, n/2, offset, n/2+offset);
+	no_sets_to_merge = compare_n(fx->all_sets, fx->valid_mergesets, fx->set_bins_of_size, fx->num_bins_of_size, sets_to_merge, 2, 2, n/2, offset, n/2+offset, 0.0);
 	merge_n(fx->all_sets, fx->set_bins_of_size, fx->num_bins_of_size, fx->valid_mergesets, sets_to_merge, 2, 2, n/2, offset, n/2+offset, no_sets_to_merge);
 
 	printf("bins of size");
