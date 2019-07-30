@@ -1,7 +1,6 @@
 #include "liblasso.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
-//#include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
@@ -9,7 +8,8 @@
 #ifdef USE_R
 #include <R.h>
 #else
-#define Rprintf printf
+#include <ncurses.h>
+#define Rprintf printw
 #endif
 
 #define NumCores 4
