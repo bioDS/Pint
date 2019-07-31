@@ -4,8 +4,7 @@ As of [15/04](https://github.com/bioDS/lasso_testing/commit/6c1bbdc4a80c7079a5cc
 - 31/07 update: descending lambda values finds 4/5.
 
 to make an installable R package:
-automake --add-missing --copy
-autoreconf -fi
+./autogen.sh
 
 
 # Some implementation notes:
