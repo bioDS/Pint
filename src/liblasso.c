@@ -12,8 +12,8 @@
 #define Rprintf printw
 #endif
 
-#define NumCores 4
-#define NumSets  1024
+#define NumCores 64
+#define NumSets 1<<18
 #define LIMIT_OVERLAP
 
 const static int NORMALISE_Y = 0;
@@ -1072,6 +1072,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double final_lambda = 0.1*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
+	int iter_count = 0;
 	for (int iter = 0; lambda > final_lambda; iter++) {
 		//refresh();
 		prev_error = error;
@@ -1174,17 +1175,20 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			Rprintf("done lambda %d after %d iterations, final error %.1f\n", lambda_count, iter + 1, error);
 			lambda_count++;
 			lambda *= 0.9;
+			iter_count += iter;
 			iter = 0;
 		} else if (iter == max_iter) {
 			Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
 			lambda_count++;
 			lambda *= 0.9;
+			iter_count += iter;
 			iter = 0;
 		}
 		//printw("done iteration %d\n", iter);
 		//clrtobot();
 	}
 	Rprintf("\nfinished at lambda = %f\n", lambda);
+	Rprintf("after %d total iters\n", iter_count);
 
 	clock_gettime(CLOCK_REALTIME, &end);
 	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
