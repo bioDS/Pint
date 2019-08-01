@@ -771,7 +771,7 @@ void update_max_rowsums(double new_value) {
 	//#pragma omp critical
 	{
 		//TODO: reasonable search algorithm.
-		int i = NUM_MAX_ROWSUMS;
+		int i = NUM_MAX_ROWSUMS - 1;
 		for (; i > 0; i--) {
 			if (new_value < max_rowsums[i])
 				break;
