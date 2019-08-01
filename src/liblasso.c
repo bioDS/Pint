@@ -32,8 +32,8 @@ static double *col_ysum;
 //static double max_rowsum = 0;
 
 #define NUM_MAX_ROWSUMS 50
-static double max_rowsums[NUM_MAX_ROWSUMS+1];
-static double max_cumulative_rowsums[NUM_MAX_ROWSUMS+1];
+static double max_rowsums[NUM_MAX_ROWSUMS];
+static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
