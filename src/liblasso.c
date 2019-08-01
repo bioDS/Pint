@@ -9,7 +9,6 @@
 #include <R.h>
 #else
 #include <ncurses.h>
-#define Rprintf printw
 #define Rprintf(args...) printw (args); refresh();
 #endif
 
