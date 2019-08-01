@@ -13,8 +13,8 @@
 #define Rprintf(args...) printw (args); refresh();
 #endif
 
-#define NumCores 4
-#define NumSets 1<<10
+#define NumCores 64
+#define NumSets 1<<12
 #define LIMIT_OVERLAP
 
 const static int NORMALISE_Y = 0;
@@ -31,9 +31,9 @@ static int *colsum;
 static double *col_ysum;
 //static double max_rowsum = 0;
 
-#define NUM_MAX_ROWSUMS 1
-static double max_rowsums[NUM_MAX_ROWSUMS];
-static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
+#define NUM_MAX_ROWSUMS 50
+static double max_rowsums[NUM_MAX_ROWSUMS+1];
+static double max_cumulative_rowsums[NUM_MAX_ROWSUMS+1];
 
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
@@ -768,7 +768,7 @@ void update_max_rowsums(double new_value) {
 	if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
 		return;
 
-	//#pragma omp critical
+	#pragma omp critical
 	{
 		//TODO: reasonable search algorithm.
 		int i = NUM_MAX_ROWSUMS;
@@ -1135,7 +1135,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			// update the predictor \Beta_k
 //#ifdef LIMIT_OVERLAP
 			//TODO: updating rowsums at the same time doesn't seem safe.
-			#pragma omp parallel num_threads(NumCores) private(max_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
+			#pragma omp parallel num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				#pragma omp for 
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
