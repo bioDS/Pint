@@ -10,10 +10,11 @@
 #else
 #include <ncurses.h>
 #define Rprintf printw
+#define Rprintf(args...) printw (args); refresh();
 #endif
 
-#define NumCores 64
-#define NumSets 1<<18
+#define NumCores 4
+#define NumSets 1<<10
 #define LIMIT_OVERLAP
 
 const static int NORMALISE_Y = 0;
