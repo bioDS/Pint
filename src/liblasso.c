@@ -30,7 +30,7 @@ static int *colsum;
 static double *col_ysum;
 //static double max_rowsum = 0;
 
-#define NUM_MAX_ROWSUMS 10
+#define NUM_MAX_ROWSUMS 1
 static double max_rowsums[NUM_MAX_ROWSUMS];
 static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
@@ -112,12 +112,13 @@ int can_merge(Mergeset *all_sets, int i1, int i2, double frac_overlap_allowed) {
 		}
 		if (ti2 >= all_sets[i2].size)
 			return TRUE;
-		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2])
+		if (all_sets[i1].entries[ti1] == all_sets[i2].entries[ti2]) {
 			if (used_overlap++ > allowable_overlap) {
 				return FALSE;
 			} else {
 				ti1++; ti2++;
 			}
+		}
 	}
 	return TRUE;
 }
@@ -766,7 +767,7 @@ void update_max_rowsums(double new_value) {
 	if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
 		return;
 
-	#pragma omp critical
+	//#pragma omp critical
 	{
 		//TODO: reasonable search algorithm.
 		int i = NUM_MAX_ROWSUMS;
@@ -922,6 +923,43 @@ int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda
 	return FALSE;
 }
 
+double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
+	double error = 0.0;
+	// caculate cumulative error after update
+	if (USE_INT == 0)
+		for (int row = 0; row < n; row++) {
+			double sum = 0;
+			for (int k = 0; k < p; k++) {
+				sum += X[k][row]*beta[k];
+			}
+			double e_diff = Y[row] - intercept - sum;
+			e_diff *= e_diff;
+			error += e_diff;
+		}
+	else {
+		//double *row_err_sums = malloc(n*sizeof(double));
+		//memset(row_err_sums, 0, n*sizeof(double));
+		//for (int col = 0; col < p_int; col++) {
+		//	double sum = 0;
+		//	for (int row_ind = 0; row_ind < X2.col_nz[col]; row_ind++) {
+		//		row_err_sums[X2.col_nz_indices[col][row_ind]] += beta[col];
+		//	}
+		//}
+
+		for (int row = 0; row < n; row++) {
+			double row_err = Y[row] - intercept - rowsum[row];
+			//if (row_err_sums[row] < -0.1) {
+//	//				printf("row %d, Y: %f err: %f\n", row, Y[row], row_err_sums[row]);
+			//}
+			error += row_err*row_err;
+		}
+
+		//free(row_err_sums);
+	}
+	error /= n;
+	return error;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.
@@ -995,7 +1033,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//	}
 	//printf("should skip %d columns\n", skip_count);
 
-	double error = DBL_MAX, prev_error;
+	double error = 0.0, prev_error;
+	for (int i = 0; i < n; i++) {
+		error += Y[i]*Y[i];
+	}
 	double intercept = 0.0;
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
@@ -1079,7 +1120,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	for (int iter = 0; lambda > final_lambda; iter++) {
 		//refresh();
 		prev_error = error;
-		error = 0;
 		double dBMax = 0.0; // largest beta diff this cycle
 
 		// update intercept (don't for the moment, it should be 0 anyway)
@@ -1092,19 +1132,20 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 
 			// update the predictor \Beta_k
-#ifdef LIMIT_OVERLAP
-			#pragma omp parallel num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+//#ifdef LIMIT_OVERLAP
+			//TODO: updating rowsums at the same time doesn't seem safe.
+			#pragma omp parallel num_threads(NumCores) private(max_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				#pragma omp for 
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
-#else
-				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
-				for (int k = 0; k < p_int; k++) {
+//#else
+//				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+//				for (int k = 0; k < p_int; k++) {
 
-#endif
+//#endif
 					if (worth_updating(col_ysum, X2, k, n, lambda)) {
-						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+						error = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 						total_updates++;
 						total_updates_entries += X2.col_nz[k];
 					}
@@ -1115,47 +1156,21 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 						total_updates_entries += X2.col_nz[k];
 					}
 				}
-#ifdef LIMIT_OVERLAP
+//#ifdef LIMIT_OVERLAP
 			}
-#endif
+//#endif
 		//}
 		haschanged = 0;
 		//move(scry, scrx);
 		//printw("\n\n");
+		error = calculate_error(USE_INT, n, p_int, X2, Y, X, beta, p, intercept, rowsum);
+		//Rprintf("e:  %.2f \ne2: %.2f\n", error, error2);
+		//refresh();
+		//if (fabs(error - error2) > 100) {
+		//	(*(int*)0)++;
+		//}
 
-		error = 0;
-		// caculate cumulative error after update
-		if (USE_INT == 0)
-			for (int row = 0; row < n; row++) {
-				double sum = 0;
-				for (int k = 0; k < p; k++) {
-					sum += X[k][row]*beta[k];
-				}
-				double e_diff = Y[row] - intercept - sum;
-				e_diff *= e_diff;
-				error += e_diff;
-			}
-		else {
-			double *row_err_sums = malloc(n*sizeof(double));
-			memset(row_err_sums, 0, n*sizeof(double));
-			for (int col = 0; col < p_int; col++) {
-				double sum = 0;
-				for (int row_ind = 0; row_ind < X2.col_nz[col]; row_ind++) {
-					row_err_sums[X2.col_nz_indices[col][row_ind]] += beta[col];
-				}
-			}
 
-			for (int row = 0; row < n; row++) {
-				double row_err = Y[row] - intercept - row_err_sums[row];
-				if (row_err_sums[row] < -0.1) {
-//					printf("row %d, Y: %f err: %f\n", row, Y[row], row_err_sums[row]);
-				}
-				error += row_err*row_err;
-			}
-
-			free(row_err_sums);
-		}
-		error /= n;
 		//Rprintf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
 		//Rprintf("error diff: %.2f\%\n", prev_error/error);
 		//printw("indices significantly negative (-500):\n");
