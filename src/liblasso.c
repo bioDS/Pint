@@ -1232,7 +1232,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	}
 
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(8)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GSList *current_col = NULL;
