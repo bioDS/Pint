@@ -30,7 +30,7 @@ static int *colsum;
 static double *col_ysum;
 //static double max_rowsum = 0;
 
-#define NUM_MAX_ROWSUMS 50
+#define NUM_MAX_ROWSUMS 10
 static double max_rowsums[NUM_MAX_ROWSUMS];
 static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
@@ -763,26 +763,29 @@ int_pair get_num(int num, int p) {
 }
 
 void update_max_rowsums(double new_value) {
-	if (new_value < max_rowsums[NUM_MAX_ROWSUMS])
+	if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
 		return;
 
-	//TODO: reasonable search algorithm.
-	int i = NUM_MAX_ROWSUMS;
-	for (; i > 0; i--) {
-		if (new_value < max_rowsums[i])
-			break;
-	}
+	#pragma omp critical
+	{
+		//TODO: reasonable search algorithm.
+		int i = NUM_MAX_ROWSUMS;
+		for (; i > 0; i--) {
+			if (new_value < max_rowsums[i])
+				break;
+		}
 
-	// i is the index of the smallest value greater than our new one.
-	// shift everything else down
-	for (int j = i; j > NUM_MAX_ROWSUMS - 1; j++) {
-		max_rowsums[j+1] = max_rowsums[j];
-	}
-	max_rowsums[i] = new_value;
+		// i is the index of the smallest value greater than our new one.
+		// shift everything else down
+		for (int j = i; j > NUM_MAX_ROWSUMS; j++) {
+			max_rowsums[j+1] = max_rowsums[j];
+		}
+		max_rowsums[i] = new_value;
 
-	max_cumulative_rowsums[0] = max_rowsums[0];
-	for (int i = 1; i < NUM_MAX_ROWSUMS; i++) {
-		max_cumulative_rowsums[i] = max_cumulative_rowsums[i-1] + max_rowsums[i];
+		max_cumulative_rowsums[0] = max_rowsums[0];
+		for (int i = 1; i < NUM_MAX_ROWSUMS; i++) {
+			max_cumulative_rowsums[i] = max_cumulative_rowsums[i-1] + max_rowsums[i];
+		}
 	}
 }
 
