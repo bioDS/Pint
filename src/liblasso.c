@@ -12,9 +12,10 @@
 #define Rprintf(args...) printw (args); refresh();
 #endif
 
-#define NumCores 4
 #define NumSets 1<<10
 #define LIMIT_OVERLAP
+
+static NumCores = 1;
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -979,6 +980,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	//gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 	N = n;
+
+	NumCores = omp_get_num_procs();
+	Rprintf("using %d threads\n", NumCores);
 
 	//move(7,0);
 	//Rprintf("calculating sparse interaction matrix (cols): \n");
