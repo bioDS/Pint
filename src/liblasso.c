@@ -6,10 +6,10 @@
 #include <errno.h>
 #include <sys/time.h>
 #ifdef USE_R
-#include <R.h>
+	#include <R.h>
 #else
-#include <ncurses.h>
-#define Rprintf(args...) printw (args); refresh();
+	#include <ncurses.h>
+	#define Rprintf(args...) printw (args); refresh();
 #endif
 
 #define NumSets 1<<12

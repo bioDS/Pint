@@ -1,5 +1,10 @@
 install_headers('liblasso.h')
 
+conf_data = configuration_data()
+conf_data.set('USE_R', false)
+configure_file(output: 'config.h', configuration: conf_data)
+configuration_inc = include_directories('.')
+
 cc = meson.get_compiler('c')
 rt_dependency = []
 if host_machine.system() != 'windows'
@@ -20,6 +25,7 @@ liblasso_deps = [
 ]
 
 liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
+	include_directories: configuration_inc,
 	dependencies: liblasso_deps,
 	install: true
 )
