@@ -38,13 +38,13 @@ typedef struct Column_Set {
 } Column_Set;
 
 typedef struct XMatrix_sparse {
-	int **col_nz_indices;
+	short **col_nz_indices;
 	int *col_nz;
 	gsl_permutation *permutation;
 } XMatrix_sparse;
 
 typedef struct XMatrix_sparse_row {
-	int **row_nz_indices;
+	short **row_nz_indices;
 	int *row_nz;
 } XMatrix_sparse_row;
 
@@ -64,7 +64,7 @@ typedef struct Beta_Sets {
 
 typedef struct Mergeset {
 	int size; //number of rows/entries in supercolumns (should really be renamed)
-	int *entries;
+	short *entries;
 	int ncols;
 	int *cols;
 } Mergeset;
