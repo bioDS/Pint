@@ -6,6 +6,7 @@
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <gmodule.h>
 #ifdef USE_R
 	#include <R.h>
 #else
@@ -464,8 +465,9 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 	//int set_bins_of_size[NumSets+1][actual_p_int];
 	//TODO: don't allocate the maximum possible set size of each one. Use a list of some kind.
 	int *set_bins_of_size[NumSets+1];
+	GQueue *set_queues_of_size[NumSets+1];
 	for (int i = 0; i < NumSets+1; i++)
-		set_bins_of_size[i] = malloc(actual_p_int*sizeof(int));
+		set_queues_of_size[i] = g_queue_new();
 	//int num_bins_of_size[NumSets+2];
 	int *num_bins_of_size = malloc((NumSets+2)*sizeof(int));
 
@@ -479,10 +481,25 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 			if (set_size > NumSets+1)
 				set_size = NumSets+1;
 			valid_mergeset_indices[count] = i;
-			set_bins_of_size[set_size][num_bins_of_size[set_size]] = i;
+			g_queue_push_tail(set_queues_of_size[set_size], i);
 			num_bins_of_size[set_size]++;
 		}
 	}
+	for (int i = 1; i < NumSets+1; i++) {
+		if (num_bins_of_size[i] > 0) {
+			set_bins_of_size[i] = malloc(num_bins_of_size[i]*sizeof(int));
+			int count = 0;
+			while (!g_queue_is_empty(set_queues_of_size[i])) {
+				set_bins_of_size[i][count] = g_queue_pop_head(set_queues_of_size[i]);
+				count++;
+			}
+			g_assert_true(count == num_bins_of_size[i]);
+		} else {
+			set_bins_of_size[i] = malloc(1); //TODO: later sections expect this to be allocated. This should probably be fixed.
+		}
+	}
+
+	g_queue_free(set_queues_of_size);
 
 
 	//printw("\nbins of size: ");
@@ -493,7 +510,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 	//refresh();
 	int xpos, ypos;
 	//getyx(stdscr, ypos, xpos);
-	int *nothing = malloc(mergeset_count*sizeof(struct Beta_Set));
+	//int *nothing = malloc(mergeset_count*sizeof(struct Beta_Set));
 
 	//TODO: rewrite this whole section to update sets in batches, then commit
 	//		the changes all at once (which sounds very openCL friendly)
