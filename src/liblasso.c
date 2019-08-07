@@ -96,13 +96,13 @@ int can_merge(Mergeset *all_sets, int i1, int i2, double frac_overlap_allowed) {
 	if (all_sets[i1].size == 0 || all_sets[i2].size == 0)
 		return TRUE;
 
-	int max_size = 0;
-	if (all_sets[i1].size > all_sets[i2].size)
-		max_size = all_sets[i1].size;
+	int min_size = 0;
+	if (all_sets[i1].size < all_sets[i2].size)
+		min_size = all_sets[i1].size;
 	else
-		max_size = all_sets[i2].size;
+		min_size = all_sets[i2].size;
 
-	int allowable_overlap = (int)(frac_overlap_allowed*max_size);
+	int allowable_overlap = (int)(frac_overlap_allowed*min_size);
 	int ti1 = 0, ti2 = 0, used_overlap = 0;
 	while (ti1 < all_sets[i1].size && ti2 < all_sets[i2].size) {
 		while (ti1 < all_sets[i1].size && all_sets[i1].entries[ti1] < all_sets[i2].entries[ti2]) {
