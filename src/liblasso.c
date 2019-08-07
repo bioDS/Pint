@@ -13,7 +13,7 @@
 	#define Rprintf(args...) printw (args); refresh();
 #endif
 
-#define NumSets 1<<12
+#define NumSets (1<<12)
 #define LIMIT_OVERLAP
 
 static NumCores = 1;
