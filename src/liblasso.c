@@ -1294,7 +1294,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
-			GSList *current_col = NULL;
+			GQueue *current_col = g_queue_new();
 			// only include main effects (where i==j) unless USE_INT is set.
 			if (USE_INT || j == i) {
 				if (USE_INT)
@@ -1306,25 +1306,22 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 				for (int row = 0; row < n; row++) {
 					val = X[i][row] * X[j][row];
 					if (val == 1) {
-						current_col = g_slist_prepend(current_col, (void*)(long)row);
+						g_queue_push_tail(current_col, (void*)(long)row);
 					}
 					else if (val != 0)
 						fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
 				}
-				length = g_slist_length(current_col);
-				current_col = g_slist_reverse(current_col);
+				length = g_queue_get_length(current_col);
 
 				X2.col_nz_indices[colno] = malloc(length*sizeof(int));
 				X2.col_nz[colno] = length;
 
-				GSList *current_col_ind = current_col;
 				int temp_counter = 0;
-				while(current_col_ind != NULL) {
-					X2.col_nz_indices[colno][temp_counter++] = (int)(long)current_col_ind->data;
-					current_col_ind = current_col_ind->next;
+				while (!g_queue_is_empty(current_col)) {
+					X2.col_nz_indices[colno][temp_counter++] = (int)(long)g_queue_pop_head(current_col);
 				}
 
-				g_slist_free(current_col);
+				g_queue_free(current_col);
 				current_col = NULL;
 			}
 		}
