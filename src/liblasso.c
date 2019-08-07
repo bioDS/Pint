@@ -158,11 +158,13 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	}
 	// we've done the overlap, now read in the rest
 	while (ti1 < all_sets[i1].size) {
-		indices[ti1++ + ti2] = all_sets[i1].entries[ti1];
+		indices[ti1 + ti2] = all_sets[i1].entries[ti1];
+		ti1++;
 		used_rows++;
 	}
 	while (ti2 < all_sets[i2].size) {
-		indices[ti1 + ti2++] = all_sets[i2].entries[ti2];
+		indices[ti1 + ti2] = all_sets[i2].entries[ti2];
+		ti2++;
 		used_rows++;
 	}
 
