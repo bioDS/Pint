@@ -179,6 +179,7 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 	memcpy(&new_cols[all_sets[i1].ncols], all_sets[i2].cols, all_sets[i2].ncols*sizeof(int));
 	free(all_sets[i1].cols);
 	free(all_sets[i2].cols);
+	free(all_sets[i2].entries);
 	all_sets[i1].cols = new_cols;
 	all_sets[i2].cols = NULL;
 	all_sets[i1].ncols = all_sets[i1].ncols + all_sets[i2].ncols;
