@@ -1,4 +1,5 @@
 #include "liblasso.h"
+#include "config.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
 #include <gsl/gsl_rng.h>
