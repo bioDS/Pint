@@ -5,8 +5,8 @@
 enum Output_Mode {quit, file, terminal};
 
 int main(int argc, char** argv) {
-	if (argc != 11) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [lambda] N P [overlap] [q/t/filename]\n");
+	if (argc != 10) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [frac overlap allowed] [q/t/filename]\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -19,10 +19,9 @@ int main(int argc, char** argv) {
 	initscr();
 	refresh();
 
-	char *method = argv[3];
-	char *scale = argv[4];
-	char *verbose = argv[5];
-	char *output_filename = argv[10];
+	char *scale = argv[3];
+	char *verbose = argv[2];
+	char *output_filename = argv[9];
 	FILE *output_file = NULL;
 
 	enum Output_Mode output_mode = terminal;
@@ -50,18 +49,18 @@ int main(int argc, char** argv) {
 
 	double lambda;
 
-	if ((lambda = strtod(argv[6], NULL)) == 0)
+	if ((lambda = strtod(argv[5], NULL)) == 0)
 		lambda = 3.604;
 	move(1,0);
 	printw("using lambda = %f\n", lambda);
 
 
-	int N = atoi(argv[7]);
-	int P = atoi(argv[8]);
+	int N = atoi(argv[6]);
+	int P = atoi(argv[7]);
 	move(1,0);
 	printw("using N = %d, P = %d\n", N, P);
 
-	double overlap = atof(argv[9]);
+	double overlap = atof(argv[8]);
 	printw("using frac: %.2f\n", overlap);
 
 
@@ -95,7 +94,7 @@ int main(int argc, char** argv) {
 	move(6,0);
 	printw("begginning coordinate descent\n");
 	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 30, USE_INT, VERBOSE, overlap);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, "cyclic", 30, USE_INT, VERBOSE, overlap);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
