@@ -568,16 +568,15 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 		if (valid_mergesets[i] == FALSE)
 			continue;
 		return_sets.sets[cur_set].set_size = all_sets[i].ncols;
-		return_sets.sets[cur_set].set = malloc(all_sets[i].ncols*sizeof(int));
-		for (int j = 0; j < all_sets[i].ncols; j++) {
-			return_sets.sets[cur_set].set[j] = all_sets[i].cols[j];
-		}
+		return_sets.sets[cur_set].set = all_sets[i].cols;
 
+		free(all_sets[i].entries);
 		cur_set++;
 	}
 
 	free(valid_mergesets);
 	free(valid_mergeset_indices);
+	free(all_sets);
 
 	return return_sets;
 }
