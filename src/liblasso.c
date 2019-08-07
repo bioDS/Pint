@@ -385,7 +385,6 @@ void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, 
 	num_bins_of_size[max_set_size] += num_bins_to_merge;
 }
 
-//TODO: don't allocate so many arrays on the stack?
 Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, double frac_overlap_allowed) {
 	Rprintf("allowing overlap of %.2f%% finding beta sets\n", (frac_overlap_allowed*100));
 	Mergeset *all_sets = malloc(actual_p_int*sizeof(Mergeset));
@@ -463,6 +462,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 
 	// indices of sets that are of particular sizes on total.
 	//int set_bins_of_size[NumSets+1][actual_p_int];
+	//TODO: don't allocate the maximum possible set size of each one. Use a list of some kind.
 	int *set_bins_of_size[NumSets+1];
 	for (int i = 0; i < NumSets+1; i++)
 		set_bins_of_size[i] = malloc(actual_p_int*sizeof(int));
