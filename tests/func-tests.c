@@ -139,7 +139,7 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 }
 
 static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpointer user_data) {
-
+	printf("starting interaction test\n");
 	fixture->p = 35;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;

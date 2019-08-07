@@ -644,3 +644,51 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT) {
 	}
 	return X2;
 }
+
+//TODO: sparse row matrix (for interaction counts)
+XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT) {
+	XMatrix_sparse_row X2;
+	int rowno, val, length, colno;
+	int p_int = (p*(p+1))/2;
+
+	X2.row_nz_indices = malloc(n*sizeof(int *));
+	X2.row_nz = malloc(n*sizeof(int));
+
+	#pragma omp parallel for shared(X2, X) private(length, val, rowno)
+	for (int rowno = 0; rowno < n; rowno++) {
+		GSList *current_row = NULL;
+		// only include main effects (where i==j) unless USE_INT is set.
+		for (int i = 0; i < p; i++) {
+			for (int j = i; j < p; j++) {
+				GSList *current_col = NULL;
+				// only include main effects (where i==j) unless USE_INT is set.
+				if (USE_INT || j == i) {
+					if (USE_INT)
+						// worked out by hand as being equivalent to the offset we would have reached.
+						colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
+					else
+						colno = i;
+					if (X[rowno][i] * X[rowno][j] == 1) {
+						current_row = g_slist_prepend(current_row, (void*)(long)colno);
+					}
+
+				}
+			}
+		}
+		length = g_slist_length(current_row);
+
+		X2.row_nz_indices[rowno] = malloc(length*sizeof(int));
+		X2.row_nz[rowno] = length;
+
+		GSList *current_row_ind = current_row;
+		int temp_counter = 0;
+		while(current_row_ind != NULL) {
+			X2.row_nz_indices[rowno][temp_counter++] = (int)(long)current_row_ind->data;
+			current_row_ind = current_row_ind->next;
+		}
+
+		g_slist_free(current_row);
+		current_row = NULL;
+	}
+	return X2;
+}
