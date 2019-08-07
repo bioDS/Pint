@@ -1224,6 +1224,19 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	free(precalc_get_num);
 	Rprintf("entries: performed %d zero updates (%f%%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
+
+	Rprintf("freeing stuff\n");
+	// free beta sets
+	for (int i = 0; i <  beta_sets.number_of_sets; i++) {
+		free(beta_sets.sets[i].set);
+	}
+	// free X2
+	for (int i = 0; i < p_int; i++) {
+		free(X2.col_nz_indices[i]);
+	}
+	free(X2.col_nz);
+
+
 	return beta;
 }
 
