@@ -28,5 +28,5 @@ verbose:		Strongly not recommended
 max lambda:		In general = P seems to be a good choice.
 N:				Number of rows of X/Y  (e.g. no. fitness scores)
 P:				Number of columns of X (e.g. no. genes)
-frac overlap:	fraction of columns being updated at the same time that is allowed to overlap. 0 will give the same results as running on a single thread. 0.01 - 0.05 appear to make good use of multiple threads without a significant impact to accuracy. (N.B. this is something of a work in progress)
+frac overlap:	fraction of columns being updated at the same time that is allowed to overlap. 0 will give the same results as running on a single thread. ~0.05 appears to make good use of multiple threads without a significant impact to accuracy. (N.B. this is something of a work in progress)
 q/t/filename: output mode. [q]uit immediately without printing output, [t]erminal: prints first 10 values < -500 to terminal, [filename]: prints all non-zero effects to the given file.
