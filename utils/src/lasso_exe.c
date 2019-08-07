@@ -2,9 +2,11 @@
 #include "../../src/liblasso.h"
 #include <ncurses.h>
 
+enum Output_Mode {quit, file, terminal};
+
 int main(int argc, char** argv) {
 	if (argc != 10) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [lambda] N P [overlap]\n");
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [frac overlap allowed] [q/t/filename]\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -13,12 +15,29 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+
 	initscr();
 	refresh();
 
-	char *method = argv[3];
-	char *scale = argv[4];
-	char *verbose = argv[5];
+	char *scale = argv[3];
+	char *verbose = argv[2];
+	char *output_filename = argv[9];
+	FILE *output_file = NULL;
+
+	enum Output_Mode output_mode = terminal;
+	if (strcmp(output_filename, "t") == 0);
+	else if (strcmp(output_filename, "q") == 0)
+		output_mode = quit;
+	else {
+		output_mode = file;
+		output_file = fopen(output_filename, "w");
+		if (output_file == NULL) {
+			perror("opening output file failed");
+		}
+	}
+
+
+
 
 	int USE_INT=0; // main effects only by default
 	if (strcmp(scale, "int") == 0)
@@ -30,18 +49,18 @@ int main(int argc, char** argv) {
 
 	double lambda;
 
-	if ((lambda = strtod(argv[6], NULL)) == 0)
+	if ((lambda = strtod(argv[5], NULL)) == 0)
 		lambda = 3.604;
 	move(1,0);
 	printw("using lambda = %f\n", lambda);
 
 
-	int N = atoi(argv[7]);
-	int P = atoi(argv[8]);
+	int N = atoi(argv[6]);
+	int P = atoi(argv[7]);
 	move(1,0);
 	printw("using N = %d, P = %d\n", N, P);
 
-	double overlap = atof(argv[9]);
+	double overlap = atof(argv[8]);
 	printw("using frac: %.2f\n", overlap);
 
 
@@ -75,7 +94,7 @@ int main(int argc, char** argv) {
 	move(6,0);
 	printw("begginning coordinate descent\n");
 	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 30, USE_INT, VERBOSE, overlap);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, "cyclic", 30, USE_INT, VERBOSE, overlap);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -96,17 +115,6 @@ int main(int argc, char** argv) {
 	int printed = 0;
 	int sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
-	for (int i = 0; i < nbeta_int && printed < 10; i++) {
-		if (beta[i] < -500) {
-			printed++;
-			sig_beta_count++;
-			int_pair ip = get_num(i, nbeta);
-			if (ip.i == ip.j)
-				printw("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
-			else
-				printw("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
-		}
-	}
 
 	printw("\n\n");
 
@@ -115,9 +123,42 @@ int main(int argc, char** argv) {
 	free(Y);
 	//move(22 + sig_beta_count,0);
 	printw("freeing X/Y\n");
-	printw("finished! press q to exit");
-	while(getch() != 'q');
-	getch();
+	switch(output_mode){
+		case terminal:
+			for (int i = 0; i < nbeta_int && printed < 10; i++) {
+				if (beta[i] < -500) {
+					printed++;
+					sig_beta_count++;
+					int_pair ip = get_num(i, nbeta);
+					if (ip.i == ip.j)
+						printw("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
+					else
+						printw("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+				}
+			}
+			printw("finished! press q to exit");
+			while(getch() != 'q');
+			getch();
+		break;
+		case file:
+			for (int i = 0; i < nbeta_int; i++) {
+				if (beta[i] != 0.0) {
+					printed++;
+					sig_beta_count++;
+					int_pair ip = get_num(i, nbeta);
+					if (ip.i == ip.j)
+						fprintf(output_file, "main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
+					else
+						fprintf(output_file, "int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+				}
+			}
+			fclose(output_file);
+		break;
+		case quit:
+		break;
+	}
+	if (output_mode == terminal) {
+	}
 	endwin();
 	return 0;
 }

@@ -1,4 +1,5 @@
 #include "liblasso.h"
+#include "config.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
 #include <gsl/gsl_rng.h>
@@ -12,7 +13,7 @@
 	#define Rprintf(args...) printw (args); refresh();
 #endif
 
-#define NumSets 1<<12
+#define NumSets (1<<12)
 #define LIMIT_OVERLAP
 
 static NumCores = 1;
