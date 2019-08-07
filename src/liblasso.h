@@ -1,3 +1,4 @@
+#include "config.h"
 #include <stdio.h>
 #include <gsl/gsl_vector.h>
 //#include <gsl/gsl_spmatrix.h>

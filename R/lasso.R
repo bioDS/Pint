@@ -8,7 +8,7 @@
 #' cyclic_lasso(xName = "X.csv", yName = "Y.csv", lambda = 20, n = 1000, p = 100)
 #' @useDynLib LassoTesting
 
-cyclic_lasso <- function(xName = "X.csv", yName = "Y.csv", lambda = 20, n = 1000, p = 100, frac_overlap_allowed = 0.1) {
+cyclic_lasso <- function(xName = "X.csv", yName = "Y.csv", lambda = p, n = 1000, p = 100, frac_overlap_allowed = 0.1) {
     if (!file.exists(xName)) {
         stop("X file does not exist")
     }

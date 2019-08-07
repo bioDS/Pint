@@ -15885,6 +15885,10 @@ _ACEOF
 fi
 
 
+
+$as_echo "#define USE_R /**/" >>confdefs.h
+
+
 PKG_CFLAGS=`"${PKG_CONFIG}" --cflags glib-2.0 ncurses libR gsl` $(SHLIB_OPENMP_CFLAGS)
 PKG_LIBS=`"${PKG_CONFIG}" --libs glib-2.0 ncurses libR gsl` $(SHLIB_OPENMP_CFLAGS)
 

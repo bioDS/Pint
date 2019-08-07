@@ -27,6 +27,8 @@ AC_CHECK_LIB([argeArrayDims], [main])
 # FIXME: Replace `main' with a function in `-lgomp':
 AC_CHECK_LIB([gomp], [main])
 
+AC_DEFINE([USE_R], [], [Description])
+
 PKG_CFLAGS=`"${PKG_CONFIG}" --cflags glib-2.0 ncurses libR gsl` $(SHLIB_OPENMP_CFLAGS)
 PKG_LIBS=`"${PKG_CONFIG}" --libs glib-2.0 ncurses libR gsl` $(SHLIB_OPENMP_CFLAGS)
 

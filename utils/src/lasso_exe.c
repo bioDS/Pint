@@ -3,8 +3,8 @@
 #include <ncurses.h>
 
 int main(int argc, char** argv) {
-	if (argc != 9) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [lambda] N P\n");
+	if (argc != 10) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [greedy/cyclic] [main/int] verbose=T/F [lambda] N P [overlap]\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -41,6 +41,9 @@ int main(int argc, char** argv) {
 	move(1,0);
 	printw("using N = %d, P = %d\n", N, P);
 
+	double overlap = atof(argv[9]);
+	printw("using frac: %.2f\n", overlap);
+
 
 	// testing: wip
 	XMatrix xmatrix = read_x_csv(argv[1], N, P);
@@ -72,7 +75,7 @@ int main(int argc, char** argv) {
 	move(6,0);
 	printw("begginning coordinate descent\n");
 	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 10, USE_INT, VERBOSE);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 30, USE_INT, VERBOSE, overlap);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
