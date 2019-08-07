@@ -5,7 +5,6 @@ liblasso_deps = [
 	dependency('openmp'),
 	dependency('glib-2.0'),
 	dependency('ncurses'),
-	dependency('OpenCL'),
 ]
 
 liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
