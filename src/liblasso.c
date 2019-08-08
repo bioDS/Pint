@@ -169,8 +169,8 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 		used_rows++;
 	}
 
-	int *actual_indices = malloc(used_rows*sizeof(short));
-	memcpy(actual_indices, indices, used_rows*sizeof(short));
+	int *actual_indices = malloc(used_rows*sizeof(ushort));
+	memcpy(actual_indices, indices, used_rows*sizeof(ushort));
 	free(all_sets[i1].entries);
 	all_sets[i1].entries = actual_indices;
 	all_sets[i1].size = used_rows;
@@ -407,8 +407,8 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 		all_sets[i].cols = malloc(sizeof(int));
 		all_sets[i].cols[0] = i;
 		all_sets[i].ncols = 1;
-		all_sets[i].entries = malloc(all_sets[i].size*sizeof(short));
-		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(short));
+		all_sets[i].entries = malloc(all_sets[i].size*sizeof(ushort));
+		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(ushort));
 		//actual_set_sizes[i] = 1;
 	}
 	//printw("mean col_nz: %f\n", (float)total_col_nz/actual_p_int);
@@ -1313,12 +1313,12 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 				}
 				length = g_queue_get_length(current_col);
 
-				X2.col_nz_indices[colno] = malloc(length*sizeof(short));
+				X2.col_nz_indices[colno] = malloc(length*sizeof(ushort));
 				X2.col_nz[colno] = length;
 
 				int temp_counter = 0;
 				while (!g_queue_is_empty(current_col)) {
-					X2.col_nz_indices[colno][temp_counter++] = (short)(long)g_queue_pop_head(current_col);
+					X2.col_nz_indices[colno][temp_counter++] = (ushort)(long)g_queue_pop_head(current_col);
 				}
 
 				g_queue_free(current_col);
@@ -1342,7 +1342,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	r = gsl_rng_alloc(T);
 	if (shuffle == TRUE)
 		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
-	int **permuted_indices = malloc(actual_p_int * sizeof(short*));
+	int **permuted_indices = malloc(actual_p_int * sizeof(ushort*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.col_nz_indices[permutation->data[i]];
@@ -1368,7 +1368,7 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 	int p_int = (p*(p+1))/2;
 	int iter_done = 0;
 
-	X2.row_nz_indices = malloc(n*sizeof(short *));
+	X2.row_nz_indices = malloc(n*sizeof(ushort *));
 	X2.row_nz = malloc(n*sizeof(int));
 
 	#pragma omp parallel for shared(X2, X) private(length, val, colno) shared(iter_done)
