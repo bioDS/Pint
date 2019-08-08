@@ -17,7 +17,7 @@
 #define NumSets (1<<12)
 #define LIMIT_OVERLAP
 
-static NumCores = 1;
+static int NumCores = 1;
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -47,14 +47,6 @@ int min(int a, int b) {
 }
 
 static int N;
-
-//TODO: try using dancing links
-//TODO: stop after |set| = NumSets?
-//		- maybe after NumSets*10 (or something) has been allowd through this row
-//TODO: split into GList[NumSets] (or similar) (by rows w/ no overlap?)
-//		OR: pre-allocate GList contents?
-//TODO: rather than linked lists, arrays of structs with offsets might compress better?
-// GQueue?
 
 Column_Set copy_column_set(Column_Set from_set) {
 	ColEntry *from = from_set.cols;
@@ -1160,7 +1152,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			//TODO: updating rowsums at the same time doesn't seem safe.
 			#pragma omp parallel num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
-				#pragma omp for 
+				#pragma omp for
 				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 					int k = beta_sets.sets[i].set[j];
 //#else
