@@ -14,7 +14,7 @@ to make an installable R package:
 # Utils
 ### Build Utils
 ```
-meson build
+meson --buildtype release build
 ninja -C build
 ```
 
