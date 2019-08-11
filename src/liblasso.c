@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <glib-2.0/glib.h>
 #include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
 #include <sys/time.h>
@@ -48,37 +49,37 @@ int min(int a, int b) {
 
 static int N;
 
-Column_Set copy_column_set(Column_Set from_set) {
-	ColEntry *from = from_set.cols;
-	int max_size = from_set.size;
-	GSList *tlist = NULL;
-	int count = 0;
-	for (int i = 0; i < max_size;) {
-		if (from[i].nextEntry > 0) {
-			count++;
-			tlist = g_slist_prepend(tlist, (void*)(long)from[i].value);
-			i = from[i].nextEntry;
-		} else if (from[i].nextEntry < 0) {
-			i = -from[i].nextEntry;
-		} else {
-			fprintf(stderr, "nextEntry was 0\n");
-		}
-	}
-
-	tlist = g_slist_reverse(tlist);
-	int length = g_slist_length(tlist);
-	Column_Set new_set;
-	new_set.size = length;
-	new_set.cols = malloc(length*sizeof(ColEntry));
-	count = 0;
-	for (GSList *temp = tlist; temp != NULL; temp = temp->next) {
-		new_set.cols[count].value = (int)(long)temp->data;
-		new_set.cols[count].nextEntry = count + 1;
-		count++;
-	}
-
-	return new_set;
-}
+//Column_Set copy_column_set(Column_Set from_set) {
+//	ColEntry *from = from_set.cols;
+//	int max_size = from_set.size;
+//	GSList *tlist = NULL;
+//	int count = 0;
+//	for (int i = 0; i < max_size;) {
+//		if (from[i].nextEntry > 0) {
+//			count++;
+//			tlist = g_slist_prepend(tlist, (void*)(long)from[i].value);
+//			i = from[i].nextEntry;
+//		} else if (from[i].nextEntry < 0) {
+//			i = -from[i].nextEntry;
+//		} else {
+//			fprintf(stderr, "nextEntry was 0\n");
+//		}
+//	}
+//
+//	tlist = g_slist_reverse(tlist);
+//	int length = g_slist_length(tlist);
+//	Column_Set new_set;
+//	new_set.size = length;
+//	new_set.cols = malloc(length*sizeof(ColEntry));
+//	count = 0;
+//	for (GSList *temp = tlist; temp != NULL; temp = temp->next) {
+//		new_set.cols[count].value = (int)(long)temp->data;
+//		new_set.cols[count].nextEntry = count + 1;
+//		count++;
+//	}
+//
+//	return new_set;
+//}
 
 //TODO: don't bother merging sets with too many elements?
 int can_merge(Mergeset *all_sets, int i1, int i2, double frac_overlap_allowed) {
@@ -161,7 +162,7 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 		used_rows++;
 	}
 
-	int *actual_indices = malloc(used_rows*sizeof(ushort));
+	ushort *actual_indices = malloc(used_rows*sizeof(ushort));
 	memcpy(actual_indices, indices, used_rows*sizeof(ushort));
 	free(all_sets[i1].entries);
 	all_sets[i1].entries = actual_indices;
@@ -473,7 +474,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 			if (set_size > NumSets+1)
 				set_size = NumSets+1;
 			valid_mergeset_indices[count] = i;
-			g_queue_push_tail(set_queues_of_size[set_size], i);
+			g_queue_push_tail(set_queues_of_size[set_size], (gpointer)(long) i);
 			num_bins_of_size[set_size]++;
 		}
 	}
@@ -482,16 +483,16 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 			set_bins_of_size[i] = malloc(num_bins_of_size[i]*sizeof(int));
 			int count = 0;
 			while (!g_queue_is_empty(set_queues_of_size[i])) {
-				set_bins_of_size[i][count] = g_queue_pop_head(set_queues_of_size[i]);
+				set_bins_of_size[i][count] = (int)(long)g_queue_pop_head(set_queues_of_size[i]);
 				count++;
 			}
-			g_assert_true(count == num_bins_of_size[i]);
 		} else {
 			set_bins_of_size[i] = malloc(1); //TODO: later sections expect this to be allocated. This should probably be fixed.
 		}
 	}
 
-	g_queue_free(set_queues_of_size);
+	for (int i = 0; i < NumSets+1; i++)
+		g_queue_free(set_queues_of_size[i]);
 
 
 	//printw("\nbins of size: ");
@@ -500,7 +501,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 	//}
 	//printw("\n");
 	//refresh();
-	int xpos, ypos;
+	//int xpos, ypos;
 	//getyx(stdscr, ypos, xpos);
 	//int *nothing = malloc(mergeset_count*sizeof(struct Beta_Set));
 
@@ -570,7 +571,7 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 	Rprintf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
 
 	//TODO: only works for contiguous sets at the moment (if there)
-	int set_size, cur_set = 0;
+	int cur_set = 0;
 	return_sets.number_of_sets = mergeset_count;
 	return_sets.sets = malloc(mergeset_count*sizeof(struct Beta_Set));
 	for (int i = 0; i < actual_p_int; i++) {
@@ -807,25 +808,25 @@ void update_max_rowsums(double new_value) {
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 //TODO: max lambda
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
-	double derivative = 0.0;
+	//double derivative = 0.0;
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
-	double sump;
-	int **X = xmatrix.X;
+	//double sump;
+	//int **X = xmatrix.X;
 	//gsl_spmatrix *X_sparse = xmatrix.X_sparse;
-	int pairwise_product = 0;
-	int_pair ip;
-	if (USE_INT) {
-		//ip = get_num(k, p);
-		ip = precalc_get_num[k];
-	} else {
-		ip.i = k;
-		ip.j = k;
-	}
+	//int pairwise_product = 0;
+	//int_pair ip;
+	//if (USE_INT) {
+	//	//ip = get_num(k, p);
+	//	ip = precalc_get_num[k];
+	//} else {
+	//	ip.i = k;
+	//	ip.j = k;
+	//}
 	// From here on things should behave the same (this is set mostly for testing)
 	USE_INT = 1;
 
-	int j, row;
+	//int j, row;
 	//if (__builtin_expect(xmatrix_sparse.col_nz[k] > 2000, 1)) {
 	#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(NumCores)
 	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
@@ -1054,7 +1055,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		error += Y[i]*Y[i];
 	}
 	double intercept = 0.0;
-	double iter_lambda;
+	//double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
 	//printw("original lambda: %f n: %d ", lambda, n);
@@ -1120,13 +1121,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//printw(" done\n");
 	//refresh();
 #endif
-	int scrx, scry;
+	//int scrx, scry;
 	//getyx(stdscr, scry, scrx);
 
 	struct timespec start, end;
 	double cpu_time_used;
 
-	int *cols_to_update = malloc(p_int*sizeof(int));
+	//int *cols_to_update = malloc(p_int*sizeof(int));
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
 	double final_lambda = 0.1*lambda;
@@ -1144,7 +1145,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//printf("using lambda = %f\n", iter_lambda);
 
 		haschanged = 1;
-		int count=5;
+		//int count=5;
 		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 
 			// update the predictor \Beta_k
@@ -1334,7 +1335,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	r = gsl_rng_alloc(T);
 	if (shuffle == TRUE)
 		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
-	int **permuted_indices = malloc(actual_p_int * sizeof(ushort*));
+	ushort **permuted_indices = malloc(actual_p_int * sizeof(ushort*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.col_nz_indices[permutation->data[i]];
@@ -1356,14 +1357,15 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 //TODO: sparse row matrix (for interaction counts)
 XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT) {
 	XMatrix_sparse_row X2;
-	int rowno, val, length, colno;
-	int p_int = (p*(p+1))/2;
+	//int rowno, val;
+	int length, colno;
+	//int p_int = (p*(p+1))/2;
 	int iter_done = 0;
 
 	X2.row_nz_indices = malloc(n*sizeof(ushort *));
 	X2.row_nz = malloc(n*sizeof(int));
 
-	#pragma omp parallel for shared(X2, X) private(length, val, colno) shared(iter_done)
+	#pragma omp parallel for shared(X2, X) private(length, colno) shared(iter_done)
 	for (int rowno = 0; rowno < n; rowno++) {
 		GSList *current_row = NULL;
 		// only include main effects (where i==j) unless USE_INT is set.
