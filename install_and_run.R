@@ -26,5 +26,27 @@ X <- d$X
 Y <- d$Y
 
 result <- overlap_lasso(X, Y, frac_overlap_allowed = frac)
-result$main_effects %>% filter(strength < -5)
-result$interaction_effects %>% filter(strength < -20)
+
+obs <- d$obs
+bij_ind <- d$bij_ind
+lethal_ind <- d$lethal_ind
+lethal_coef <- -1000
+
+fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$interaction_effects$j,
+                     effect = result$interaction_effects$strength %>% unlist) %>%
+  filter(effect < -500) %>%
+  arrange(gene_i) %>%
+  left_join(., obs, by = c("gene_i", "gene_j")) %>%
+  mutate(type = "interaction") %>%
+  rowwise %>%
+  left_join(., merge(bij_ind, lethal_ind, all=T), by = c("gene_i", "gene_j")) %>%
+  ungroup %>%
+  mutate(TP = !is.na(coef)) %>%
+  mutate(lethal = (coef == lethal_coef)) %>%
+  arrange(desc(TP)) %>%
+  arrange(desc(lethal)) %>%
+  select(gene_i, gene_j, type, TP, lethal) %>%
+  distinct(gene_i, gene_j, .keep_all=TRUE) %>%
+  tbl_df
+
+fx_int %>% data.frame
