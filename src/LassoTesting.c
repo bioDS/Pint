@@ -51,12 +51,12 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda, SEXP frac_overlap_allowed_) {
 	for (int i = 0; i < p_int; i++) {
 		int_pair ip = get_num(i, p);
 		if (ip.i == ip.j) {
-			REAL(main_i)[main_count] = ip.i;
+			REAL(main_i)[main_count] = ip.i+1;
 			REAL(main_strength)[main_count] = beta[i];
 			main_count++;
 		} else {
-			REAL(int_i)[int_count] = ip.i;
-			REAL(int_j)[int_count] = ip.j;
+			REAL(int_i)[int_count] = ip.i+1;
+			REAL(int_j)[int_count] = ip.j+1;
 			REAL(int_strength)[int_count] = beta[i];
 			int_count++;
 		}
