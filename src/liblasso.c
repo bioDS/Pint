@@ -40,6 +40,7 @@ static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 static gsl_permutation *global_permutation;
 static gsl_permutation *global_permutation_inverse;
+static int_pair *cached_nums;
 
 int min(int a, int b) {
 	if (a < b)
@@ -49,37 +50,15 @@ int min(int a, int b) {
 
 static int N;
 
-//Column_Set copy_column_set(Column_Set from_set) {
-//	ColEntry *from = from_set.cols;
-//	int max_size = from_set.size;
-//	GSList *tlist = NULL;
-//	int count = 0;
-//	for (int i = 0; i < max_size;) {
-//		if (from[i].nextEntry > 0) {
-//			count++;
-//			tlist = g_slist_prepend(tlist, (void*)(long)from[i].value);
-//			i = from[i].nextEntry;
-//		} else if (from[i].nextEntry < 0) {
-//			i = -from[i].nextEntry;
-//		} else {
-//			fprintf(stderr, "nextEntry was 0\n");
-//		}
-//	}
-//
-//	tlist = g_slist_reverse(tlist);
-//	int length = g_slist_length(tlist);
-//	Column_Set new_set;
-//	new_set.size = length;
-//	new_set.cols = malloc(length*sizeof(ColEntry));
-//	count = 0;
-//	for (GSList *temp = tlist; temp != NULL; temp = temp->next) {
-//		new_set.cols[count].value = (int)(long)temp->data;
-//		new_set.cols[count].nextEntry = count + 1;
-//		count++;
-//	}
-//
-//	return new_set;
-//}
+//TODO: actually use this
+void free_static_resources() {
+	if (global_permutation != NULL)
+		free(global_permutation);
+	if (global_permutation_inverse != NULL)
+		free(global_permutation_inverse);
+	if (cached_nums != NULL)
+		free(cached_nums);
+}
 
 //TODO: don't bother merging sets with too many elements?
 int can_merge(Mergeset *all_sets, int i1, int i2, double frac_overlap_allowed) {
@@ -756,9 +735,7 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 }
 
 
-//TODO: this takes far too long.
-//	-could we store one row (of essentially these) instead?
-int_pair get_num(int num, int p) {
+int_pair get_num_old(int num, int p) {
 	int offset = 0;
 	int_pair ip;
 	ip.i = -1;
@@ -775,6 +752,27 @@ int_pair get_num(int num, int p) {
 		}
 	}
 	return ip;
+}
+
+int_pair get_num(int num, int p) {
+	int num_post_permutation = gsl_permutation_get(global_permutation, num);
+	return cached_nums[num_post_permutation];
+}
+
+int_pair *get_all_nums(int p) {
+	int p_int = p*(p+1)/2;
+	int_pair *nums = malloc(p_int*sizeof(int_pair));
+	int offset = 0;
+	for (int i = 0; i < p; i++) {
+		for (int j = i; j < p; j++) {
+			int_pair ip;
+			ip.i = i;
+			ip.j = j;
+			nums[offset] = ip;
+			offset++;
+		}
+	}
+	return nums;
 }
 
 void update_max_rowsums(double new_value) {
@@ -1033,22 +1031,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		p_int = p;
 	}
 
-	//int skip_count = 0;
-	//int skip_entire_column[p_int];
-	//for (int i = 0; i < p; i++)
-	//	for (int j = 0; j < i; j++) {
-	//		int skip_this = 1;
-	//		for (int k = 0; k < n; k++) {
-	//			if (X[k][i] != 0 && X[k][j] != 0) {
-	//				skip_this = 0;
-	//			}
-	//		}
-	//		if (skip_this == 1) {
-	//			skip_count++;
-	//			skip_entire_column[i*p + j] = 1;
-	//		}
-	//	}
-	//printf("should skip %d columns\n", skip_count);
+	cached_nums = get_all_nums(p);
 
 	double error = 0.0, prev_error;
 	for (int i = 0; i < n; i++) {
@@ -1118,8 +1101,15 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		beta_sets = find_beta_sets(X2, p_int, n, frac_overlap_allowed);
 	else
 		beta_sets = find_beta_sets(X2, p, n, frac_overlap_allowed);
-	//printw(" done\n");
-	//refresh();
+	int max_set_size = 0;
+	for (int i = 0; i < beta_sets.number_of_sets; i++) {
+		if (beta_sets.sets[i].set_size > max_set_size)
+			max_set_size = beta_sets.sets[i].set_size;
+	}
+
+	// TODO: actually it's probably best to do this for each set, and then provide a random offset into these lists of offsets (for some definition of the word best)
+	// Find all prime numbers < beta_set_size, & coprime with every set size to be used as stride sizes through the list, producing a different order.
+
 #endif
 	//int scrx, scry;
 	//getyx(stdscr, scry, scrx);
@@ -1134,6 +1124,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
+	//int set_step_size
 	for (int iter = 0; lambda > final_lambda; iter++) {
 		//refresh();
 		prev_error = error;
@@ -1150,7 +1141,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 			// update the predictor \Beta_k
 //#ifdef LIMIT_OVERLAP
-			//TODO: updating rowsums at the same time doesn't seem safe.
 			#pragma omp parallel num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
 			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 				#pragma omp for

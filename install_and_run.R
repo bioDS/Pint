@@ -1,4 +1,7 @@
 #!/usr/bin/env Rscript
+
+library(dplyr)
+
 args <- commandArgs(trailingOnly = TRUE)
 frac <- as.numeric(args[1])
 
@@ -14,9 +17,14 @@ if (args[3] == "large") {
 
 library(LassoTesting)
 
-
 if (large) {
-	cyclic_lasso("./X_nlethals50_v15803.csv", "./Y_nlethals50_v15803.csv", frac_overlap_allowed = frac, n=10000, p=1000)
+	d <- readRDS("../xyz-simulation/simulated_large_data/n10000_p1000_SNR5_nbi10_nbij500_nlethals50_viol0_15803.rds")
 } else {
-	cyclic_lasso("./testX.csv", "./testY.csv", frac_overlap_allowed = frac, n=1000, p=100)
+	d <- readRDS("../xyz-simulation/simulated_data/n1000_p100_SNR5_nbi10_nbij50_nlethals5_viol0_23649.rds")
 }
+X <- d$X
+Y <- d$Y
+
+result <- overlap_lasso(X, Y, frac_overlap_allowed = frac)
+result$main_effects %>% filter(strength < -5)
+result$interaction_effects %>% filter(strength < -20)

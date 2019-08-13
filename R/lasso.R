@@ -5,18 +5,26 @@
 #' @param X_filename, Y_filename, lambda, n, p
 #' @export
 #' @examples
-#' cyclic_lasso(xName = "X.csv", yName = "Y.csv", lambda = 20, n = 1000, p = 100)
+#' overlap_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05)
 #' @useDynLib LassoTesting
 
-cyclic_lasso <- function(xName = "X.csv", yName = "Y.csv", lambda = p, n = 1000, p = 100, frac_overlap_allowed = 0.1) {
-    if (!file.exists(xName)) {
-        stop("X file does not exist")
+overlap_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05) {
+    if (!dim(Y)[1] == n) {
+        stop("Y does not have the same number of rows as X, or the format is wrong")
     }
-    if (!file.exists(yName)) {
-        stop("Y file does not exist")
-    }
-    #dyn.load(LassoTesting)
-    Ret = .Call(lasso_, as.character(xName), as.character(yName), as.numeric(lambda), as.integer(n), as.integer(p), as.numeric(frac_overlap_allowed))
-    #Ret = "test"
-    return(Ret)
+
+    result = .Call(lasso_, X, Y, lambda, frac_overlap_allowed)
+
+    #i <- sapply(result[[1]], `[`, 1)
+    #strength <- sapply(result[[1]], `[`, 2)
+    i <- result[[1]]
+    strength <- result[[2]]
+    df_main <- data.frame(i,strength)
+
+    i <- result[[3]]
+    j <- result[[4]]
+    strength <- result[[5]]
+    df_int <- data.frame(i,j,strength)
+
+    return (list(main_effects = df_main, interaction_effects = df_int))
 }

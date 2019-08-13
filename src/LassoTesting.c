@@ -1,68 +1,77 @@
 #include "liblasso.h"
 #include <R.h>
+#include <glib.h>
 #include <Rinternals.h>
 
-SEXP lasso_(SEXP x_fname, SEXP y_fname, SEXP lambda_, SEXP N_, SEXP P_, SEXP frac_overlap_allowed_) {
-	char *method = "cyclic";
-	char *scale = "int";
-	char *verbose = "F";
+struct effect {
+	int i, j;
+	double strength;
+};
 
-	int USE_INT=0; // main effects only by default
-	if (strcmp(scale, "int") == 0)
-		USE_INT=1;
-
-	//VERBOSE = "T";
-	//if (strcmp(verbose, "T") == 0)
-		VERBOSE = 1;
-
-	double lambda = asReal(lambda_);
-	if (lambda == 0)
-		lambda = 3.604;
-	int N = asInteger(N_);
-	int P = asInteger(P_);
-
+SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda, SEXP frac_overlap_allowed_) {
+	double *x = REAL(X_);
+	double *y = REAL(Y_);
+	SEXP dim = getAttrib(X_, R_DimSymbol);
+	int n = INTEGER(dim)[0];
+	int p = INTEGER(dim)[1];
 	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
+	int p_int = p*(p+1)/2;
 
-	// testing: wip
-	XMatrix xmatrix = read_x_csv(CHAR(asChar(x_fname)), N, P);
-	double *Y = read_y_csv(CHAR(asChar(y_fname)), N);
+	int **X = malloc(p*sizeof(int*));
+	for (int i = 0; i < p; i++)
+		X[i] = malloc(n*sizeof(int));
 
-	int **X2;
-	int nbeta;
-	nbeta = xmatrix.actual_cols;
-	X2 = xmatrix.X;
-
-	if (xmatrix.X == NULL) {
-		fprintf(stderr, "failed to read X\n");
-		return 1;
-	}
-	if (Y == NULL) {
-		fprintf(stderr, "failed to read Y\n");
-		return 1;
-	}
-
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, lambda, method, 100, USE_INT, VERBOSE, frac_overlap_allowed);
-	int nbeta_int = nbeta;
-	if (USE_INT) {
-		nbeta_int = nbeta*(nbeta+1)/2;
-	}
-	if (beta == NULL) {
-		fprintf(stderr, "failed to estimate beta values\n");
-		return 1;
-	}
-
-	int sig_beta_count = 0;
-	for (int i = 0; i < nbeta_int; i++) {
-		if (beta[i] < -500) {
-			sig_beta_count++;
-			int_pair ip = get_num(i, nbeta);
-			if (ip.i == ip.j)
-				Rprintf("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
-			else
-				Rprintf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+	for (int i = 0; i < p; i++) {
+		for (int j = 0; j < n; j++) {
+			X[i][j] = (int)(x[j + i*n]);
 		}
 	}
-	return ScalarReal(1);
+	double *Y = malloc(n*sizeof(double));
+	for (int i = 0; i < n; i++) {
+		Y[i] = (double)y[i];
+	}
+
+	XMatrix xmatrix;
+	xmatrix.actual_cols = n;
+	xmatrix.X = X;
+
+	
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda), "cyclic", 50, 1, 0, frac_overlap_allowed);
+	int main_count = 0, int_count = 0;
+
+	SEXP main_i = PROTECT(allocVector(REALSXP, p));
+	SEXP main_strength = PROTECT(allocVector(REALSXP, p));
+	SEXP int_i = PROTECT(allocVector(REALSXP, p_int - p));
+	SEXP int_j = PROTECT(allocVector(REALSXP, p_int - p));
+	SEXP int_strength = PROTECT(allocVector(REALSXP, p_int - p));
+	SEXP all_effects = PROTECT(allocVector(VECSXP, 5));
+
+	int protected = 6;
+
+	for (int i = 0; i < p_int; i++) {
+		int_pair ip = get_num(i, p);
+		if (ip.i == ip.j) {
+			REAL(main_i)[main_count] = ip.i;
+			REAL(main_strength)[main_count] = beta[i];
+			main_count++;
+		} else {
+			REAL(int_i)[int_count] = ip.i;
+			REAL(int_j)[int_count] = ip.j;
+			REAL(int_strength)[int_count] = beta[i];
+			int_count++;
+		}
+	}
+
+	free_static_resources();
+
+	SET_VECTOR_ELT(all_effects, 0, main_i);
+	SET_VECTOR_ELT(all_effects, 1, main_strength);
+	SET_VECTOR_ELT(all_effects, 2, int_i);
+	SET_VECTOR_ELT(all_effects, 3, int_j);
+	SET_VECTOR_ELT(all_effects, 4, int_strength);
+
+	UNPROTECT(protected);
+	return all_effects;
 }
 
 static const R_CallMethodDef CallEntries[] ={

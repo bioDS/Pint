@@ -1,2 +1,2 @@
 useDynLib("LassoTesting", .registration=TRUE)
-export(cyclic_lasso)
+export(overlap_lasso)

@@ -160,5 +160,6 @@ int main(int argc, char** argv) {
 	if (output_mode == terminal) {
 	}
 	endwin();
+	free_static_resources();
 	return 0;
 }

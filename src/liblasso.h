@@ -89,3 +89,4 @@ void merge_sets(Mergeset *all_sets, int i, int j);
 int can_merge(Mergeset *all_sets, int i, int j, double frac_overlap_allowed);
 int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, double frac_overlap_allowed);
 void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, int num_bins_to_merge);
+void free_static_resources();
