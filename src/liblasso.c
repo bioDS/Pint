@@ -50,6 +50,7 @@ int min(int a, int b) {
 
 static int N;
 
+
 //TODO: actually use this
 void free_static_resources() {
 	if (global_permutation != NULL)
@@ -58,6 +59,22 @@ void free_static_resources() {
 		free(global_permutation_inverse);
 	if (cached_nums != NULL)
 		free(cached_nums);
+}
+
+S8bWord to_s8b(int count, int *vals) {
+    S8bWord word;
+    word.selector = 0;
+	int t = 0;
+	//TODO: improve on this
+	while(group_size[t] > count && t < 16)
+		t++;
+	word.selector = t;
+	for (int i = 0; i < count; i++) {
+		word.values |= vals[count-i-1];
+		if (i < count - 1)
+			word.values <<= item_width[word.selector];
+	}
+    return word;
 }
 
 //TODO: don't bother merging sets with too many elements?
