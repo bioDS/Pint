@@ -50,16 +50,16 @@ gc()
 if (verbose) cat("Fitting model\n")
 if (verbose) cat("Fitting model\n")
 
-time <- system.time(result <- overlap_lasso(X, Y))
+time <- system.time(fit <- overlap_lasso(X, Y))
 
 
 
 if (verbose) cat("Collecting stats\n")
-cf <- coef(result, lambdaType = "lambdaHat") #lambdaIndex = 50)#
+cf <- coef(fit, lambdaType = "lambdaHat") #lambdaIndex = 50)#
 
 ## Collect coefficients
-fx_main <- data.frame(gene_i = result$main_effects$i,
-                     effect = result$main_effects$strength %>% unlist) %>%
+fx_main <- data.frame(gene_i = fit$main_effects$i,
+                     effect = fit$main_effects$strength %>% unlist) %>%
   arrange(gene_i) %>%
   mutate(type = "main", gene_j = NA, TP = (gene_i %in% bi_ind[["gene_i"]] || gene_i %in% lethal_ind[["gene_i"]]))  %>%
   mutate(lethal=gene_i %in% lethal_ind[["gene_i"]]) %>%
@@ -69,9 +69,9 @@ fx_main <- data.frame(gene_i = result$main_effects$i,
   tbl_df
 fx_main
 
-fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$interaction_effects$j,
-                     effect = result$interaction_effects$strength %>% unlist) %>%
-  filter(effect < -10) %>%
+fx_int <- data.frame(gene_i = fit$interaction_effects$i, gene_j = fit$interaction_effects$j,
+                     effect = fit$interaction_effects$strength %>% unlist) %>%
+  filter(abs(effect) > 0.5) %>%
   arrange(gene_i) %>%
   left_join(., obs, by = c("gene_i", "gene_j")) %>%
   mutate(type = "interaction") %>%
