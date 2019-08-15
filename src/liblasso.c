@@ -955,7 +955,7 @@ int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda
 double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
 	double error = 0.0;
 	// caculate cumulative error after update
-	if (USE_INT == 0)
+	if (USE_INT == 0) {
 		for (int row = 0; row < n; row++) {
 			double sum = 0;
 			for (int k = 0; k < p; k++) {
@@ -965,7 +965,7 @@ double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double 
 			e_diff *= e_diff;
 			error += e_diff;
 		}
-	else {
+	} else {
 		//double *row_err_sums = malloc(n*sizeof(double));
 		//memset(row_err_sums, 0, n*sizeof(double));
 		//for (int col = 0; col < p_int; col++) {
@@ -985,7 +985,7 @@ double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double 
 
 		//free(row_err_sums);
 	}
-	error /= n;
+	//error /= n;
 	return error;
 }
 
@@ -1137,7 +1137,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//int *cols_to_update = malloc(p_int*sizeof(int));
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
-	double final_lambda = 0.1*lambda;
+	double final_lambda = pow(0.90,100)*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
@@ -1169,7 +1169,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 //#endif
 					if (worth_updating(col_ysum, X2, k, n, lambda)) {
-						error = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
 						total_updates++;
 						total_updates_entries += X2.col_nz[k];
 					}
@@ -1212,9 +1212,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (prev_error/error < HALT_BETA_DIFF) {
+		if (prev_error/error < HALT_BETA_DIFF && dBMax < 1) {
 			//Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
-			Rprintf("done lambda %d after %d iterations, final error %.1f\n", lambda_count, iter + 1, error);
+			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
 			lambda_count++;
 			lambda *= 0.9;
 			iter_count += iter;

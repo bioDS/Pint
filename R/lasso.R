@@ -8,7 +8,7 @@
 #' overlap_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05)
 #' @useDynLib LassoTesting
 
-overlap_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05) {
+overlap_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = abs(max(apply(X,2, `%*%`, Y))), frac_overlap_allowed = 0.05) {
     if (!dim(Y)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
     }
