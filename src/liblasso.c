@@ -1214,7 +1214,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
 		if (prev_error/error < HALT_BETA_DIFF && dBMax < 1) {
 			//Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
-			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+			//Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+			Rprintf(" %d", lambda_count);
 			lambda_count++;
 			lambda *= 0.9;
 			iter_count += iter;
