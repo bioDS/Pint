@@ -36,7 +36,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda, SEXP frac_overlap_allowed_) {
 	xmatrix.X = X;
 
 	
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda), "cyclic", 50, 1, 0, frac_overlap_allowed);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda), "cyclic", 100, 1, 0, frac_overlap_allowed);
 	int main_count = 0, int_count = 0;
 
 	SEXP main_i = PROTECT(allocVector(REALSXP, p));
