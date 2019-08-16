@@ -142,7 +142,7 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX2Small.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 0, 0, 0.0);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 0, 0, 0.0);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < fixture->p; i++) {
@@ -160,7 +160,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	fixture->X = fixture->xmatrix.X;
 	int p_int = fixture->p*(fixture->p+1)/2;
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, fixture->lambda, "cyclic", 10, 1, 0, 0.0);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 1, 0, 0.0);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < p_int; i++) {
@@ -332,12 +332,66 @@ static void check_X2_encoding() {
 	g_assert_true(test_word.selector == w2.selector);
 	g_assert_true(test_word.values == w2.values);
 
+	int max_size_given_entries[60];
+	for (int i = 0; i < 60; i++) {
+		max_size_given_entries[i] = 60/(i+1);
+	}
+	int group_size_given_entries[60];
+	for (int i = 0; i < 60; i++) {
+		group_size_given_entries[i] = 1<<max_size_given_entries[i];
+	}
 
+	printf("num entries in col 0: %d\n", xmatrix_sparse.col_nz[0]);
+	int *col_entries = malloc(60*sizeof(int));
+	int count = 0;
+	//GList *s8b_col = NULL;
+	GQueue *s8b_col = g_queue_new();
 	// work out s8b compressed equivalent of col 0
-	//for (int i = 0; i < xmatrix_sparse.col_nz[0]; i++) {
-	//	int used_bits = 0;
-	//	int next_num_bits
-	//}
+	int largest_entry = 0;
+	int max_bits = max_size_given_entries[0];
+	int diff = xmatrix_sparse.col_nz_indices[0][0];
+	for (int i = 0; i < xmatrix_sparse.col_nz[0]; i++) {
+		if (i != 0)
+			diff = xmatrix_sparse.col_nz_indices[0][i] - xmatrix_sparse.col_nz_indices[0][i-1];
+		printf("current no. %d, diff %d. available bits %d\n", xmatrix_sparse.col_nz_indices[0][i], diff, max_bits);
+		// update max bits.
+		int used = 0;
+		while (diff > 0) {
+			used++;
+			diff >>= 1;
+		}
+		max_bits = max_size_given_entries[count+1];
+		// if the current diff won't fit in the s8b word, push the word and start a new one
+		if (count + 1 > group_size_given_entries[max_bits] || diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
+			if (count + 1 > group_size_given_entries[max_bits])
+				printf(" a ");
+			if (diff > 1<<max_bits)
+				printf(" b ");
+			if (largest_entry > max_size_given_entries[count+1])
+				printf(" c ");
+			printf("pushing word with %d entries: ", count);
+			for (int j = 0; j < count; j++)
+				printf("%d ", col_entries[j]);
+			printf("\n");
+			count = 0;
+			largest_entry = 0;
+			max_bits = max_size_given_entries[1];
+			S8bWord *word = malloc(sizeof(S8bWord));
+			S8bWord tempword = to_s8b(count, col_entries);
+			memcpy(word, &tempword, sizeof(S8bWord));
+			g_queue_push_tail(s8b_col, word);
+		}
+		col_entries[count] = diff;
+		count++;
+		if (used > largest_entry)
+			largest_entry = used;
+	}
+	free(col_entries);
+
+	int length = g_queue_get_length(s8b_col);
+	int bytes = length*sizeof(S8bWord);
+	printf("col[0] contains %d words, for a toal of %d bytes, instead of %d shorts (%d bytes). Effective reduction %f%%\n",
+		length, bytes, xmatrix_sparse.col_nz[0], xmatrix_sparse.col_nz[0]*sizeof(short), (double)bytes/(xmatrix_sparse.col_nz[0]*sizeof(short)));
 }
 
 static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data) {
