@@ -8,7 +8,7 @@ struct effect {
 	double strength;
 };
 
-SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda, SEXP frac_overlap_allowed_) {
+SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_, SEXP frac_overlap_allowed_) {
 	double *x = REAL(X_);
 	double *y = REAL(Y_);
 	SEXP dim = getAttrib(X_, R_DimSymbol);
@@ -35,8 +35,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda, SEXP frac_overlap_allowed_) {
 	xmatrix.actual_cols = n;
 	xmatrix.X = X;
 
-	
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda), "cyclic", 100, 1, 0, frac_overlap_allowed);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda_), "cyclic", 100, 1, 0, frac_overlap_allowed);
 	int main_count = 0, int_count = 0;
 
 	SEXP main_i = PROTECT(allocVector(REALSXP, p));
