@@ -1,7 +1,7 @@
 install_headers('liblasso.h')
 
 conf_data = configuration_data()
-conf_data.set('USE_R', false)
+conf_data.set('NOT_R', true)
 configure_file(output: 'config.h', configuration: conf_data)
 configuration_inc = include_directories('.')
 

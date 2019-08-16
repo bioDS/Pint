@@ -8,11 +8,11 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <gmodule.h>
-#ifdef USE_R
-	#include <R.h>
-#else
+#ifdef NOT_R
 	#include <ncurses.h>
 	#define Rprintf(args...) printw (args); refresh();
+#else
+	#include <R.h>
 #endif
 
 #define NumSets (1<<12)
