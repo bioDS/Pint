@@ -997,12 +997,13 @@ double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double 
  * TODO: add an intercept
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
-double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
 			// TODO: update x_i in the direction -(dF(x)/de_i / B)
 	//TODO: free
+	double lambda = lambda_max;
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
 	int **X = xmatrix.X;
@@ -1138,6 +1139,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
 	double final_lambda = pow(0.90,100)*lambda;
+	//if (final_lambda < lambda_min) {
+		final_lambda = lambda_min;
+	//}
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
@@ -1215,7 +1219,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (prev_error/error < HALT_BETA_DIFF && dBMax < 1) {
 			//Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
 			//Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
-			Rprintf(" %d", lambda_count);
+			Rprintf(" %d(%f)", lambda_count, lambda);
 			lambda_count++;
 			lambda *= 0.9;
 			iter_count += iter;

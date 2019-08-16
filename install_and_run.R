@@ -3,29 +3,29 @@
 library(dplyr)
 
 args <- commandArgs(trailingOnly = TRUE)
-frac <- as.numeric(args[1])
 
-if (args[2] == "reinstall") {
-	install.packages(repos=NULL, pkgs="./")
+if (length(args >= 2)) {
+	f <- (args[2])
+} else {
+	f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
+}
+
+if (length(args) >= 1) {
+	if (args[1] == "reinstall") {
+		install.packages(repos=NULL, pkgs="./")
+	}
 }
 
 large <- FALSE
-if (args[3] == "large") {
-	large <- TRUE
-}
-
 
 library(LassoTesting)
 
-if (large) {
-	d <- readRDS("../xyz-simulation/simulated_large_data/n10000_p1000_SNR5_nbi10_nbij500_nlethals50_viol0_15803.rds")
-} else {
-	d <- readRDS("../xyz-simulation/simulated_data/n1000_p100_SNR5_nbi10_nbij50_nlethals5_viol0_23649.rds")
-}
+d <- readRDS(f)
+
 X <- d$X
 Y <- d$Y
 
-result <- overlap_lasso(X, Y, frac_overlap_allowed = frac)
+result <- overlap_lasso(X, Y, lambda_min = 0.05)
 
 obs <- d$obs
 bij_ind <- d$bij_ind
@@ -34,7 +34,7 @@ lethal_coef <- -1000
 
 fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$interaction_effects$j,
                      effect = result$interaction_effects$strength %>% unlist) %>%
-  filter(effect < -500) %>%
+  filter(abs(effect) > 0.5) %>%
   arrange(gene_i) %>%
   left_join(., obs, by = c("gene_i", "gene_j")) %>%
   mutate(type = "interaction") %>%
