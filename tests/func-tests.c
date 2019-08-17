@@ -333,14 +333,11 @@ static void check_X2_encoding() {
 	g_assert_true(test_word.selector == w2.selector);
 	g_assert_true(test_word.values == w2.values);
 
-	int max_size_given_entries[60];
+	int max_size_given_entries[61];
 	for (int i = 0; i < 60; i++) {
 		max_size_given_entries[i] = 60/(i+1);
 	}
-	int group_size_given_entries[60];
-	for (int i = 0; i < 60; i++) {
-		group_size_given_entries[i] = 1<<max_size_given_entries[i];
-	}
+	max_size_given_entries[60] = 0;
 
 	printf("num entries in col 0: %d\n", xmatrix_sparse.col_nz[0]);
 	int *col_entries = malloc(60*sizeof(int));
@@ -364,9 +361,7 @@ static void check_X2_encoding() {
 		}
 		max_bits = max_size_given_entries[count+1];
 		// if the current diff won't fit in the s8b word, push the word and start a new one
-		if (count + 1 > group_size_given_entries[max_bits] || diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
-			if (count + 1 > group_size_given_entries[max_bits])
-				printf(" a ");
+		if (diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
 			if (diff > 1<<max_bits)
 				printf(" b ");
 			if (largest_entry > max_size_given_entries[count+1])
