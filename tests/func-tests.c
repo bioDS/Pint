@@ -261,8 +261,7 @@ static void test_find_beta_sets() {
 }
 
 //assumes little endian
-void printBits(size_t const size, void const * const ptr)
-{
+void printBits(size_t const size, void const * const ptr) {
     unsigned char *b = (unsigned char*) ptr;
     unsigned char byte;
     int i, j;
