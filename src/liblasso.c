@@ -1094,6 +1094,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			for (int j = 0; j < group_size[word.selector]; j++) {
 				int diff = word.values & masks[word.selector];
 				if (diff != 0) {
+					printf("%d, %d\n", col, entry);
 					entry += diff;
 					col_ysum[col] += Y[entry];
 				}
@@ -1293,7 +1294,6 @@ int **X2_from_X(int **X, int n, int p) {
 
 // TODO: write a test comparing this to non-sparse X2
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle) {
-	shuffle = FALSE;
 	XMatrix_sparse X2;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
@@ -1429,18 +1429,22 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	unsigned short **permuted_indices_actual = malloc(actual_p_int * sizeof(unsigned short*));
 	unsigned short **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
+	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
 		permuted_indices_actual[i] = X2.col_nz_indices[permutation->data[i]];
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
+		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
 	}
 	free(X2.compressed_indices);
 	free(X2.col_nz_indices); //TODO: free
 	free(X2.col_nz);
+	free(X2.col_nwords);
 	free(r);
 	X2.compressed_indices = permuted_indices;
 	X2.col_nz_indices = permuted_indices_actual;
 	X2.col_nz = permuted_nz;
+	X2.col_nwords = permuted_nwords;
 	X2.permutation = permutation;
 	global_permutation = permutation;
 	global_permutation_inverse = gsl_permutation_alloc(permutation->size);
