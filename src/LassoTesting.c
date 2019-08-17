@@ -16,6 +16,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	int p = INTEGER(dim)[1];
 	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
 	int p_int = p*(p+1)/2;
+	initialise_static_resources();
 
 	int **X = malloc(p*sizeof(int*));
 	for (int i = 0; i < p; i++)

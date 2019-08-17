@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
 
 	double overlap = atof(argv[8]);
 	printf("using frac: %.2f\n", overlap);
-
+	
+	initialise_static_resources();
 
 	// testing: wip
 	XMatrix xmatrix = read_x_csv(argv[1], N, P);

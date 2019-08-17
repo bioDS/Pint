@@ -1094,7 +1094,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			for (int j = 0; j < group_size[word.selector]; j++) {
 				int diff = word.values & masks[word.selector];
 				if (diff != 0) {
-					printf("%d, %d\n", col, entry);
 					entry += diff;
 					col_ysum[col] += Y[entry];
 				}
@@ -1315,8 +1314,10 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 		actual_p_int = p_int;
 	}
 
+	long total_count = 0;
+	long total_sum = 0;
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GQueue *current_col = g_queue_new();
@@ -1343,6 +1344,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 						g_queue_push_tail(current_col_actual, (void*)(long)row);
 						total_nz_entries++;
 						diff = row - prev_row;
+						total_sum += diff;
 						int used = 0;
 						int tdiff = diff;
 						while (tdiff > 0) {
@@ -1351,9 +1353,11 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 						}
 						max_bits = max_size_given_entries[count+1];
 						// if the current diff won't fit in the s8b word, push the word and start a new one
-						if (count + 1 > group_size_given_entries[max_bits] || diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
+						if (count + 1 > group_size_given_entries[count] || diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
 							S8bWord *word = malloc(sizeof(S8bWord)); // we (maybe?) can't rely on this being the size of a pointer, so we'll add by reference
 							S8bWord tempword = to_s8b(count, col_entries);
+							total_count += count;
+							g_assert_true(count >= 2);
 							memcpy(word, &tempword, sizeof(S8bWord));
 							g_queue_push_tail(current_col, word);
 							count = 0;
@@ -1415,6 +1419,15 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 		//	refresh();
 		//}
 	}
+
+	long total_words = 0;
+	long total_entries = 0;
+	for (int i = 0; i < actual_p_int; i++) {
+		total_words += X2.col_nwords[i];
+		total_entries += X2.col_nz[i];
+	}
+	printf("mean count: %f\n", (double)total_count/(double)total_words);
+	printf("mean size: %f\n", (double)total_sum/(double)total_entries);
 
 	//int shuffle_order[p_int];
 	gsl_rng *r;
