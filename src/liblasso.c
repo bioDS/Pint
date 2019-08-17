@@ -9,8 +9,9 @@
 #include <sys/time.h>
 #include <gmodule.h>
 #ifdef NOT_R
-	#include <ncurses.h>
-	#define Rprintf(args...) printw (args); refresh();
+	//#include <ncurses.h>
+	//#define Rprintf(args...) printw (args); refresh();
+	#define Rprintf(args...) printf (args);
 #else
 	#include <R.h>
 #endif
@@ -32,6 +33,8 @@ static int VERBOSE = 1;
 static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
+static int max_size_given_entries[60];
+static int group_size_given_entries[60];
 //static double max_rowsum = 0;
 
 #define NUM_MAX_ROWSUMS 50
@@ -50,8 +53,13 @@ int min(int a, int b) {
 
 static int N;
 
+void initialise_static_resources() {
+	for (int i = 0; i < 60; i++) {
+		max_size_given_entries[i] = 60/(i+1);
+		group_size_given_entries[i] = 1<<max_size_given_entries[i];
+	}
+}
 
-//TODO: actually use this
 void free_static_resources() {
 	if (global_permutation != NULL)
 		free(global_permutation);
@@ -63,12 +71,13 @@ void free_static_resources() {
 
 S8bWord to_s8b(int count, int *vals) {
     S8bWord word;
+	word.values = 0;
     word.selector = 0;
 	int t = 0;
 	//TODO: improve on this
-	while(group_size[t] > count && t < 16)
+	while(group_size[t] >= count && t < 16)
 		t++;
-	word.selector = t;
+	word.selector = t-1;
 	for (int i = 0; i < count; i++) {
 		word.values |= vals[count-i-1];
 		if (i < count - 1)
@@ -158,8 +167,8 @@ void merge_sets(Mergeset *all_sets, int i1, int i2) {
 		used_rows++;
 	}
 
-	ushort *actual_indices = malloc(used_rows*sizeof(ushort));
-	memcpy(actual_indices, indices, used_rows*sizeof(ushort));
+	unsigned short *actual_indices = malloc(used_rows*sizeof(unsigned short));
+	memcpy(actual_indices, indices, used_rows*sizeof(unsigned short));
 	free(all_sets[i1].entries);
 	all_sets[i1].entries = actual_indices;
 	all_sets[i1].size = used_rows;
@@ -396,8 +405,10 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, int actual_p_int, int n, do
 		all_sets[i].cols = malloc(sizeof(int));
 		all_sets[i].cols[0] = i;
 		all_sets[i].ncols = 1;
-		all_sets[i].entries = malloc(all_sets[i].size*sizeof(ushort));
-		memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(ushort));
+		all_sets[i].entries = malloc(all_sets[i].size*sizeof(unsigned short));
+		//memcpy(all_sets[i].entries, x2col.col_nz_indices[i], all_sets[i].size*sizeof(unsigned short));
+		//free(x2col.col_nz_indices[i]);
+		all_sets[i].entries = x2col.col_nz_indices[i];
 		//actual_set_sizes[i] = 1;
 	}
 	//printw("mean col_nz: %f\n", (float)total_col_nz/actual_p_int);
@@ -823,44 +834,31 @@ void update_max_rowsums(double new_value) {
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 //TODO: max lambda
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
-	//double derivative = 0.0;
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
-	//double sump;
-	//int **X = xmatrix.X;
-	//gsl_spmatrix *X_sparse = xmatrix.X_sparse;
-	//int pairwise_product = 0;
-	//int_pair ip;
-	//if (USE_INT) {
-	//	//ip = get_num(k, p);
-	//	ip = precalc_get_num[k];
-	//} else {
-	//	ip.i = k;
-	//	ip.j = k;
-	//}
+	int *column_entries = malloc(xmatrix_sparse.col_nz[k]*sizeof(int));
 	// From here on things should behave the same (this is set mostly for testing)
 	USE_INT = 1;
 
-	//int j, row;
-	//if (__builtin_expect(xmatrix_sparse.col_nz[k] > 2000, 1)) {
-	#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(NumCores)
-	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-		int i;
-		// TODO: avoid unnecessary calculations for large lambda.
-		i = xmatrix_sparse.col_nz_indices[k][e];
-		// TODO: assumes X is binary
-		sumn += Y[i] - intercept - rowsum[i];
+	//#pragma omp parallel for shared(Y, xmatrix_sparse, rowsum, intercept) reduction (+:sumn) num_threads(NumCores)
+	int col_entry_pos = 0;
+	int entry = -1;
+	//Rprintf("col: %d\n", k);
+	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
+		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+		for (int j = 0; j < group_size[word.selector]; j++) {
+			int diff = word.values & masks[word.selector];
+			if (diff != 0) {
+				entry += diff;
+				column_entries[col_entry_pos] = entry;
+				//printf("\nentry: %d\n", entry);
+				sumn += Y[entry] - intercept - rowsum[entry];
+				//g_assert_true(entry == xmatrix_sparse.col_nz_indices[k][col_entry_pos]);
+				col_entry_pos++;
+			}
+			word.values >>= item_width[word.selector];
+		}
 	}
-	//} else {
-	//	for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-	//		// TODO: avoid unnecessary calculations for large lambda.
-	//		i = xmatrix_sparse.col_nz_indices[k][e];
-	//		// TODO: assumes X is binary
-	//		sumn += Y[i] - intercept - rowsum[i];
-	//	}
-	//}
-	//total_updates++;
-	//total_updates_entries += xmatrix_sparse.col_nz[k];
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -874,7 +872,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	if (Bk_diff != 0) {
 		haschanged = 1;
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
-			int i = xmatrix_sparse.col_nz_indices[k][e];
+			int i = column_entries[e];
 			rowsum[i] += Bk_diff;
 			update_max_rowsums(rowsum[i]);
 		}
@@ -887,6 +885,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff *= Bk_diff;
 	if (Bk_diff > dBMax)
 		dBMax = Bk_diff;
+	free(column_entries);
 	return dBMax;
 }
 
@@ -1025,6 +1024,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		max_cumulative_rowsums[i] = 0;
 	}
 
+
 	int p_int = p*(p+1)/2;
 	double *beta;
 	if (USE_INT) {
@@ -1086,9 +1086,19 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	memset(colsum, 0, p_int*sizeof(double));
 
 	col_ysum = malloc(p_int*sizeof(double));
+	memset(col_ysum, 0, p_int*sizeof(double));
 	for (int col = 0; col < p_int; col++) {
-		for (int row_ind = 0; row_ind < X2.col_nz[col]; row_ind++) {
-			col_ysum[col] += Y[X2.col_nz_indices[col][row_ind]];
+		int entry = -1;
+		for (int i = 0; i < X2.col_nwords[col]; i++) {
+			S8bWord word = X2.compressed_indices[col][i];
+			for (int j = 0; j < group_size[word.selector]; j++) {
+				int diff = word.values & masks[word.selector];
+				if (diff != 0) {
+					entry += diff;
+					col_ysum[col] += Y[entry];
+				}
+				word.values >>= item_width[word.selector];
+			}
 		}
 	}
 
@@ -1217,8 +1227,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
 		if (prev_error/error < HALT_BETA_DIFF && dBMax < 1) {
-			//Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
-			//Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
+			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
 			Rprintf(" %d(%f)", lambda_count, lambda);
 			lambda_count++;
 			lambda *= 0.9;
@@ -1254,9 +1264,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	}
 	// free X2
 	for (int i = 0; i < p_int; i++) {
-		free(X2.col_nz_indices[i]);
+		//free(X2.col_nz_indices[i]);
+		free(X2.compressed_indices[i]);
 	}
+	free(X2.col_nz_indices);
+	free(X2.compressed_indices);
 	free(X2.col_nz);
+	free(X2.col_nwords);
 
 
 	return beta;
@@ -1279,19 +1293,25 @@ int **X2_from_X(int **X, int n, int p) {
 
 // TODO: write a test comparing this to non-sparse X2
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle) {
+	shuffle = FALSE;
 	XMatrix_sparse X2;
 	int colno, val, length;
 	int p_int = (p*(p+1))/2;
 	int iter_done = 0;
 	int actual_p_int = 0;
 
+	//TODO: granted all these pointers are the same size, but it's messy
 	if (!USE_INT) {
+		X2.compressed_indices = malloc(p*sizeof(int *));
 		X2.col_nz_indices = malloc(p*sizeof(int *));
 		X2.col_nz = malloc(p*sizeof(int));
+		X2.col_nwords = malloc(p*sizeof(int));
 		actual_p_int = p;
 	} else {
+		X2.compressed_indices = malloc(p_int*sizeof(int *));
 		X2.col_nz_indices = malloc(p_int*sizeof(int *));
 		X2.col_nz = malloc(p_int*sizeof(int));
+		X2.col_nwords = malloc(p_int*sizeof(int));
 		actual_p_int = p_int;
 	}
 
@@ -1300,6 +1320,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < p; j++) {
 			GQueue *current_col = g_queue_new();
+			GQueue *current_col_actual = g_queue_new();
 			// only include main effects (where i==j) unless USE_INT is set.
 			if (USE_INT || j == i) {
 				if (USE_INT)
@@ -1308,26 +1329,83 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 				else
 					colno = i;
 
+				// Read through the the current column entries, and append them to X2 as an s8b-encoded list of offsets
+				int *col_entries = malloc(60*sizeof(int));
+				int count = 0;
+				int largest_entry = 0;
+				int max_bits = max_size_given_entries[0];
+				int diff = 0;
+				int prev_row = -1;
+				int total_nz_entries = 0;
 				for (int row = 0; row < n; row++) {
 					val = X[i][row] * X[j][row];
 					if (val == 1) {
-						g_queue_push_tail(current_col, (void*)(long)row);
+						g_queue_push_tail(current_col_actual, (void*)(long)row);
+						total_nz_entries++;
+						diff = row - prev_row;
+						int used = 0;
+						int tdiff = diff;
+						while (tdiff > 0) {
+							used++;
+							tdiff >>= 1;
+						}
+						max_bits = max_size_given_entries[count+1];
+						// if the current diff won't fit in the s8b word, push the word and start a new one
+						if (count + 1 > group_size_given_entries[max_bits] || diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
+							S8bWord *word = malloc(sizeof(S8bWord)); // we (maybe?) can't rely on this being the size of a pointer, so we'll add by reference
+							S8bWord tempword = to_s8b(count, col_entries);
+							memcpy(word, &tempword, sizeof(S8bWord));
+							g_queue_push_tail(current_col, word);
+							count = 0;
+							largest_entry = 0;
+							max_bits = max_size_given_entries[1];
+						}
+						// things for the next iter
+						col_entries[count] = diff;
+						count++;
+						if (used > largest_entry)
+							largest_entry = used;
+						prev_row = row;
 					}
 					else if (val != 0)
 						fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
 				}
+				//push the last (non-full) word
+				S8bWord *word = malloc(sizeof(S8bWord));
+				S8bWord tempword = to_s8b(count, col_entries);
+				memcpy(word, &tempword, sizeof(S8bWord));
+				g_queue_push_tail(current_col, word);
+				free(col_entries);
 				length = g_queue_get_length(current_col);
 
-				X2.col_nz_indices[colno] = malloc(length*sizeof(ushort));
-				X2.col_nz[colno] = length;
+				// push all our words to an array in X2
+				X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
+				X2.col_nz[colno] = total_nz_entries;
+				X2.col_nwords[colno] = length;
+				count = 0;
+				while (!g_queue_is_empty(current_col)) {
+					S8bWord *current_word = g_queue_pop_head(current_col);
+					X2.compressed_indices[colno][count] = *current_word;
+					free(current_word);
+					count++;
+				}
+				int indices_length = g_queue_get_length(current_col_actual);
+				g_assert(total_nz_entries == indices_length);
+
+				//TODO: remove thise
+				// push actual columns for testing purposes
+				X2.col_nz_indices[colno] = malloc(total_nz_entries*sizeof(unsigned short));
 
 				int temp_counter = 0;
-				while (!g_queue_is_empty(current_col)) {
-					X2.col_nz_indices[colno][temp_counter++] = (ushort)(long)g_queue_pop_head(current_col);
+				while (!g_queue_is_empty(current_col_actual)) {
+					X2.col_nz_indices[colno][temp_counter] = (unsigned short)(long)g_queue_pop_head(current_col_actual);
+					temp_counter++;
 				}
 
+				g_queue_free(current_col_actual);
 				g_queue_free(current_col);
 				current_col = NULL;
+				current_col_actual = NULL;
 			}
 		}
 		iter_done++;
@@ -1347,16 +1425,21 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	r = gsl_rng_alloc(T);
 	if (shuffle == TRUE)
 		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
-	ushort **permuted_indices = malloc(actual_p_int * sizeof(ushort*));
+	//TODO: remove
+	unsigned short **permuted_indices_actual = malloc(actual_p_int * sizeof(unsigned short*));
+	unsigned short **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
-		permuted_indices[i] = X2.col_nz_indices[permutation->data[i]];
+		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
+		permuted_indices_actual[i] = X2.col_nz_indices[permutation->data[i]];
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
 	}
-	free(X2.col_nz_indices);
+	free(X2.compressed_indices);
+	free(X2.col_nz_indices); //TODO: free
 	free(X2.col_nz);
 	free(r);
-	X2.col_nz_indices = permuted_indices;
+	X2.compressed_indices = permuted_indices;
+	X2.col_nz_indices = permuted_indices_actual;
 	X2.col_nz = permuted_nz;
 	X2.permutation = permutation;
 	global_permutation = permutation;
@@ -1367,57 +1450,57 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 }
 
 //TODO: sparse row matrix (for interaction counts)
-XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT) {
-	XMatrix_sparse_row X2;
-	//int rowno, val;
-	int length, colno;
-	//int p_int = (p*(p+1))/2;
-	int iter_done = 0;
-
-	X2.row_nz_indices = malloc(n*sizeof(ushort *));
-	X2.row_nz = malloc(n*sizeof(int));
-
-	#pragma omp parallel for shared(X2, X) private(length, colno) shared(iter_done)
-	for (int rowno = 0; rowno < n; rowno++) {
-		GSList *current_row = NULL;
-		// only include main effects (where i==j) unless USE_INT is set.
-		for (int i = 0; i < p; i++) {
-			for (int j = i; j < p; j++) {
-				// only include main effects (where i==j) unless USE_INT is set.
-				if (USE_INT || j == i) {
-					if (USE_INT)
-						// worked out by hand as being equivalent to the offset we would have reached.
-						colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
-					else
-						colno = i;
-					if (X[i][rowno] * X[j][rowno] == 1) {
-						current_row = g_slist_prepend(current_row, (void*)(long)colno);
-					}
-
-				}
-			}
-		}
-		length = g_slist_length(current_row);
-		current_row = g_slist_reverse(current_row);
-
-		X2.row_nz_indices[rowno] = malloc(length*sizeof(int));
-		X2.row_nz[rowno] = length;
-
-		GSList *current_row_ind = current_row;
-		int temp_counter = 0;
-		while(current_row_ind != NULL) {
-			X2.row_nz_indices[rowno][temp_counter++] = (int)(long)current_row_ind->data;
-			current_row_ind = current_row_ind->next;
-		}
-
-		g_slist_free(current_row);
-		current_row = NULL;
-		iter_done += 1;
-		//if (omp_get_thread_num() == 0) {
-		//	move(8,48);
-		//	printw("%.1f%%\n", (float)iter_done*100/n);
-		//	refresh();
-		//}
-	}
-	return X2;
-}
+//XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT) {
+//	XMatrix_sparse_row X2;
+//	//int rowno, val;
+//	int length, colno;
+//	//int p_int = (p*(p+1))/2;
+//	int iter_done = 0;
+//
+//	X2.row_nz_indices = malloc(n*sizeof(ushort *));
+//	X2.row_nz = malloc(n*sizeof(int));
+//
+//	#pragma omp parallel for shared(X2, X) private(length, colno) shared(iter_done)
+//	for (int rowno = 0; rowno < n; rowno++) {
+//		GSList *current_row = NULL;
+//		// only include main effects (where i==j) unless USE_INT is set.
+//		for (int i = 0; i < p; i++) {
+//			for (int j = i; j < p; j++) {
+//				// only include main effects (where i==j) unless USE_INT is set.
+//				if (USE_INT || j == i) {
+//					if (USE_INT)
+//						// worked out by hand as being equivalent to the offset we would have reached.
+//						colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
+//					else
+//						colno = i;
+//					if (X[i][rowno] * X[j][rowno] == 1) {
+//						current_row = g_slist_prepend(current_row, (void*)(long)colno);
+//					}
+//
+//				}
+//			}
+//		}
+//		length = g_slist_length(current_row);
+//		current_row = g_slist_reverse(current_row);
+//
+//		X2.row_nz_indices[rowno] = malloc(length*sizeof(int));
+//		X2.row_nz[rowno] = length;
+//
+//		GSList *current_row_ind = current_row;
+//		int temp_counter = 0;
+//		while(current_row_ind != NULL) {
+//			X2.row_nz_indices[rowno][temp_counter++] = (int)(long)current_row_ind->data;
+//			current_row_ind = current_row_ind->next;
+//		}
+//
+//		g_slist_free(current_row);
+//		current_row = NULL;
+//		iter_done += 1;
+//		//if (omp_get_thread_num() == 0) {
+//		//	move(8,48);
+//		//	printw("%.1f%%\n", (float)iter_done*100/n);
+//		//	refresh();
+//		//}
+//	}
+//	return X2;
+//}

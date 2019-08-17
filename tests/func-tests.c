@@ -1,4 +1,4 @@
-#include <glib.h>
+#include <glib-2.0/glib.h>
 #include "../src/liblasso.h"
 #include <locale.h>
 #include <gsl/gsl_rng.h>
@@ -180,6 +180,7 @@ static void test_read_y_csv() {
 }
 
 static void test_find_beta_sets() {
+	initialise_static_resources();
 	int n = 6;
 	int p = 7;
 	int Xt[7][6] = { {1,1,0,0,0,0},
@@ -195,12 +196,12 @@ static void test_find_beta_sets() {
 		memcpy(X[i], Xt[i], n*sizeof(int));
 	}
 	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0, FALSE);
-	XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
+	//XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
 
-	printf("\nsparse row 0 (%d entries):\n", x2row.row_nz[0]);
-	for (int i = 0; i < x2row.row_nz[0]; i++)
-		printf("'%d' ", x2row.row_nz_indices[0][i]);
-	printf("\n");
+	//printf("\nsparse row 0 (%d entries):\n", x2row.row_nz[0]);
+	//for (int i = 0; i < x2row.row_nz[0]; i++)
+	//	printf("'%d' ", x2row.row_nz_indices[0][i]);
+	//printf("\n");
 
 
 
@@ -235,7 +236,7 @@ static void test_find_beta_sets() {
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
-	x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
+	//x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
 	beta_sets = find_beta_sets(x2col, p_int, n, 0.0);
 
 	printf("found %d sets\n", beta_sets.number_of_sets);
@@ -278,6 +279,7 @@ void printBits(size_t const size, void const * const ptr) {
 }
 
 static void check_X2_encoding() {
+	initialise_static_resources();
 	int n = 1000;
 	int p = 35;
 	int p_int = p*(p+1)/2;
@@ -313,7 +315,7 @@ static void check_X2_encoding() {
 	int group_size[15] = {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6,  5,  4,  3,  2,  1};
 	int masks[16];
 	for (int i = 0; i < 16; i++)
-		masks[i] = (1<<i) - 1;
+		masks[i] = (1<<item_width[i]) - 1;
 
 	S8bWord test_word;
 	test_word.selector = 7;
@@ -348,16 +350,17 @@ static void check_X2_encoding() {
 	// work out s8b compressed equivalent of col 0
 	int largest_entry = 0;
 	int max_bits = max_size_given_entries[0];
-	int diff = xmatrix_sparse.col_nz_indices[0][0];
+	int diff = xmatrix_sparse.col_nz_indices[0][0] + 1;
 	for (int i = 0; i < xmatrix_sparse.col_nz[0]; i++) {
 		if (i != 0)
 			diff = xmatrix_sparse.col_nz_indices[0][i] - xmatrix_sparse.col_nz_indices[0][i-1];
 		printf("current no. %d, diff %d. available bits %d\n", xmatrix_sparse.col_nz_indices[0][i], diff, max_bits);
 		// update max bits.
 		int used = 0;
-		while (diff > 0) {
+		int tdiff = diff;
+		while (tdiff > 0) {
 			used++;
-			diff >>= 1;
+			tdiff >>= 1;
 		}
 		max_bits = max_size_given_entries[count+1];
 		// if the current diff won't fit in the s8b word, push the word and start a new one
@@ -372,25 +375,69 @@ static void check_X2_encoding() {
 			for (int j = 0; j < count; j++)
 				printf("%d ", col_entries[j]);
 			printf("\n");
-			count = 0;
-			largest_entry = 0;
-			max_bits = max_size_given_entries[1];
 			S8bWord *word = malloc(sizeof(S8bWord));
 			S8bWord tempword = to_s8b(count, col_entries);
 			memcpy(word, &tempword, sizeof(S8bWord));
 			g_queue_push_tail(s8b_col, word);
+			count = 0;
+			largest_entry = 0;
+			max_bits = max_size_given_entries[1];
 		}
 		col_entries[count] = diff;
 		count++;
 		if (used > largest_entry)
 			largest_entry = used;
 	}
-	free(col_entries);
+	//push the last (non-full) word
+	S8bWord *word = malloc(sizeof(S8bWord));
+	S8bWord tempword = to_s8b(count, col_entries);
+	memcpy(word, &tempword, sizeof(S8bWord));
+	g_queue_push_tail(s8b_col, word);
 
+	free(col_entries);
 	int length = g_queue_get_length(s8b_col);
+
+	S8bWord *actual_col = malloc(length*sizeof(S8bWord));
+	count = 0;
+	while (!g_queue_is_empty(s8b_col)) {
+		S8bWord *current_word = g_queue_pop_head(s8b_col);
+		memcpy(&actual_col[count], current_word, sizeof(S8bWord));
+		count++;
+	}
+
+	printf("checking [s8b] == [short]\n");
+	int col_entry_pos = 0;
+	int entry = -1;
+	for (int i = 0; i < length; i++) {
+		S8bWord word = actual_col[i];
+		for (int j = 0; j < group_size[word.selector]; j++) {
+			int diff = word.values & masks[word.selector];
+			entry += diff;
+			//printf("b: ");
+			//printBits(8, &word);
+			//printf("\n");
+			if (diff != 0) {
+				printf("%d == %d\n", entry, xmatrix_sparse.col_nz_indices[0][col_entry_pos]);
+				g_assert_true(entry == xmatrix_sparse.col_nz_indices[0][col_entry_pos]);
+				col_entry_pos++;
+			}
+			word.values >>= item_width[word.selector];
+		}
+	}
+
 	int bytes = length*sizeof(S8bWord);
-	printf("col[0] contains %d words, for a toal of %d bytes, instead of %d shorts (%d bytes). Effective reduction %f%%\n",
+	printf("col[0] contains %d words, for a toal of %d bytes, instead of %d shorts (%d bytes). Effective reduction %f\n",
 		length, bytes, xmatrix_sparse.col_nz[0], xmatrix_sparse.col_nz[0]*sizeof(short), (double)bytes/(xmatrix_sparse.col_nz[0]*sizeof(short)));
+
+	printf("liblasso vs test compressed first col:\n");
+	for (int i = 0; i < xmatrix_sparse.col_nwords[0]; i++) {
+		printf("%d == %d\n", xmatrix_sparse.compressed_indices[0][i].selector, actual_col[i].selector);
+		g_assert_true(xmatrix_sparse.compressed_indices[0][i].selector == actual_col[i].selector);
+		printf("%d == %d\n", xmatrix_sparse.compressed_indices[0][i].values, actual_col[i].values);
+		g_assert_true(xmatrix_sparse.compressed_indices[0][i].values == actual_col[i].values);
+	}
+	g_assert_true(xmatrix_sparse.col_nwords[0] == length);
+	printf("correct number of words\n");
 }
 
 static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data) {

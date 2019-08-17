@@ -55,14 +55,15 @@ typedef struct Column_Set {
 } Column_Set;
 
 typedef struct XMatrix_sparse {
-	unsigned short **col_nz_indices;
 	int *col_nz;
+	int *col_nwords;
+	unsigned short **col_nz_indices;
 	gsl_permutation *permutation;
-	S8bWord *compressed_indices;
+	S8bWord **compressed_indices;
 } XMatrix_sparse;
 
 typedef struct XMatrix_sparse_row {
-	ushort **row_nz_indices;
+	unsigned short **row_nz_indices;
 	int *row_nz;
 } XMatrix_sparse_row;
 
@@ -91,7 +92,7 @@ typedef struct Mergeset {
 
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int permute);
-XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
+//XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int VERBOSE, double frac_overlap_allowed);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
@@ -110,3 +111,4 @@ int can_merge(Mergeset *all_sets, int i, int j, double frac_overlap_allowed);
 int compare_n(Mergeset *all_sets, int *valid_mergesets, int **set_bins_of_size, int *num_bins_of_size, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, double frac_overlap_allowed);
 void merge_n(Mergeset *all_sets, int **set_bins_of_size, int *num_bins_of_size, int *valid_mergesets, int *sets_to_merge, int small, int large, int n, int small_offset, int large_offset, int num_bins_to_merge);
 void free_static_resources();
+void initialise_static_resources();

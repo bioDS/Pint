@@ -1,6 +1,6 @@
 #include <gsl/gsl_vector.h>
 #include "../../src/liblasso.h"
-#include <ncurses.h>
+//#include <ncurses.h>
 
 enum Output_Mode {quit, file, terminal};
 
@@ -16,8 +16,8 @@ int main(int argc, char** argv) {
 	}
 
 
-	initscr();
-	refresh();
+	//initscr();
+	//refresh();
 
 	char *scale = argv[3];
 	char *verbose = argv[2];
@@ -51,17 +51,15 @@ int main(int argc, char** argv) {
 
 	if ((lambda = strtod(argv[5], NULL)) == 0)
 		lambda = 3.604;
-	move(1,0);
-	printw("using lambda = %f\n", lambda);
+	printf("using lambda = %f\n", lambda);
 
 
 	int N = atoi(argv[6]);
 	int P = atoi(argv[7]);
-	move(1,0);
-	printw("using N = %d, P = %d\n", N, P);
+	printf("using N = %d, P = %d\n", N, P);
 
 	double overlap = atof(argv[8]);
-	printw("using frac: %.2f\n", overlap);
+	printf("using frac: %.2f\n", overlap);
 
 
 	// testing: wip
@@ -78,9 +76,7 @@ int main(int argc, char** argv) {
 		nbeta = xmatrix.actual_cols;
 		X2 = xmatrix.X;
 	//}
-	move(5,0);
-	printw("using nbeta = %d\n", nbeta);
-	refresh();
+	printf("using nbeta = %d\n", nbeta);
 
 	if (xmatrix.X == NULL) {
 		fprintf(stderr, "failed to read X\n");
@@ -91,10 +87,8 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	move(6,0);
-	printw("begginning coordinate descent\n");
-	refresh();
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 0.01, lambda, "cyclic", 30, USE_INT, VERBOSE, overlap);
+	printf("begginning coordinate descent\n");
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 1, lambda, "cyclic", 100, USE_INT, VERBOSE, overlap);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -109,20 +103,19 @@ int main(int argc, char** argv) {
 	//}
 	//printf("\n");
 
-	printw("\n");
 	//move(12,0);
-	printw("indices significantly negative (-500):\n");
+	printf("indices significantly negative (-500):\n");
 	int printed = 0;
 	int sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
 
-	printw("\n\n");
+	printf("\n\n");
 
 	//printw("\n");
 	free(xmatrix.X);
 	free(Y);
 	//move(22 + sig_beta_count,0);
-	printw("freeing X/Y\n");
+	printf("freeing X/Y\n");
 	switch(output_mode){
 		case terminal:
 			for (int i = 0; i < nbeta_int && printed < 10; i++) {
@@ -131,14 +124,12 @@ int main(int argc, char** argv) {
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
 					if (ip.i == ip.j)
-						printw("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
+						printf("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
 					else
-						printw("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+						printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 				}
 			}
-			printw("finished! press q to exit");
-			while(getch() != 'q');
-			getch();
+			printf("finished! press q to exit");
 		break;
 		case file:
 			for (int i = 0; i < nbeta_int; i++) {
