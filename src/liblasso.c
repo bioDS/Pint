@@ -17,7 +17,7 @@
 #endif
 
 #define NumSets (1<<12)
-#define LIMIT_OVERLAP
+//#define LIMIT_OVERLAP
 
 static int NumCores = 1;
 
@@ -806,7 +806,7 @@ void update_max_rowsums(double new_value) {
 	if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
 		return;
 
-	#pragma omp critical
+	//#pragma omp critical
 	{
 		//TODO: reasonable search algorithm.
 		int i = NUM_MAX_ROWSUMS - 1;
@@ -1171,38 +1171,40 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 
 			// update the predictor \Beta_k
-//#ifdef LIMIT_OVERLAP
-			#pragma omp parallel num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) //schedule(static, 1)
-			for (int i = 0; i <  beta_sets.number_of_sets; i++) {
-				#pragma omp for
-				for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
-					int k = beta_sets.sets[i].set[j];
-//#else
-//				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
-//				for (int k = 0; k < p_int; k++) {
+#ifdef LIMIT_OVERLAP
+		#pragma omp parallel num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error, dBMax) //schedule(static, 1)
+		for (int i = 0; i <  beta_sets.number_of_sets; i++) {
+			#pragma omp for
+			for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
+				int k = beta_sets.sets[i].set[j];
+#else
+				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
+				for (int k = 0; k < p_int; k++) {
 
-//#endif
-					if (worth_updating(col_ysum, X2, k, n, lambda)) {
-						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
-						if (fabs(dBMax) > 0 && !set_min_lambda) {
-							set_min_lambda = TRUE;
-							final_lambda = (pow(0.9,50))*lambda;
-							Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
-						}
-						total_updates++;
-						total_updates_entries += X2.col_nz[k];
-					}
-					else {
-						skipped_updates++;
-						total_updates++;
-						skipped_updates_entries += X2.col_nz[k];
-						total_updates_entries += X2.col_nz[k];
-					}
+#endif
+				if (worth_updating(col_ysum, X2, k, n, lambda)) {
+					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+					total_updates++;
+					total_updates_entries += X2.col_nz[k];
 				}
-//#ifdef LIMIT_OVERLAP
+				else {
+					skipped_updates++;
+					total_updates++;
+					skipped_updates_entries += X2.col_nz[k];
+					total_updates_entries += X2.col_nz[k];
+				}
 			}
-//#endif
+#ifdef LIMIT_OVERLAP
+		}
+		dBMax /= NumCores;
+
+#endif
 		//}
+		if (fabs(dBMax) > 0 && !set_min_lambda) {
+			set_min_lambda = TRUE;
+			final_lambda = (pow(0.9,50))*lambda;
+			Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
+		}
 		haschanged = 0;
 		//move(scry, scrx);
 		//printw("\n\n");
@@ -1231,7 +1233,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (prev_error/error < HALT_BETA_DIFF && dBMax < 1) {
+		if (prev_error/error < HALT_BETA_DIFF) {
 			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
 			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
 			Rprintf(" %d(%f)", lambda_count, lambda);
@@ -1264,9 +1266,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	Rprintf("freeing stuff\n");
 	// free beta sets
+	#ifdef LIMIT_OVERLAP
 	for (int i = 0; i <  beta_sets.number_of_sets; i++) {
 		free(beta_sets.sets[i].set);
 	}
+	#endif
 	// free X2
 	for (int i = 0; i < p_int; i++) {
 		//free(X2.col_nz_indices[i]);
@@ -1444,13 +1448,17 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	if (shuffle == TRUE)
 		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
 	//TODO: remove
+	#ifdef LIMIT_OVERLAP
 	unsigned short **permuted_indices_actual = malloc(actual_p_int * sizeof(unsigned short*));
+	#endif
 	unsigned short **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
+		#ifdef LIMIT_OVERLAP
 		permuted_indices_actual[i] = X2.col_nz_indices[permutation->data[i]];
+		#endif
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
 		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
 	}
@@ -1460,7 +1468,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	free(X2.col_nwords);
 	free(r);
 	X2.compressed_indices = permuted_indices;
+	#ifdef LIMIT_OVERLAP
 	X2.col_nz_indices = permuted_indices_actual;
+	#endif
 	X2.col_nz = permuted_nz;
 	X2.col_nwords = permuted_nwords;
 	X2.permutation = permutation;
