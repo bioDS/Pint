@@ -1352,7 +1352,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 				for (int row = 0; row < n; row++) {
 					val = X[i][row] * X[j][row];
 					if (val == 1) {
+						#ifdef LIMIT_OVERLAP
 						g_queue_push_tail(current_col_actual, (void*)(long)row);
+						#endif
 						total_nz_entries++;
 						diff = row - prev_row;
 						total_sum += diff;
@@ -1404,18 +1406,24 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 					free(current_word);
 					count++;
 				}
+				#ifdef LIMIT_OVERLAP
 				int indices_length = g_queue_get_length(current_col_actual);
 				g_assert(total_nz_entries == indices_length);
+				#endif
 
 				//TODO: remove thise
 				// push actual columns for testing purposes
+				#ifdef LIMIT_OVERLAP
 				X2.col_nz_indices[colno] = malloc(total_nz_entries*sizeof(unsigned short));
+				#endif
 
+				#ifdef LIMIT_OVERLAP
 				int temp_counter = 0;
 				while (!g_queue_is_empty(current_col_actual)) {
 					X2.col_nz_indices[colno][temp_counter] = (unsigned short)(long)g_queue_pop_head(current_col_actual);
 					temp_counter++;
 				}
+				#endif
 
 				g_queue_free(current_col_actual);
 				g_queue_free(current_col);
@@ -1465,7 +1473,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
 	}
 	free(X2.compressed_indices);
+	#ifdef LIMIT_OVERLAP
 	free(X2.col_nz_indices); //TODO: free
+	#endif
 	free(X2.col_nz);
 	free(X2.col_nwords);
 	free(r);
