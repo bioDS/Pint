@@ -1276,7 +1276,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//free(X2.col_nz_indices[i]);
 		free(X2.compressed_indices[i]);
 	}
+	#ifdef LIMIT_OVERLAP
 	free(X2.col_nz_indices);
+	#endif
 	free(X2.compressed_indices);
 	free(X2.col_nz);
 	free(X2.col_nwords);
@@ -1451,7 +1453,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	#ifdef LIMIT_OVERLAP
 	unsigned short **permuted_indices_actual = malloc(actual_p_int * sizeof(unsigned short*));
 	#endif
-	unsigned short **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
+	S8bWord **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
