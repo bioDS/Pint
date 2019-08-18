@@ -7,7 +7,10 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args >= 2)) {
 	f <- (args[2])
 } else {
-	f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
+	#f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
+  #f <- "../xyz-simulation/simulated_lethal_data/n1000_p100_SNR5_nbi10_nbij50_nlethals10_viol0_78568.rds"
+  #f <- "../xyz-simulation/simulated_data/n1000_p100_SNR5_nbi10_nbij50_nlethals5_viol0_23649.rds"
+  f <- "../xyz-simulation/simulated_data/n10000_p1000_SNR10_nbi0_nbij1000_nlethals0_viol0_11504.rds"
 }
 
 if (length(args) >= 1) {
@@ -25,16 +28,17 @@ d <- readRDS(f)
 X <- d$X
 Y <- d$Y
 
-result <- overlap_lasso(X, Y, lambda_min = 0.05)
+result <- overlap_lasso(X, Y, lambda_min = 0.04)
 
 obs <- d$obs
 bij_ind <- d$bij_ind
 lethal_ind <- d$lethal_ind
 lethal_coef <- -1000
+large_coef <- 2
 
 fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$interaction_effects$j,
                      effect = result$interaction_effects$strength %>% unlist) %>%
-  filter(abs(effect) > 0.5) %>%
+  filter(abs(effect) > 1) %>%
   arrange(gene_i) %>%
   left_join(., obs, by = c("gene_i", "gene_j")) %>%
   mutate(type = "interaction") %>%
@@ -43,9 +47,11 @@ fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$inte
   ungroup %>%
   mutate(TP = !is.na(coef)) %>%
   mutate(lethal = (coef == lethal_coef)) %>%
+  mutate(large = (abs(coef) >= large_coef)) %>%
   arrange(desc(TP)) %>%
   arrange(desc(lethal)) %>%
-  select(gene_i, gene_j, type, TP, lethal) %>%
+  arrange(desc(large)) %>%
+  select(gene_i, gene_j, type, TP, large, lethal) %>%
   distinct(gene_i, gene_j, .keep_all=TRUE) %>%
   tbl_df
 

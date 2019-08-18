@@ -1145,6 +1145,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double cpu_time_used;
 
 	//int *cols_to_update = malloc(p_int*sizeof(int));
+	int set_min_lambda = FALSE;
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
 	double final_lambda = pow(0.90,100)*lambda;
@@ -1183,6 +1184,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 //#endif
 					if (worth_updating(col_ysum, X2, k, n, lambda)) {
 						dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+						if (fabs(dBMax) > 0 && !set_min_lambda) {
+							set_min_lambda = TRUE;
+							final_lambda = (pow(0.9,50))*lambda;
+							Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
+						}
 						total_updates++;
 						total_updates_entries += X2.col_nz[k];
 					}
