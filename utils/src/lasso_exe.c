@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 1, lambda, "cyclic", 100, USE_INT, VERBOSE, overlap);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 0.04, lambda, "cyclic", 100, USE_INT, VERBOSE, overlap);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
 	//printf("\n");
 
 	//move(12,0);
-	printf("indices significantly negative (-500):\n");
+	printf("indices significantly non-zero (|x| > 1):\n");
 	int printed = 0;
 	int sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
 	switch(output_mode){
 		case terminal:
 			for (int i = 0; i < nbeta_int && printed < 10; i++) {
-				if (beta[i] < -500) {
+				if (fabs(beta[i]) > 1) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
