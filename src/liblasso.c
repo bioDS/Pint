@@ -36,7 +36,7 @@ static double *col_ysum;
 static int max_size_given_entries[61];
 //static double max_rowsum = 0;
 
-#define NUM_MAX_ROWSUMS 50
+#define NUM_MAX_ROWSUMS 1
 static double max_rowsums[NUM_MAX_ROWSUMS];
 static double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
@@ -806,7 +806,7 @@ void update_max_rowsums(double new_value) {
 	if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
 		return;
 
-	//#pragma omp critical
+	#pragma omp critical
 	{
 		//TODO: reasonable search algorithm.
 		int i = NUM_MAX_ROWSUMS - 1;
@@ -1146,6 +1146,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	//int *cols_to_update = malloc(p_int*sizeof(int));
 	int set_min_lambda = FALSE;
+	gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
+	gsl_rng *iter_rng;
+	gsl_permutation_init(iter_permutation);
+	gsl_rng_env_setup();
+	const gsl_rng_type *T = gsl_rng_default;
+	iter_rng = gsl_rng_alloc(T);
+	gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
 	double final_lambda = pow(0.90,100)*lambda;
@@ -1178,8 +1185,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			for (int j = 0; j < beta_sets.sets[i].set_size; j++) {
 				int k = beta_sets.sets[i].set[j];
 #else
-				#pragma omp parallel for num_threads(NumCores) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) //schedule(static, 1)
-				for (int k = 0; k < p_int; k++) {
+				if (set_min_lambda == TRUE)
+					gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
+				#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
+				for (int i = 0; i < p_int; i++) {
+					int k = iter_permutation->data[i];
 
 #endif
 				if (worth_updating(col_ysum, X2, k, n, lambda)) {
@@ -1196,14 +1206,23 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			}
 #ifdef LIMIT_OVERLAP
 		}
-		dBMax /= NumCores;
-
 #endif
+		//dBMax /= NumCores;
+
 		//}
-		if (fabs(dBMax) > 0 && !set_min_lambda) {
-			set_min_lambda = TRUE;
-			final_lambda = (pow(0.9,50))*lambda;
-			Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
+		if (!set_min_lambda) {
+			if (fabs(dBMax) > 0) {
+				set_min_lambda = TRUE;
+				final_lambda = (pow(0.9,50))*lambda;
+				Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
+			} else {
+				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+				Rprintf(" %d(%f)", lambda_count, lambda);
+				lambda_count++;
+				lambda *= 0.9;
+				iter_count += iter;
+				iter = 0;
+			}
 		}
 		haschanged = 0;
 		//move(scry, scrx);
