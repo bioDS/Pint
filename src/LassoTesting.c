@@ -38,27 +38,39 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda_min_), asReal(lambda_max_), "cyclic", 100, 1, 0, frac_overlap_allowed);
 	int main_count = 0, int_count = 0;
+	int total_main_count = 0, total_int_count = 0;
 
-	SEXP main_i = PROTECT(allocVector(REALSXP, p));
-	SEXP main_strength = PROTECT(allocVector(REALSXP, p));
-	SEXP int_i = PROTECT(allocVector(REALSXP, p_int - p));
-	SEXP int_j = PROTECT(allocVector(REALSXP, p_int - p));
-	SEXP int_strength = PROTECT(allocVector(REALSXP, p_int - p));
-	SEXP all_effects = PROTECT(allocVector(VECSXP, 5));
-
-	int protected = 6;
 
 	for (int i = 0; i < p_int; i++) {
-		int_pair ip = get_num(i, p);
-		if (ip.i == ip.j) {
-			REAL(main_i)[main_count] = ip.i+1;
-			REAL(main_strength)[main_count] = beta[i];
-			main_count++;
-		} else {
-			REAL(int_i)[int_count] = ip.i+1;
-			REAL(int_j)[int_count] = ip.j+1;
-			REAL(int_strength)[int_count] = beta[i];
-			int_count++;
+		if (beta[i] != 0) {
+			int_pair ip = get_num(i, p);
+			if (ip.i == ip.j) {
+				total_main_count++;
+			} else {
+				total_int_count++;
+			}
+		}
+	}
+	SEXP main_i = PROTECT(allocVector(REALSXP, total_main_count));
+	SEXP main_strength = PROTECT(allocVector(REALSXP, total_main_count));
+	SEXP int_i = PROTECT(allocVector(REALSXP, total_int_count));
+	SEXP int_j = PROTECT(allocVector(REALSXP, total_int_count));
+	SEXP int_strength = PROTECT(allocVector(REALSXP, total_int_count));
+	SEXP all_effects = PROTECT(allocVector(VECSXP, 5));
+	int protected = 6;
+	for (int i = 0; i < p_int; i++) {
+		if (beta[i] != 0) {
+			int_pair ip = get_num(i, p);
+			if (ip.i == ip.j) {
+				REAL(main_i)[main_count] = ip.i+1;
+				REAL(main_strength)[main_count] = beta[i];
+				main_count++;
+			} else {
+				REAL(int_i)[int_count] = ip.i+1;
+				REAL(int_j)[int_count] = ip.j+1;
+				REAL(int_strength)[int_count] = beta[i];
+				int_count++;
+			}
 		}
 	}
 
