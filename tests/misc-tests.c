@@ -1,5 +1,5 @@
 #include <glib.h>
-#include "../src/lasso_lib.h"
+#include "../src/liblasso.h"
 
 static void test_always_succeeds() {
 	g_assert (1 == 1);
