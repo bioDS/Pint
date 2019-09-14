@@ -1156,10 +1156,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
-	double final_lambda = pow(0.90,100)*lambda;
-	//if (final_lambda < lambda_min) {
-		final_lambda = lambda_min;
-	//}
+	double final_lambda = lambda_min;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
