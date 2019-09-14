@@ -128,12 +128,56 @@ static void test_X2_from_X() {
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconstpointer user_data) {
 	fixture->n = 1000;
-	fixture->p = 100;
+	fixture->p = 35;
+	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	fixture->X = fixture->xmatrix.X;
 	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
+	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 20;
+	int p_int = fixture->p*(fixture->p+1)/2;
+	fixture->beta = malloc(p_int*sizeof(double));
+	memset(fixture->beta, 0, p_int*sizeof(double));
 	fixture->k = 27;
 	fixture->dBMax = 0;
 	fixture->intercept = 0;
+	int_pair *precalc_get_num = malloc(p_int*sizeof(int_pair));
+	int offset = 0;
+	for (int i = 0; i < fixture->p; i++) {
+		for (int j = i; j < fixture->p; j++) {
+			precalc_get_num[offset].i = i;
+			precalc_get_num[offset].j = j;
+			offset++;
+		}
+	}
+	fixture->precalc_get_num = precalc_get_num;
+
+	for (int i = 0; i < fixture->n; i++)
+		fixture->rowsum[i] = 0;
+}
+
+static void test_simple_coordinate_descent_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
+	for (int i = 0; i < fixture->p; i++) {
+		free(fixture->xmatrix.X[i]);
+	}
+	free(fixture->xmatrix.X);
+	free(fixture->Y);
+	free(fixture->rowsum);
+	free(fixture->beta);
+	free(fixture->precalc_get_num);
+	for (int i = 0; i < fixture->p*(fixture->p+1)/2; i++) {
+		#ifdef DENSE_X2
+		#ifndef LIMIT_OVERLAP
+			free(fixture->xmatrix_sparse.col_nz_indices[i]);
+		#endif
+		#endif
+		free(fixture->xmatrix_sparse.compressed_indices[i]);
+	}
+	#ifdef DENSE_X2
+	free(fixture->xmatrix_sparse.col_nz_indices);
+	#endif
+	free(fixture->xmatrix_sparse.compressed_indices);
+	free(fixture->xmatrix_sparse.col_nz);
+	free(fixture->xmatrix_sparse.col_nwords);
 }
 
 static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpointer user_data) {
@@ -154,21 +198,77 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 }
 
 static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpointer user_data) {
+	// are we running the shuffle test, or sequential?
+	double acceptable_diff = 0.1;
+	int shuffle = FALSE;
+	if (user_data == TRUE) {
+		printf("\nrunning shuffle test!\n");
+		acceptable_diff = 10;
+		shuffle = TRUE;
+	}
+	double *glmnet_beta = read_y_csv("/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
+	printf("starting interaction test\n");
+	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	fixture->X = fixture->xmatrix.X;
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, shuffle);
+	int p_int = fixture->p*(fixture->p+1)/2;
+	double *beta = fixture->beta;
+
+	double dBMax;
+	for (int j = 0; j < 10; j++)
+		for (int i = 0; i < p_int; i++) {
+			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+			int k = fixture->xmatrix_sparse.permutation->data[i];
+			//int k = i;
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, dBMax, 0, 1, fixture->precalc_get_num);
+		}
+
+	int no_agreeing = 0;
+	for (int i = 0; i < p_int; i++) {
+		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+		//int k = i;
+		printf("testing beta[%d] (%f) ~ %f [", i, beta[i], small_X2_correct_beta[k]);
+
+		if (	(beta[i] < small_X2_correct_beta[k] + acceptable_diff)
+			&& 	(beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
+				no_agreeing++;
+				printf("x]\n");
+			} else {
+				printf(" ]\n");
+			}
+	}
+	printf("frac agreement: %f\n", (double)no_agreeing/p_int);
+	g_assert_true(no_agreeing == p_int);
+}
+
+static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture, gconstpointer user_data) {
+	double *glmnet_beta = read_y_csv("/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
 	printf("starting interaction test\n");
 	fixture->p = 35;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, FALSE);
 	int p_int = fixture->p*(fixture->p+1)/2;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 1, 0, 0.0);
+	double *beta = fixture->beta;
+
+	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, 0.05, 1000, "cyclic", 100, 1, 0, 0.01, 1.0001);
 
 	double acceptable_diff = 10;
+	int no_agreeing = 0;
 	for (int i = 0; i < p_int; i++) {
 		int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-		printf("testing beta[%d] (%f) ~ %f\n", i, fixture->beta[i], small_X2_correct_beta[k]);
-		g_assert_true(fixture->beta[i] < small_X2_correct_beta[k] + acceptable_diff);
-		g_assert_true(fixture->beta[i] > small_X2_correct_beta[k] - acceptable_diff);
+		printf("testing beta[%d] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
+
+		if (	(beta[k] < glmnet_beta[i] + acceptable_diff)
+			&& 	(beta[k] > glmnet_beta[i] - acceptable_diff)) {
+				no_agreeing++;
+				printf("x]\n");
+			} else {
+				printf(" ]\n");
+			}
 	}
+	printf("frac agreement: %f\n", (double)no_agreeing/p_int);
+	g_assert_true(no_agreeing >= 0.8*p_int);
 }
 
 // will fail if Y has been normalised
@@ -279,11 +379,10 @@ void printBits(size_t const size, void const * const ptr) {
 }
 
 static void check_X2_encoding() {
-	initialise_static_resources();
 	int n = 1000;
 	int p = 35;
 	int p_int = p*(p+1)/2;
-	XMatrix xmatrix = read_x_csv("./testXSmall.csv", n, p);
+	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
 	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
 
 	// mean entry size
@@ -644,18 +743,20 @@ static void test_merge_n(Merge_Fixture *fx, gconstpointer user_data) {
 }
 
 int main (int argc, char *argv[]) {
+	initialise_static_resources();
 	setlocale (LC_ALL, "");
 	g_test_init (&argc, &argv, NULL);
 
 	g_test_add_func("/func/test-read-y-csv", test_read_y_csv);
 	g_test_add_func("/func/test-read-x-csv", test_read_x_csv);
 	g_test_add_func("/func/test-soft-threshol", test_soft_threshold);
-	//g_test_add_func("/func/test-update-beta-cyclic", test_update_beta_cyclic);
 	g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL, update_beta_fixture_set_up, test_update_beta_cyclic, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-update-intercept-cyclic", test_update_intercept_cyclic);
 	g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
 	g_test_add("/func/test-simple-coordinate-descent-main", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_main, update_beta_fixture_tear_down);
-	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, NULL, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, update_beta_fixture_tear_down);
+	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, FALSE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
+	g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
+	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
 	g_test_add_func("/func/test-find-beta-sets", test_find_beta_sets);
 	g_test_add("/func/test-check-n", Merge_Fixture, NULL, check_merge_n_set_up, test_check_n, check_merge_n_tear_down);
 	g_test_add("/func/test-merge-n", Merge_Fixture, NULL, check_merge_n_set_up, test_merge_n, check_merge_n_tear_down);
