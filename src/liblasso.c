@@ -17,7 +17,6 @@
 #endif
 
 #define NumSets (1<<12)
-//#define LIMIT_OVERLAP
 
 static int NumCores = 1;
 
@@ -30,7 +29,6 @@ static int zero_updates = 0;
 static int zero_updates_entries = 0;
 
 static int VERBOSE = 1;
-static int haschanged = 1;
 static int *colsum;
 static double *col_ysum;
 static int max_size_given_entries[61];
@@ -852,7 +850,11 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 				column_entries[col_entry_pos] = entry;
 				//printf("\nentry: %d\n", entry);
 				sumn += Y[entry] - intercept - rowsum[entry];
-				//g_assert_true(entry == xmatrix_sparse.col_nz_indices[k][col_entry_pos]);
+				#ifdef DENSE_X2
+				#ifndef LIMIT_OVERLAP
+				g_assert_true(entry == xmatrix_sparse.col_nz_indices[k][col_entry_pos]);
+				#endif
+				#endif
 				col_entry_pos++;
 			}
 			word.values >>= item_width[word.selector];
@@ -869,7 +871,6 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	if (Bk_diff != 0) {
-		haschanged = 1;
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			int i = column_entries[e];
 			rowsum[i] += Bk_diff;
@@ -1173,7 +1174,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//iter_lambda = lambda*(max_iter-iter)/max_iter;
 		//printf("using lambda = %f\n", iter_lambda);
 
-		haschanged = 1;
 		//int count=5;
 		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 
@@ -1224,7 +1224,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				iter = 0;
 			}
 		}
-		haschanged = 0;
 		//move(scry, scrx);
 		//printw("\n\n");
 		error = calculate_error(USE_INT, n, p_int, X2, Y, X, beta, p, intercept, rowsum);
@@ -1252,8 +1251,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (prev_error/error < HALT_BETA_DIFF) {
-			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, HALT_BETA_DIFF, iter + 1);
+		if (prev_error/error < halt_beta_diff) {
+			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
 			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
 			Rprintf(" %d(%f)", lambda_count, lambda);
 			lambda_count++;
@@ -1292,10 +1291,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	#endif
 	// free X2
 	for (int i = 0; i < p_int; i++) {
-		//free(X2.col_nz_indices[i]);
+		#ifdef DENSE_X2
+		#ifndef LIMIT_OVERLAP
+			free(X2.col_nz_indices[i]);
+		#endif
+		#endif
 		free(X2.compressed_indices[i]);
 	}
-	#ifdef LIMIT_OVERLAP
+	#ifdef DENSE_X2
 	free(X2.col_nz_indices);
 	#endif
 	free(X2.compressed_indices);
@@ -1371,7 +1374,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 				for (int row = 0; row < n; row++) {
 					val = X[i][row] * X[j][row];
 					if (val == 1) {
-						#ifdef LIMIT_OVERLAP
+						#ifdef DENSE_X2
 						g_queue_push_tail(current_col_actual, (void*)(long)row);
 						#endif
 						total_nz_entries++;
@@ -1425,18 +1428,18 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 					free(current_word);
 					count++;
 				}
-				#ifdef LIMIT_OVERLAP
+				#ifdef DENSE_X2
 				int indices_length = g_queue_get_length(current_col_actual);
 				g_assert(total_nz_entries == indices_length);
 				#endif
 
 				//TODO: remove thise
 				// push actual columns for testing purposes
-				#ifdef LIMIT_OVERLAP
+				#ifdef DENSE_X2
 				X2.col_nz_indices[colno] = malloc(total_nz_entries*sizeof(unsigned short));
 				#endif
 
-				#ifdef LIMIT_OVERLAP
+				#ifdef DENSE_X2
 				int temp_counter = 0;
 				while (!g_queue_is_empty(current_col_actual)) {
 					X2.col_nz_indices[colno][temp_counter] = (unsigned short)(long)g_queue_pop_head(current_col_actual);
@@ -1477,7 +1480,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	if (shuffle == TRUE)
 		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
 	//TODO: remove
-	#ifdef LIMIT_OVERLAP
+	#ifdef DENSE_X2
 	unsigned short **permuted_indices_actual = malloc(actual_p_int * sizeof(unsigned short*));
 	#endif
 	S8bWord **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
@@ -1485,21 +1488,21 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
-		#ifdef LIMIT_OVERLAP
+		#ifdef DENSE_X2
 		permuted_indices_actual[i] = X2.col_nz_indices[permutation->data[i]];
 		#endif
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
 		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
 	}
 	free(X2.compressed_indices);
-	#ifdef LIMIT_OVERLAP
+	#ifdef DENSE_X2
 	free(X2.col_nz_indices); //TODO: free
 	#endif
 	free(X2.col_nz);
 	free(X2.col_nwords);
 	free(r);
 	X2.compressed_indices = permuted_indices;
-	#ifdef LIMIT_OVERLAP
+	#ifdef DENSE_X2
 	X2.col_nz_indices = permuted_indices_actual;
 	#endif
 	X2.col_nz = permuted_nz;
