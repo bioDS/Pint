@@ -119,8 +119,8 @@ int main(int argc, char** argv) {
 	printf("freeing X/Y\n");
 	switch(output_mode){
 		case terminal:
-			for (int i = 0; i < nbeta_int && printed < 10; i++) {
-				if (fabs(beta[i]) > 1) {
+			for (int i = 0; i < nbeta_int && printed < 100; i++) {
+				if (fabs(beta[i]) > 500) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
@@ -130,7 +130,6 @@ int main(int argc, char** argv) {
 						printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 				}
 			}
-			printf("finished! press q to exit");
 		break;
 		case file:
 			for (int i = 0; i < nbeta_int; i++) {
