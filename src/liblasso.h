@@ -18,7 +18,13 @@
 //#define N 30
 //#define P 1000
 //#define P 35
-#define HALT_BETA_DIFF 1.01
+//#define HALT_BETA_DIFF 1.0001
+
+//#define LIMIT_OVERLAP
+#ifdef LIMIT_OVERLAP
+	#define DENSE_X2
+#endif
+//#define DENSE_X2
 
 static int VERBOSE;
 
