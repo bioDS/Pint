@@ -1385,7 +1385,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 						}
 						max_bits = max_size_given_entries[count+1];
 						// if the current diff won't fit in the s8b word, push the word and start a new one
-						if (diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
+						if (max(used,largest_entry) > max_size_given_entries[count+1]) {
 							S8bWord *word = malloc(sizeof(S8bWord)); // we (maybe?) can't rely on this being the size of a pointer, so we'll add by reference
 							S8bWord tempword = to_s8b(count, col_entries);
 							total_count += count;
