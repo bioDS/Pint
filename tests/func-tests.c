@@ -141,8 +141,8 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->p = 630;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX2Small.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, TRUE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 0, 0, 0.0);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, FALSE);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 0, 0, 0.0, 1.0001);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < fixture->p; i++) {

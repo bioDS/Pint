@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 0.04, lambda, "cyclic", 100, USE_INT, VERBOSE, overlap);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 40, lambda, "cyclic", 10000, USE_INT, VERBOSE, overlap, 1.0001);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;

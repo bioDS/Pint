@@ -995,7 +995,7 @@ double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double 
  * TODO: add an intercept
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
-double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed, double halt_beta_diff) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random

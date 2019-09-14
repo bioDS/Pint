@@ -93,7 +93,7 @@ typedef struct Mergeset {
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int permute);
 //XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT);
-double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int VERBOSE, double frac_overlap_allowed);
+double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int VERBOSE, double frac_overlap_allowed, double halt_beta_diff);
 double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
 double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num);
