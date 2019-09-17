@@ -8,7 +8,7 @@ struct effect {
 	double strength;
 };
 
-SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_overlap_allowed_, SEXP halt_error_diff_) {
+SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_overlap_allowed_, SEXP halt_error_diff_, SEXP max_interaction_distance_) {
 	double *x = REAL(X_);
 	double *y = REAL(Y_);
 	SEXP dim = getAttrib(X_, R_DimSymbol);
@@ -16,6 +16,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	int p = INTEGER(dim)[1];
 	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
 	int p_int = p*(p+1)/2;
+	int max_interaction_distance = asInteger(max_interaction_distance_);
 	initialise_static_resources();
 
 	double halt_error_diff = asReal(halt_error_diff_);
@@ -38,7 +39,9 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	xmatrix.actual_cols = n;
 	xmatrix.X = X;
 
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, asReal(lambda_min_), asReal(lambda_max_), "cyclic", 100, 1, 0, frac_overlap_allowed, halt_error_diff);
+	Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
+
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_), asReal(lambda_max_), "cyclic", 100, 1, 0, frac_overlap_allowed, halt_error_diff);
 	int main_count = 0, int_count = 0;
 	int total_main_count = 0, total_int_count = 0;
 
@@ -89,7 +92,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 }
 
 static const R_CallMethodDef CallEntries[] ={
-	{"lasso_", (DL_FUNC) &lasso_, 5},
+	{"lasso_", (DL_FUNC) &lasso_, 7},
 	{NULL, NULL, 0}
 };
 

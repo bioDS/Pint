@@ -93,7 +93,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, FALSE);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1, FALSE);
 	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, 0, fixture->precalc_get_num);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
@@ -185,8 +185,8 @@ static void test_simple_coordinate_descent_main(UpdateFixture *fixture, gconstpo
 	fixture->p = 630;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX2Small.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, FALSE);
-	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, 0.01, fixture->lambda, "cyclic", 10, 0, 0, 0.0, 1.0001);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1, FALSE);
+	fixture->beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->xmatrix.actual_cols, -1, 0.01, fixture->lambda, "cyclic", 10, 0, 0, 0.0, 1.0001);
 
 	double acceptable_diff = 10;
 	for (int i = 0; i < fixture->p; i++) {
@@ -210,7 +210,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	printf("starting interaction test\n");
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, shuffle);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, -1, shuffle);
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
@@ -247,11 +247,11 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture, gco
 	fixture->p = 35;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, FALSE);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 1, -1, FALSE);
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
-	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, 0.05, 1000, "cyclic", 100, 1, 0, 0.01, 1.0001);
+	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, "cyclic", 100, 1, 0, 0.01, 1.0001);
 
 	double acceptable_diff = 10;
 	int no_agreeing = 0;
@@ -295,7 +295,7 @@ static void test_find_beta_sets() {
 		X[i] = malloc(n*sizeof(int));
 		memcpy(X[i], Xt[i], n*sizeof(int));
 	}
-	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0, FALSE);
+	XMatrix_sparse x2col = sparse_X2_from_X(X, n, p, 0, -1, FALSE);
 	//XMatrix_sparse_row x2row = sparse_horizontal_X2_from_X(X, n, p, 0);
 
 	//printf("\nsparse row 0 (%d entries):\n", x2row.row_nz[0]);
@@ -335,7 +335,7 @@ static void test_find_beta_sets() {
 	p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
+	x2col = sparse_X2_from_X(xmatrix.X, n, p, 1, -1, FALSE);
 	//x2row = sparse_horizontal_X2_from_X(xmatrix.X, n, p, 1);
 	beta_sets = find_beta_sets(x2col, p_int, n, 0.0);
 
@@ -383,7 +383,7 @@ static void check_X2_encoding() {
 	int p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, 1, FALSE);
+	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, 1, -1, FALSE);
 
 	// mean entry size
 	long total = 0;
@@ -557,7 +557,7 @@ static void check_merge_n_set_up(Merge_Fixture *fixture, gconstpointer user_data
 			offset++;
 		}
 	}
-	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(X, n, p, 1, FALSE);
+	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(X, n, p, 1, -1, FALSE);
 	Mergeset *all_sets = malloc(p_int*sizeof(Mergeset));
 	int *valid_mergesets = malloc(p_int*sizeof(int));
 

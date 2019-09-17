@@ -50,6 +50,7 @@ int min(int a, int b) {
 
 static int N;
 
+//TODO: the compiler should really do this
 void initialise_static_resources() {
 	for (int i = 0; i < 60; i++) {
 		max_size_given_entries[i] = 60/(i+1);
@@ -64,6 +65,15 @@ void free_static_resources() {
 		free(global_permutation_inverse);
 	if (cached_nums != NULL)
 		free(cached_nums);
+}
+
+int get_p_int(int p, int max_interaction_distance) {
+	int p_int = 0;
+	//if (max_interaction_distance <= 0 || max_interaction_distance >= p/2)
+		p_int = (p*(p+1))/2;
+	//else
+	//	p_int = p*(2*max_interaction_distance+1);
+	return p_int;
 }
 
 S8bWord to_s8b(int count, int *vals) {
@@ -746,9 +756,6 @@ double soft_threshold(double z, double gamma) {
 		return val;
 }
 
-// separated to make profiling easier.
-// TODO: this is taking most of the time, worth avoiding.
-//		- has not been adjusted for on the fly X2.
 double get_sump(int p, int k, int i, double *beta, int **X) {
 	double sump = 0;
 	for (int j = 0; j < p; j++) {
@@ -784,12 +791,14 @@ int_pair get_num(int num, int p) {
 	return cached_nums[num_post_permutation];
 }
 
-int_pair *get_all_nums(int p) {
-	int p_int = p*(p+1)/2;
+int_pair *get_all_nums(int p, int max_interaction_distance) {
+	int p_int = get_p_int(p, max_interaction_distance);
+	if (max_interaction_distance == -1)
+		max_interaction_distance = p_int/2+1;
 	int_pair *nums = malloc(p_int*sizeof(int_pair));
 	int offset = 0;
 	for (int i = 0; i < p; i++) {
-		for (int j = i; j < p; j++) {
+		for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
 			int_pair ip;
 			ip.i = i;
 			ip.j = j;
@@ -997,7 +1006,7 @@ double calculate_error(int USE_INT, int n, int p_int, XMatrix_sparse X2, double 
  * TODO: add an intercept
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
-double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed, double halt_beta_diff) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, int max_interaction_distance, double lambda_min, double lambda_max, char *method, int max_iter, int USE_INT, int verbose, double frac_overlap_allowed, double halt_beta_diff) {
 	// TODO: until converged
 		// TODO: for each main effect x_i or interaction x_ij
 			// TODO: choose index i to update uniformly at random
@@ -1016,7 +1025,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//move(7,0);
 	//Rprintf("calculating sparse interaction matrix (cols): \n");
 	//refresh();
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, max_interaction_distance, TRUE);
 	//printw("calculating sparse interaction matrix (rows): \n");
 	//XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
@@ -1025,8 +1034,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		max_cumulative_rowsums[i] = 0;
 	}
 
-
-	int p_int = p*(p+1)/2;
+	int p_int = get_p_int(p, max_interaction_distance);
+	if (max_interaction_distance == -1) {
+		max_interaction_distance = p_int/2+1;
+	}
 	double *beta;
 	if (USE_INT) {
 		beta = malloc(p_int*sizeof(double)); // probably too big in most cases.
@@ -1040,7 +1051,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		precalc_get_num = malloc(p_int*sizeof(int_pair));
 		int offset = 0;
 		for (int i = 0; i < p; i++) {
-			for (int j = i; j < p; j++) {
+			for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
 				precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].i = i;
 				precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].j = j;
 				offset++;
@@ -1050,7 +1061,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		p_int = p;
 	}
 
-	cached_nums = get_all_nums(p);
+	cached_nums = get_all_nums(p, max_interaction_distance);
 
 	double error = 0.0, prev_error;
 	for (int i = 0; i < n; i++) {
@@ -1279,6 +1290,33 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	free(precalc_get_num);
 	Rprintf("entries: performed %d zero updates (%f%%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
+	//TODO: this really should be 0. Fix things until it is.
+	Rprintf("checking how much rowsums have diverged:\n");
+	double *temp_rowsum = malloc(n*sizeof(double));
+	memset(temp_rowsum, 0, n*sizeof(double));
+	for (int col = 0; col < p_int; col++) {
+		int entry = -1;
+		for (int i = 0; i < X2.col_nwords[col]; i++) {
+			S8bWord word = X2.compressed_indices[col][i];
+			for (int j = 0; j < group_size[word.selector]; j++) {
+				int diff = word.values & masks[word.selector];
+				if (diff != 0) {
+					entry += diff;
+					temp_rowsum[entry] += beta[col];
+				}
+				word.values >>= item_width[word.selector];
+			}
+		}
+	}
+	double total_rowsum_diff = 0;
+	double frac_rowsum_diff = 0;
+	for (int i = 0; i < n; i++) {
+		total_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i]));
+		if (fabs(rowsum[i]) > 1)
+			frac_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i])/rowsum[i]);
+	}
+	Rprintf("mean diff: %.2f (%.2f%%)\n", total_rowsum_diff/n, (frac_rowsum_diff*100));
+	free(temp_rowsum);
 
 	Rprintf("freeing stuff\n");
 	// free beta sets
@@ -1294,7 +1332,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			free(X2.col_nz_indices[i]);
 		#endif
 		#endif
-		free(X2.compressed_indices[i]);
+		if (X2.col_nwords[i] > 0)
+			free(X2.compressed_indices[i]);
 	}
 	#ifdef DENSE_X2
 	free(X2.col_nz_indices);
@@ -1323,25 +1362,34 @@ int **X2_from_X(int **X, int n, int p) {
 
 
 // TODO: write a test comparing this to non-sparse X2
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle) {
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int max_interaction_distance, int shuffle) {
 	XMatrix_sparse X2;
 	int colno, val, length;
-	int p_int = (p*(p+1))/2;
+	
 	int iter_done = 0;
 	int actual_p_int = 0;
+	int p_int = p*(p+1)/2;
+	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
+	p_int = get_p_int(p, max_interaction_distance);
+	if (max_interaction_distance < 0)
+		max_interaction_distance = p;
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	if (!USE_INT) {
 		X2.compressed_indices = malloc(p*sizeof(int *));
 		X2.col_nz_indices = malloc(p*sizeof(int *));
 		X2.col_nz = malloc(p*sizeof(int));
+		memset(X2.col_nz, 0, p*sizeof(int));
 		X2.col_nwords = malloc(p*sizeof(int));
+		memset(X2.col_nwords, 0, p*sizeof(int));
 		actual_p_int = p;
 	} else {
 		X2.compressed_indices = malloc(p_int*sizeof(int *));
 		X2.col_nz_indices = malloc(p_int*sizeof(int *));
 		X2.col_nz = malloc(p_int*sizeof(int));
+		memset(X2.col_nz, 0, p_int*sizeof(int));
 		X2.col_nwords = malloc(p_int*sizeof(int));
+		memset(X2.col_nwords, 0, p_int*sizeof(int));
 		actual_p_int = p_int;
 	}
 
@@ -1350,13 +1398,15 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 	//TODO: iter_done isn't exactly being updated safely
 	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
 	for (int i = 0; i < p; i++) {
-		for (int j = i; j < p; j++) {
+		for (int j = i; j < min(i+max_interaction_distance,p); j++) {
+		//for (int j = i; j < p; j++) {
 			GQueue *current_col = g_queue_new();
 			GQueue *current_col_actual = g_queue_new();
 			// only include main effects (where i==j) unless USE_INT is set.
 			if (USE_INT || j == i) {
 				if (USE_INT)
 					// worked out by hand as being equivalent to the offset we would have reached.
+					//TODO: include max_interaction_distance
 					colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
 				else
 					colno = i;
