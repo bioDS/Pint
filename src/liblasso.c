@@ -873,6 +873,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	if (Bk_diff != 0) {
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			int i = column_entries[e];
+			#pragma omp atomic
 			rowsum[i] += Bk_diff;
 			update_max_rowsums(rowsum[i]);
 		}
