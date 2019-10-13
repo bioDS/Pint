@@ -954,6 +954,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
 	return dBMax;
 }
 
+//TODO: think about +ve and -ve Y/rowsums here, this doesn't seem right
 int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
 	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
 		return TRUE;
