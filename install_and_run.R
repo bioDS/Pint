@@ -7,7 +7,7 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args >= 2)) {
 	f <- (args[2])
 } else {
-	#f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
+ # f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
   #f <- "../xyz-simulation/simulated_lethal_data/n1000_p100_SNR5_nbi10_nbij50_nlethals10_viol0_78568.rds"
   #f <- "../xyz-simulation/simulated_data/n1000_p100_SNR5_nbi10_nbij50_nlethals5_viol0_23649.rds"
   f <- "../xyz-simulation/simulated_data/n10000_p1000_SNR10_nbi0_nbij1000_nlethals0_viol0_11504.rds"
@@ -28,7 +28,7 @@ d <- readRDS(f)
 X <- d$X
 Y <- d$Y
 
-result <- overlap_lasso(X, Y, lambda_min = 0.04)
+result <- overlap_lasso(X, Y, lambda_min = 0.04, max_interaction_distance=-1)
 
 obs <- d$obs
 bij_ind <- d$bij_ind
@@ -56,3 +56,6 @@ fx_int <- data.frame(gene_i = result$interaction_effects$i, gene_j = result$inte
   tbl_df
 
 fx_int %>% data.frame
+
+count(result$interaction_effects)
+count(result$main_effects)

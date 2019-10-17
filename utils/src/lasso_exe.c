@@ -5,8 +5,8 @@
 enum Output_Mode {quit, file, terminal};
 
 int main(int argc, char** argv) {
-	if (argc != 10) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [frac overlap allowed] [q/t/filename]\n");
+	if (argc != 11) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename]\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
 
 	char *scale = argv[3];
 	char *verbose = argv[2];
-	char *output_filename = argv[9];
+	char *output_filename = argv[10];
 	FILE *output_file = NULL;
 
 	enum Output_Mode output_mode = terminal;
@@ -58,7 +58,10 @@ int main(int argc, char** argv) {
 	int P = atoi(argv[7]);
 	printf("using N = %d, P = %d\n", N, P);
 
-	double overlap = atof(argv[8]);
+	int max_interaction_distance = atoi(argv[8]);
+	printf("using max interaction distance: %d\n", max_interaction_distance);
+
+	double overlap = atof(argv[9]);
 	printf("using frac: %.2f\n", overlap);
 	
 	initialise_static_resources();
@@ -89,7 +92,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, 0.04, lambda, "cyclic", 100, USE_INT, VERBOSE, overlap);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 40, lambda, "cyclic", 10000, USE_INT, VERBOSE, overlap, 1.0001);
 	int nbeta_int = nbeta;
 	if (USE_INT) {
 		nbeta_int = nbeta*(nbeta+1)/2;
@@ -119,8 +122,8 @@ int main(int argc, char** argv) {
 	printf("freeing X/Y\n");
 	switch(output_mode){
 		case terminal:
-			for (int i = 0; i < nbeta_int && printed < 10; i++) {
-				if (fabs(beta[i]) > 1) {
+			for (int i = 0; i < nbeta_int && printed < 100; i++) {
+				if (fabs(beta[i]) > 500) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
@@ -130,7 +133,6 @@ int main(int argc, char** argv) {
 						printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 				}
 			}
-			printf("finished! press q to exit");
 		break;
 		case file:
 			for (int i = 0; i < nbeta_int; i++) {
