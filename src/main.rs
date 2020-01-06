@@ -1,9 +1,8 @@
 use std::fs::File;
-//use std::env;
-//use std::error::Error;
-//use std::ffi::OsString;
-//use std::process;
+use clap::{Arg, App, SubCommand};
 
+//TODO: use bitpacking
+//TODO: multithreading
 
 struct XMatrix {
     rows: Vec<Vec<bool>>
@@ -54,29 +53,30 @@ mod tests {
 }
 
 fn main() {
-    let X_row = read_x_csv("testX.csv");
+    let matches = App::new("cli lasso")
+                    .version("0.1")
+                    .arg(Arg::with_name("xmatrix")
+                         .short("x")
+                         .long("xmatrix")
+                         .value_name("FILE")
+                         .help(".csv file for X matrix")
+                         .takes_value(true))
+                    .arg(Arg::with_name("ymatrix")
+                         .short("y")
+                         .long("ymatrix")
+                         .value_name("FILE")
+                         .help(".csv file for Y matrix")
+                         .takes_value(true))
+                    .get_matches();
+
+    let x_filename = matches.value_of("xmatrix").unwrap_or("testX.csv");
+    let y_filename = matches.value_of("ymatrix").unwrap_or("testY.csv");
+
+    let X_row = read_x_csv(x_filename);
     let X_col = row_to_col(X_row);
-    let Y = read_y_csv("testY.csv");
+    let Y = read_y_csv(y_filename);
 
     let X2 = x_to_x2_sparse_col(&X_col);
-
-    // print sparse X2 to file
-    //for col_ind in 0..X2.column_indices.len() {
-    //    let col = &X2.column_indices[col_ind];
-    //    print!("\"{}\"", col_ind);
-    //    for entry in col {
-    //        print!(",{}", entry);
-    //    }
-    //    println!();
-    //}
-    //let testX2 = read_x_csv("./testX2.csv");
-    //for col_ind in 0..X2.column_indices.len() {
-    //    let col = &X2.column_indices[col_ind];
-    //    for entry in col {
-    //        assert!(testX2.rows[*entry][col_ind]);
-    //    }
-    //}
-
 
     let beta = simple_coordinate_descent_lasso(&X2, Y);
 
