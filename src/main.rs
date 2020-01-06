@@ -37,8 +37,8 @@ mod tests {
     fn test_sparse_x2() {
         let X_row = read_x_csv("testX.csv");
         let X_col = row_to_col(X_row);
-        let Y = read_y_csv();
-        let X2 = x_to_x2_sparse_col(X_col);
+        let Y = read_y_csv("testY.csv");
+        let X2 = x_to_x2_sparse_col(&X_col);
 
         let testX2 = read_x_csv("./testX2.csv");
         for col_ind in 0..X2.column_indices.len() {
@@ -56,9 +56,9 @@ mod tests {
 fn main() {
     let X_row = read_x_csv("testX.csv");
     let X_col = row_to_col(X_row);
-    let Y = read_y_csv();
+    let Y = read_y_csv("testY.csv");
 
-    let X2 = x_to_x2_sparse_col(X_col);
+    let X2 = x_to_x2_sparse_col(&X_col);
 
     // print sparse X2 to file
     //for col_ind in 0..X2.column_indices.len() {
@@ -84,12 +84,16 @@ fn main() {
     for b_ind in 0..beta.len() {
         let b = &beta[b_ind];
         if b.abs() > 500.0 {
-            println!("{}: {}", b_ind, b);
+            let (i1, i2) = match (get_num(b_ind, X_col.cols.len())) {
+                Ok(x) => x,
+                Err(e) => panic!(e),
+            };
+            println!("{} ({},{}): {}", b_ind, i1, i2, b);
         }
     }
 }
 
-fn x_to_x2_sparse_col(X: XMatrix_Cols) -> Sparse_Xmatrix {
+fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
     let p = X.cols.len();
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
     let n = X.cols[0].len();
@@ -204,6 +208,19 @@ fn simple_coordinate_descent_lasso(X: &Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<f64>
     beta
 }
 
+fn get_num(n: usize, p: usize) -> Result<(usize, usize), &'static str> {
+    let mut offset = 0;
+    for i in 0..p {
+        for j in i..p {
+            if offset == n {
+                return Ok((i+1,j+1));
+            }
+            offset += 1;
+        }
+    }
+    Err("Could not find value")
+}
+
 fn calculate_error(rowsums: &Vec<f64>, Y: &Vec<f64>) -> f64 {
     let mut error = 0.0;
     for ind in 0..Y.len() {
@@ -279,9 +296,8 @@ fn read_x_csv(file_path: &str) -> XMatrix {
     return XMatrix { rows };
 }
 
-fn read_y_csv() -> Vec<f64> {
+fn read_y_csv(file_path: &str) -> Vec<f64> {
     let mut rows: Vec<f64> = Vec::new();
-    let file_path = "testY.csv";
     let file = match File::open(file_path) {
         Ok(x) => x,
         Err(e) => panic!("couldn't open file")
