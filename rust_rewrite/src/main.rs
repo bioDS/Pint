@@ -1,6 +1,6 @@
 use std::fs::File;
 use clap::{Arg, App, SubCommand};
-use bitpacking::{BitPacker8x, BitPacker};
+use bitpacking::{BitPacker4x, BitPacker};
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 
@@ -21,7 +21,7 @@ struct Compressed_Column {
 struct ColumnIterator<'a> {
     column: &'a Compressed_Column,
     index: usize,
-    bitpacker: BitPacker8x,
+    bitpacker: BitPacker4x,
     last_value: u32,
     prev_pos: usize,
 }
@@ -39,7 +39,7 @@ impl Iterator for ColumnIterator<'_> {
         assert!(self.column.block_inf.len() > 0);
         let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
         //println!("len: {}, bits: {}, actual_entries {}", compressed_len, num_bits, actual_entries);
-        let mut decompressed = vec![0_u32; BitPacker8x::BLOCK_LEN];
+        let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
         //println!("reading from {}. {} entries. starting at position {} in bytes. reading {} bytes", self.last_value, actual_entries, self.prev_pos, compressed_len);
         bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut decompressed[..], num_bits);
         //print!("old prev_pos: {}", self.prev_pos);
@@ -63,7 +63,7 @@ impl Iterator for ColumnIterator<'_> {
 //        ColumnIterator {
 //            column: &self,
 //            index: 0,
-//            bitpacker: BitPacker8x::new(),
+//            bitpacker: BitPacker4x::new(),
 //            last_value: 0,
 //            prev_pos: 0
 //        }
@@ -79,7 +79,7 @@ impl<'a> IntoIterator for &'a Compressed_Column {
         ColumnIterator {
             column: self,
             index: 0,
-            bitpacker: BitPacker8x::new(),
+            bitpacker: BitPacker4x::new(),
             last_value: 0,
             prev_pos: 0
         }
@@ -94,7 +94,7 @@ struct Sparse_Xmatrix {
     n: usize,
     p: usize,
     compressed_columns: Vec<Compressed_Column>,
-    bitpacker: bitpacking::BitPacker8x
+    bitpacker: bitpacking::BitPacker4x
 }
 
 trait matrix_functions {
@@ -152,8 +152,8 @@ mod tests {
         for _i in 0..n {
             my_data.push(my_data.last().unwrap_or(&0_u32) + rng.gen_range(0,100));
         }
-        let bitpacker = BitPacker8x::new();
-        let block_len = BitPacker8x::BLOCK_LEN;
+        let bitpacker = BitPacker4x::new();
+        let block_len = BitPacker4x::BLOCK_LEN;
         let mut compressed_col: Vec<u8> = Vec::new();
         let mut compressed_lens = Vec::new();
 
@@ -168,7 +168,7 @@ mod tests {
             let actual_entries = min(n - ind*block_len, block_len);
             println!("actual_entries: {}", actual_entries);
             let num_bits: u8 = bitpacker.num_bits(&my_data[ind*block_len..(ind+1)*block_len]);
-            let mut compressed = vec![0_u8; 8*BitPacker8x::BLOCK_LEN];
+            let mut compressed = vec![0_u8; 8*BitPacker4x::BLOCK_LEN];
             let compressed_len = bitpacker.compress_sorted(last_value, &my_data[ind*block_len..(ind+1)*block_len], &mut compressed[..], num_bits);
             last_value = my_data[ind*block_len + actual_entries - 1];
             println!("new last value: {}", last_value);
@@ -184,7 +184,7 @@ mod tests {
         let mut last_value = 0;
         for (compressed_len, num_bits, actual_entries) in &compressed_lens {
             println!("len: {}, bits: {}", compressed_len, num_bits);
-            let mut decompressed = vec![0_u32; BitPacker8x::BLOCK_LEN];
+            let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
             println!("prev_pos: {}", prev_pos);
             bitpacker.decompress_sorted(last_value, &compressed_col[prev_pos..prev_pos+compressed_len], &mut decompressed[..], *num_bits);
             last_value = decompressed[actual_entries - 1];
@@ -257,8 +257,8 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
     println!("building X2. n = {}, p = {}", n, p);
     let mut col_ind = 0;
 
-    let bitpacker = BitPacker8x::new();
-    let block_len = BitPacker8x::BLOCK_LEN;
+    let bitpacker = BitPacker4x::new();
+    let block_len = BitPacker4x::BLOCK_LEN;
     let mut compressed_columns: Vec<Compressed_Column> = Vec::new();
 
     for col1_ind in 0..p {
@@ -277,14 +277,14 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
             let mut compressed_col: Vec<u8> = Vec::new();
             let mut compressed_lens: Vec<(usize, u8, usize)> = Vec::new();
             let mut last_value = 0;
-            if current_col_indices.len() % BitPacker8x::BLOCK_LEN != 0 {
-                current_col_indices.resize((current_col_indices.len()/BitPacker8x::BLOCK_LEN +1)*BitPacker8x::BLOCK_LEN, *current_col_indices.last().unwrap_or(&0));
+            if current_col_indices.len() % BitPacker4x::BLOCK_LEN != 0 {
+                current_col_indices.resize((current_col_indices.len()/BitPacker4x::BLOCK_LEN +1)*BitPacker4x::BLOCK_LEN, *current_col_indices.last().unwrap_or(&0));
             }
 
             for ind in 0..(current_col_indices.len() as usize/block_len) {
                 let actual_entries = min(size - ind*block_len, block_len);
                 let num_bits: u8 = bitpacker.num_bits(&current_col_indices[ind*block_len..(ind+1)*block_len]);
-                let mut compressed = vec![0_u8; 8*BitPacker8x::BLOCK_LEN];
+                let mut compressed = vec![0_u8; 8*BitPacker4x::BLOCK_LEN];
                 let compressed_len = bitpacker.compress_sorted(last_value, &current_col_indices[ind*block_len..(ind+1)*block_len], &mut compressed[..], num_bits);
                 last_value = current_col_indices[ind*block_len + actual_entries - 1];
                 //println!("new last value: {}", last_value);
