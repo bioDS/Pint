@@ -33,49 +33,25 @@ impl Iterator for ColumnIterator<'_> {
         if self.index == self.column.block_inf.len() {
             return None;
         }
-        //println!("doing something");
         let bitpacker = self.bitpacker;
         let mut col_ind = 0;
         assert!(self.column.block_inf.len() > 0);
         let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
-        //println!("len: {}, bits: {}, actual_entries {}", compressed_len, num_bits, actual_entries);
         let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
-        //println!("reading from {}. {} entries. starting at position {} in bytes. reading {} bytes", self.last_value, actual_entries, self.prev_pos, compressed_len);
         bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut decompressed[..], num_bits);
-        //print!("old prev_pos: {}", self.prev_pos);
         self.prev_pos += compressed_len;
-        //println!(", new prev_pos: {}", self.prev_pos);
         self.index += 1;
         self.last_value = decompressed[actual_entries - 1];
         decompressed.resize(actual_entries, 0);
-        //println!("new last value: {}", self.last_value);
-        //println!("first value: {} last value {}", decompressed[0], self.last_value);
         Some(decompressed)
     }
 }
-
-//impl<'a> IntoIterator for Compressed_Column {
-//    type Item = Vec<u32>;
-//    type IntoIter = ColumnIterator<'a>;
-//
-//    fn into_iter(self) -> ColumnIterator<'a> {
-//        //println!("self.block_inf.len() {}, size {}", self.block_inf.len(), self.size);
-//        ColumnIterator {
-//            column: &self,
-//            index: 0,
-//            bitpacker: BitPacker4x::new(),
-//            last_value: 0,
-//            prev_pos: 0
-//        }
-//    }
-//}
 
 impl<'a> IntoIterator for &'a Compressed_Column {
     type Item = Vec<u32>;
     type IntoIter = ColumnIterator<'a>;
 
     fn into_iter(self) -> ColumnIterator<'a> {
-        //println!("self.block_inf.len() {}, size {}", self.block_inf.len(), self.size);
         ColumnIterator {
             column: self,
             index: 0,
@@ -148,7 +124,6 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut my_data: Vec<u32> = Vec::new();
         let n = 513;
-        //let my_data: Vec<u32> = (0..n).collect();
         for _i in 0..n {
             my_data.push(my_data.last().unwrap_or(&0_u32) + rng.gen_range(0,100));
         }
@@ -183,12 +158,9 @@ mod tests {
         let mut found = 0;
         let mut last_value = 0;
         for (compressed_len, num_bits, actual_entries) in &compressed_lens {
-            println!("len: {}, bits: {}", compressed_len, num_bits);
             let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
-            println!("prev_pos: {}", prev_pos);
             bitpacker.decompress_sorted(last_value, &compressed_col[prev_pos..prev_pos+compressed_len], &mut decompressed[..], *num_bits);
             last_value = decompressed[actual_entries - 1];
-            println!("new last value: {}", last_value);
             prev_pos += compressed_len;
 
             assert_eq!(&my_data[count..count+*actual_entries], &decompressed[..*actual_entries]);
@@ -287,14 +259,11 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
                 let mut compressed = vec![0_u8; 8*BitPacker4x::BLOCK_LEN];
                 let compressed_len = bitpacker.compress_sorted(last_value, &current_col_indices[ind*block_len..(ind+1)*block_len], &mut compressed[..], num_bits);
                 last_value = current_col_indices[ind*block_len + actual_entries - 1];
-                //println!("new last value: {}", last_value);
 
-                //println!("adding ({},{})", compressed_len, num_bits);
                 compressed_lens.push((compressed_len, num_bits, actual_entries));
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            //println!("pushing size {}, lens {}", size, compressed_lens.len());
             compressed_columns.push(Compressed_Column { bytes: compressed_col, block_inf: compressed_lens, size});
 
             col_ind += 1;
@@ -313,7 +282,6 @@ fn row_to_col(row_X: XMatrix) -> XMatrix_Cols {
 
     for row_ind in 0..n {
         for col_ind in 0..p {
-            //println!("col: {}, row: {}", col_ind, row_ind);
             cols[col_ind][row_ind] = rows[row_ind][col_ind];
         }
     }
@@ -365,21 +333,16 @@ fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<f64> 
     let mut error = calculate_error(&rowsum, &Y);
     println!("for testing purposes, initial e is {:.2}", error as f64);
     let mut column_iter: Vec<ColumnIterator> = Vec::new();
-    //for i in 0..X.compressed_columns.len() {
-    //    column_iter.push(X.compressed_columns[i].into_iter());
-    //}
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
             let mut k = 0;
-            //for (col) in &column_iter {
             for (k,column) in X.compressed_columns.iter().enumerate() {
                 update_beta_cyclic(&column, &Y, &mut beta, n, p, &mut rowsum, lambda, k);
             }
             let prev_error = error;
             error = calculate_error(&rowsum, &Y);
-            //println!("error: {}", error);
             if prev_error/error < halt_beta_diff {
                 println!("Change was {:.2}. Halting after {} iterations. e: {:.2}", (prev_error/error), iter, error as f64);
                 break;
@@ -463,7 +426,6 @@ fn read_x_csv(file_path: &str) -> XMatrix {
     };
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(file);
 
-    let mut row = 0;
     for record in reader.records() {
         let mut new_row: Vec<bool> = Vec::new();
         let actual_record = match record {
@@ -493,7 +455,6 @@ fn read_y_csv(file_path: &str) -> Vec<f64> {
     };
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(file);
 
-    let mut row = 0;
     for record in reader.records() {
         let actual_record = match record {
             Ok(r) => r,
