@@ -1,34 +1,27 @@
 use std::fs::File;
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 use bitpacking::{BitPacker4x, BitPacker};
-use rand::{thread_rng, Rng};
 use std::cmp::min;
 use rayon::prelude::*;
 use crossbeam_utils::atomic::AtomicCell;
-use std::sync::mpsc;
-use std::thread;
 use std::sync::Arc;
 
-//TODO: use bitpacking
-//TODO: multithreading
 //TODO: replace actual_entries with final block
-
-//impl Eq for f64 {
-//}
+//TODO: shuffle column order
+//TODO: limit threads
 
 struct XMatrix {
     rows: Vec<Vec<bool>>
 }
 
-struct Compressed_Column {
+struct CompressedColumn {
     bytes: Vec<u8>,
     block_inf: Vec<(usize, u8, usize)>, //compressed_len, num_bits, actual_entries
     size: usize,
-    index: usize,
 }
 
 struct ColumnIterator<'a> {
-    column: &'a Compressed_Column,
+    column: &'a CompressedColumn,
     index: usize,
     bitpacker: BitPacker4x,
     last_value: u32,
@@ -56,7 +49,7 @@ impl Iterator for ColumnIterator<'_> {
     }
 }
 
-impl<'a> IntoIterator for &'a Compressed_Column {
+impl<'a> IntoIterator for &'a CompressedColumn {
     type Item = Vec<u32>;
     type IntoIter = ColumnIterator<'a>;
 
@@ -71,22 +64,21 @@ impl<'a> IntoIterator for &'a Compressed_Column {
     }
 }
 
-struct XMatrix_Cols {
+struct XMatrixCols {
     cols: Vec<Vec<bool>>
 }
 
-struct Sparse_Xmatrix {
+struct SparseXmatrix {
     n: usize,
     p: usize,
-    compressed_columns: Vec<Compressed_Column>,
-    bitpacker: bitpacking::BitPacker4x
+    compressed_columns: Vec<CompressedColumn>,
 }
 
-trait matrix_functions {
+trait MatrixFunctions {
     fn next(&self);
 }
 
-impl matrix_functions for Sparse_Xmatrix {
+impl MatrixFunctions for SparseXmatrix {
     fn next(&self) {
     }
 }
@@ -177,7 +169,7 @@ mod tests {
             count += block_len;
         }
         count = 0;
-        let cc = Compressed_Column { size: n, bytes: compressed_col, block_inf: compressed_lens };
+        let cc = CompressedColumn { size: n, bytes: compressed_col, block_inf: compressed_lens };
         for block in &cc {
             for entry in block {
                 assert_eq!(entry, my_data[count]);
@@ -231,7 +223,7 @@ fn main() {
     }
 }
 
-fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
+fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
     let p = X.cols.len();
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
     let n = X.cols[0].len();
@@ -240,7 +232,7 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
 
     let bitpacker = BitPacker4x::new();
     let block_len = BitPacker4x::BLOCK_LEN;
-    let mut compressed_columns: Vec<Compressed_Column> = Vec::new();
+    let mut compressed_columns: Vec<CompressedColumn> = Vec::new();
 
     for col1_ind in 0..p {
         for col2_ind in col1_ind..p {
@@ -273,16 +265,16 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            compressed_columns.push(Compressed_Column { bytes: compressed_col, block_inf: compressed_lens, size, index: col_ind});
+            compressed_columns.push(CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size});
 
             col_ind += 1;
         }
     }
 
-    Sparse_Xmatrix { n, p: p_int, compressed_columns, bitpacker }
+    SparseXmatrix { n, p: p_int, compressed_columns, bitpacker }
 }
 
-fn row_to_col(row_X: XMatrix) -> XMatrix_Cols {
+fn row_to_col(row_X: XMatrix) -> XMatrixCols {
     let rows = row_X.rows;
     let n = rows.len();
     let p = rows[0].len();
@@ -295,42 +287,11 @@ fn row_to_col(row_X: XMatrix) -> XMatrix_Cols {
         }
     }
 
-    XMatrix_Cols {cols}
-}
-
-fn print_x2_to_stdout(X2: &Vec<Vec<bool>>) {
-    let mut row_count = 0;
-    for row in X2 {
-        print!("\"{}\"", row_count);
-        for col in row {
-            if *col == true {
-                print!(",{}", 1);
-            } else {
-                print!(",{}", 0);
-            }
-        }
-        row_count += 1;
-        println!();
-    }
-}
-
-fn X2_from_X(X: XMatrix) -> Vec<Vec<bool>> {
-    let mut X2 = Vec::new();
-    for row in &X.rows {
-        let mut new_row: Vec<bool> = Vec::with_capacity(row.len()*row.len());
-        for i in 0..row.len() {
-            for j in i..row.len() {
-                new_row.push(row[i] && row[j]);
-            }
-        }
-        X2.push(new_row);
-    }
-
-    X2
+    XMatrixCols {cols}
 }
 
 // X should be column major
-fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
+fn simple_coordinate_descent_lasso(X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
     let p = X.p;
     let n = X.n;
     println!("p: {}, n: {}", p, n);
@@ -350,54 +311,11 @@ fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<Arc<A
     println!("for testing purposes, initial e is {:.2}", error as f64);
     let mut column_iter: Vec<ColumnIterator> = Vec::new();
 
-    // divide the columns into per-thread groups. Allocate message passing structures.
-    //let num_threads = 2;
-    //let iter_end_barrier = std::sync::Barrier::new(num_threads);
-    //let mut thread_handles = Vec::with_capacity(num_threads);
-    //let col_chunks = vec![&X.compressed_columns[1..p/2], &X.compressed_columns[p/2..]];
-    //let (tx, rx) = mpsc::channel::<Vec<(usize, f64)>>();
 
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
-            //let mut k = 0;
-            //let test: usize = X.compressed_columns.par_iter().map(|col| col.size).sum();
-            //X.compressed_columns.par_iter_mut().map(|mut column| beta_change(&mut column, &Y, &beta, n, p, &rowsum, lambda, 0));
-            //let beta_updates: Vec<(usize, f64)> = (0..X.compressed_columns.len()).collect::<Vec<usize>>().par_iter_mut().map(|k| (*k,beta_change(&X.compressed_columns[*k], &Y, &beta, n, p, &rowsum, lambda, *k))).collect();
-            //for (beta_index, update) in beta_updates {
-            //    beta[beta_index] += update;
-            //}
-            // update rowsums. TODO: this should happen immediately above, as it is we have
-            // problems.
-            //rowsum = Y.clone();
-            //for (k,column) in X.compressed_columns.iter().enumerate() {
-            //    for block in column {
-            //        for entry in block {
-            //            rowsum[entry as usize] += beta[k];
-
-            //        }
-            //    }
-            //}
-
-            // update all rowsums, using message passing to communicate changes in beta
-            //for thread_columns in &col_chunks {
-            //    let tx = tx.clone();
-            //    thread_handles.push(thread::spawn(|| {
-            //        for column in *thread_columns {
-            //            let beta_updates = beta_change(&column, &Y, &beta, n, p, &rowsum, lambda, column.index);
-            //        }
-            //    }));
-            //}
-            //for handle in thread_handles {
-            //    handle.join().unwrap();
-            //}
-
-            // single-threaded version
-            //for (k,column) in X.compressed_columns.iter().enumerate() {
-            //    update_beta_cyclic(&column, &Y, &mut beta, n, p, &mut rowsum, lambda, k);
-            //}
-            // parallel version
             X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
                 update_beta_cyclic(&column, &Y, &beta, n, p, &rowsum, lambda, k);
             });
@@ -439,7 +357,7 @@ fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     error
 }
 
-fn beta_change(column: &Compressed_Column, Y: &Vec<f64>, beta: &Vec<f64>, n: usize, p: usize, rowsum: &Vec<f64>, lambda: f64, k: usize) -> f64 {
+fn beta_change(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<f64>, n: usize, p: usize, rowsum: &Vec<f64>, lambda: f64, k: usize) -> f64 {
     let sumk = column.size as f64;
     let mut sumn = sumk * beta[k];
     let old_beta_k = beta[k];
@@ -454,7 +372,7 @@ fn beta_change(column: &Compressed_Column, Y: &Vec<f64>, beta: &Vec<f64>, n: usi
         soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk - old_beta_k
     }
 }
-fn update_beta_cyclic(column: &Compressed_Column, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, k: usize) {
+fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, k: usize) {
     let sumk = column.size as f64;
     let mut sumn = sumk * f64::from_bits(beta[k].load());
     let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
