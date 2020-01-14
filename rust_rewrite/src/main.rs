@@ -3,10 +3,18 @@ use clap::{Arg, App, SubCommand};
 use bitpacking::{BitPacker4x, BitPacker};
 use rand::{thread_rng, Rng};
 use std::cmp::min;
+use rayon::prelude::*;
+use crossbeam_utils::atomic::AtomicCell;
+use std::sync::mpsc;
+use std::thread;
+use std::sync::Arc;
 
 //TODO: use bitpacking
 //TODO: multithreading
 //TODO: replace actual_entries with final block
+
+//impl Eq for f64 {
+//}
 
 struct XMatrix {
     rows: Vec<Vec<bool>>
@@ -16,6 +24,7 @@ struct Compressed_Column {
     bytes: Vec<u8>,
     block_inf: Vec<(usize, u8, usize)>, //compressed_len, num_bits, actual_entries
     size: usize,
+    index: usize,
 }
 
 struct ColumnIterator<'a> {
@@ -211,7 +220,7 @@ fn main() {
 
     // find large looking beta values
     for b_ind in 0..beta.len() {
-        let b = &beta[b_ind];
+        let b = f64::from_bits(beta[b_ind].load());
         if b.abs() > 500.0 {
             let (i1, i2) = match (get_num(b_ind, X_col.cols.len())) {
                 Ok(x) => x,
@@ -264,7 +273,7 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            compressed_columns.push(Compressed_Column { bytes: compressed_col, block_inf: compressed_lens, size});
+            compressed_columns.push(Compressed_Column { bytes: compressed_col, block_inf: compressed_lens, size, index: col_ind});
 
             col_ind += 1;
         }
@@ -321,26 +330,78 @@ fn X2_from_X(X: XMatrix) -> Vec<Vec<bool>> {
 }
 
 // X should be column major
-fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<f64> {
+fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
     let p = X.p;
     let n = X.n;
     println!("p: {}, n: {}", p, n);
-    let mut beta = vec![0.0; p];
-    let mut rowsum = vec![0.0; n];
-    let mut colsums = vec![0; p];
+    //let mut beta = vec![0.0; p];
+    let mut beta = Vec::with_capacity(p);
+    //let mut rowsum = vec![0.0; n];
+    let mut rowsum = Vec::with_capacity(n);//vec![AtomicCell::new(0.0); n];
+    for _ in 0..n {
+        rowsum.push(Arc::new(AtomicCell::new(0)));
+    }
+    for _ in 0..p {
+        beta.push(Arc::new(AtomicCell::new(0)));
+    }
     let mut lambda = 100.0; //TODO: find max lambda;
     let halt_beta_diff = 1.0001;
     let mut error = calculate_error(&rowsum, &Y);
     println!("for testing purposes, initial e is {:.2}", error as f64);
     let mut column_iter: Vec<ColumnIterator> = Vec::new();
+
+    // divide the columns into per-thread groups. Allocate message passing structures.
+    //let num_threads = 2;
+    //let iter_end_barrier = std::sync::Barrier::new(num_threads);
+    //let mut thread_handles = Vec::with_capacity(num_threads);
+    //let col_chunks = vec![&X.compressed_columns[1..p/2], &X.compressed_columns[p/2..]];
+    //let (tx, rx) = mpsc::channel::<Vec<(usize, f64)>>();
+
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
-            let mut k = 0;
-            for (k,column) in X.compressed_columns.iter().enumerate() {
-                update_beta_cyclic(&column, &Y, &mut beta, n, p, &mut rowsum, lambda, k);
-            }
+            //let mut k = 0;
+            //let test: usize = X.compressed_columns.par_iter().map(|col| col.size).sum();
+            //X.compressed_columns.par_iter_mut().map(|mut column| beta_change(&mut column, &Y, &beta, n, p, &rowsum, lambda, 0));
+            //let beta_updates: Vec<(usize, f64)> = (0..X.compressed_columns.len()).collect::<Vec<usize>>().par_iter_mut().map(|k| (*k,beta_change(&X.compressed_columns[*k], &Y, &beta, n, p, &rowsum, lambda, *k))).collect();
+            //for (beta_index, update) in beta_updates {
+            //    beta[beta_index] += update;
+            //}
+            // update rowsums. TODO: this should happen immediately above, as it is we have
+            // problems.
+            //rowsum = Y.clone();
+            //for (k,column) in X.compressed_columns.iter().enumerate() {
+            //    for block in column {
+            //        for entry in block {
+            //            rowsum[entry as usize] += beta[k];
+
+            //        }
+            //    }
+            //}
+
+            // update all rowsums, using message passing to communicate changes in beta
+            //for thread_columns in &col_chunks {
+            //    let tx = tx.clone();
+            //    thread_handles.push(thread::spawn(|| {
+            //        for column in *thread_columns {
+            //            let beta_updates = beta_change(&column, &Y, &beta, n, p, &rowsum, lambda, column.index);
+            //        }
+            //    }));
+            //}
+            //for handle in thread_handles {
+            //    handle.join().unwrap();
+            //}
+
+            // single-threaded version
+            //for (k,column) in X.compressed_columns.iter().enumerate() {
+            //    update_beta_cyclic(&column, &Y, &mut beta, n, p, &mut rowsum, lambda, k);
+            //}
+            // parallel version
+            X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
+                update_beta_cyclic(&column, &Y, &beta, n, p, &rowsum, lambda, k);
+            });
+
             let prev_error = error;
             error = calculate_error(&rowsum, &Y);
             if prev_error/error < halt_beta_diff {
@@ -370,35 +431,56 @@ fn get_num(n: usize, p: usize) -> Result<(usize, usize), &'static str> {
     Err("Could not find value")
 }
 
-fn calculate_error(rowsums: &Vec<f64>, Y: &Vec<f64>) -> f64 {
+fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     let mut error = 0.0;
     for ind in 0..Y.len() {
-        error += (Y[ind] - rowsums[ind] as f64).powi(2);
+        error += (Y[ind] - f64::from_bits(rowsums[ind].load()) as f64).powi(2);
     }
     error
 }
 
-fn update_beta_cyclic(column: &Compressed_Column, Y: &Vec<f64>, beta: &mut Vec<f64>, n: usize, p: usize, rowsum: &mut Vec<f64>, lambda: f64, k: usize) {
+fn beta_change(column: &Compressed_Column, Y: &Vec<f64>, beta: &Vec<f64>, n: usize, p: usize, rowsum: &Vec<f64>, lambda: f64, k: usize) -> f64 {
     let sumk = column.size as f64;
     let mut sumn = sumk * beta[k];
-    let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
     let old_beta_k = beta[k];
     for block in column.into_iter() {
         for entry in block {
             sumn += Y[entry as usize] - rowsum[entry as usize] as f64;
+        }
+    }
+    if sumk == 0.0 {
+        0.0
+    } else {
+        soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk - old_beta_k
+    }
+}
+fn update_beta_cyclic(column: &Compressed_Column, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, k: usize) {
+    let sumk = column.size as f64;
+    let mut sumn = sumk * f64::from_bits(beta[k].load());
+    let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
+    let old_beta_k = f64::from_bits(beta[k].load());
+    for block in column.into_iter() {
+        for entry in block {
+            sumn += Y[entry as usize] - f64::from_bits(rowsum[entry as usize].load());
             complete_row.push(entry as usize);
         }
     }
     if sumk == 0.0 {
-        beta[k] = 0.0;
+        beta[k].store(0);
     } else {
-        beta[k] = soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk;
-    }
-    let beta_k_diff = beta[k] - old_beta_k;
-    // update rowsums if we have to
+        let new_beta_k = soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk;
+        beta[k].store(new_beta_k.to_bits());
+    let beta_k_diff = new_beta_k - old_beta_k;
     if beta_k_diff != 0.0 {
-        for i in complete_row {
-            rowsum[i] += beta_k_diff;
+        // update rowsums if we have to
+            for i in complete_row {
+                let mut current_rowsum = rowsum[i].load();
+                let mut new_rowsum = current_rowsum + 1;
+                while new_rowsum != current_rowsum {
+                    current_rowsum = rowsum[i].load();
+                    new_rowsum = rowsum[i].compare_and_swap(current_rowsum, (f64::from_bits(current_rowsum) + beta_k_diff).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
+                }
+            }
         }
     }
 }
