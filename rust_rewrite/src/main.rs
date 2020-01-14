@@ -36,7 +36,6 @@ impl Iterator for ColumnIterator<'_> {
             return None;
         }
         let bitpacker = self.bitpacker;
-        let mut col_ind = 0;
         assert!(self.column.block_inf.len() > 0);
         let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
         let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
@@ -228,14 +227,13 @@ fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
     let n = X.cols[0].len();
     println!("building X2. n = {}, p = {}", n, p);
-    let mut col_ind = 0;
 
     let bitpacker = BitPacker4x::new();
     let block_len = BitPacker4x::BLOCK_LEN;
     let mut compressed_columns: Vec<CompressedColumn> = Vec::new();
 
     for col1_ind in 0..p {
-        for col2_ind in col1_ind..p {
+        compressed_columns.par_extend((col1_ind..p).into_par_iter().map(|col2_ind| {
             let mut current_col_indices: Vec<u32> = Vec::new();
             let col1 = &X.cols[col1_ind];
             let col2 = &X.cols[col2_ind];
@@ -265,13 +263,11 @@ fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            compressed_columns.push(CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size});
-
-            col_ind += 1;
-        }
+            CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size}
+        }));
     }
 
-    SparseXmatrix { n, p: p_int, compressed_columns, bitpacker }
+    SparseXmatrix { n, p: p_int, compressed_columns }
 }
 
 fn row_to_col(row_X: XMatrix) -> XMatrixCols {
