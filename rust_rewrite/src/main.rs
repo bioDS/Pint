@@ -6,6 +6,7 @@ use rayon::prelude::*;
 use crossbeam_utils::atomic::AtomicCell;
 use std::sync::Arc;
 
+
 //TODO: replace actual_entries with final block
 //TODO: shuffle column order
 //TODO: limit threads
@@ -92,6 +93,7 @@ mod tests {
         let X_col = row_to_col(X_row);
         let Y = read_y_csv("testY.csv");
         let X2 = x_to_x2_sparse_col(&X_col);
+
 
         let testX2 = read_x_csv("./testX2.csv");
         let mut actual_count: usize = 0;
@@ -204,6 +206,7 @@ fn main() {
     let X_col = row_to_col(X_row);
     let Y = read_y_csv(y_filename);
     println!("Y is {}", Y.len());
+    assert_eq!(X_col.cols[0].len(), Y.len());
 
     let X2 = x_to_x2_sparse_col(&X_col);
 
@@ -230,10 +233,10 @@ fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
 
     let bitpacker = BitPacker4x::new();
     let block_len = BitPacker4x::BLOCK_LEN;
-    let mut compressed_columns: Vec<CompressedColumn> = Vec::new();
 
-    for col1_ind in 0..p {
-        compressed_columns.par_extend((col1_ind..p).into_par_iter().map(|col2_ind| {
+    //compressed_columns.
+    let compressed_columns = ((0..p).into_par_iter().flat_map(|col1_ind| {
+        let compressed_combined_col: Vec<CompressedColumn> = (col1_ind..p).into_par_iter().map(|col2_ind| {
             let mut current_col_indices: Vec<u32> = Vec::new();
             let col1 = &X.cols[col1_ind];
             let col2 = &X.cols[col2_ind];
@@ -264,8 +267,9 @@ fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
             }
 
             CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size}
-        }));
-    }
+        }).collect();
+        compressed_combined_col
+    })).collect();
 
     SparseXmatrix { n, p: p_int, compressed_columns }
 }
@@ -353,21 +357,6 @@ fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     error
 }
 
-fn beta_change(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<f64>, n: usize, p: usize, rowsum: &Vec<f64>, lambda: f64, k: usize) -> f64 {
-    let sumk = column.size as f64;
-    let mut sumn = sumk * beta[k];
-    let old_beta_k = beta[k];
-    for block in column.into_iter() {
-        for entry in block {
-            sumn += Y[entry as usize] - rowsum[entry as usize] as f64;
-        }
-    }
-    if sumk == 0.0 {
-        0.0
-    } else {
-        soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk - old_beta_k
-    }
-}
 fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, k: usize) {
     let sumk = column.size as f64;
     let mut sumn = sumk * f64::from_bits(beta[k].load());
@@ -388,15 +377,25 @@ fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<At
     if beta_k_diff != 0.0 {
         // update rowsums if we have to
             for i in complete_row {
-                let mut current_rowsum = rowsum[i].load();
-                let mut new_rowsum = current_rowsum + 1;
-                while new_rowsum != current_rowsum {
-                    current_rowsum = rowsum[i].load();
-                    new_rowsum = rowsum[i].compare_and_swap(current_rowsum, (f64::from_bits(current_rowsum) + beta_k_diff).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
-                }
+                atomic_inc(&rowsum[i], beta_k_diff);
+                //let mut current_rowsum = rowsum[i].load();
+                //let mut new_rowsum = current_rowsum + 1;
+                //while new_rowsum != current_rowsum {
+                //    current_rowsum = rowsum[i].load();
+                //    new_rowsum = rowsum[i].compare_and_swap(current_rowsum, (f64::from_bits(current_rowsum) + beta_k_diff).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
+                //}
             }
         }
     }
+}
+
+fn atomic_inc(cell: &Arc<AtomicCell<u64>>, inc_value: f64) {
+                let mut current_value = cell.load();
+                let mut new_value = current_value + 1;
+                while new_value != current_value {
+                    current_value = cell.load();
+                    new_value = cell.compare_and_swap(current_value, (f64::from_bits(current_value) + inc_value).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
+                }
 }
 
 fn soft_threshold(z: f64, gamma: f64) -> f64 {
