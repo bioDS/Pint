@@ -5,6 +5,10 @@ use std::cmp::min;
 use rayon::prelude::*;
 use crossbeam_utils::atomic::AtomicCell;
 use std::sync::Arc;
+use streaming_iterator::StreamingIterator;
+
+#[cfg(test)]
+use rand::{thread_rng, Rng};
 
 
 //TODO: replace actual_entries with final block
@@ -22,44 +26,63 @@ struct CompressedColumn {
 }
 
 struct ColumnIterator<'a> {
+    decompressed_block: Vec<u32>,
     column: &'a CompressedColumn,
     index: usize,
     bitpacker: BitPacker4x,
     last_value: u32,
     prev_pos: usize,
+    read_entries: usize,
 }
 
-impl Iterator for ColumnIterator<'_> {
-    type Item = Vec<u32>;
+trait IntoStreamingIterator<'a> {
+    fn into_streaming_iter(self) -> ColumnIterator<'a>;
+}
 
-    fn next(&mut self) -> Option<Vec<u32>> {
+impl<'a> StreamingIterator for ColumnIterator<'a> {
+    type Item = [u32];
+
+    fn advance (&mut self) {
         if self.index == self.column.block_inf.len() {
-            return None;
+            self.index += 1;
+            return;
         }
         let bitpacker = self.bitpacker;
         assert!(self.column.block_inf.len() > 0);
         let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
-        let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
-        bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut decompressed[..], num_bits);
+        //let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
+        //let decompressed = &mut self.decompressed_block;
+        bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut self.decompressed_block[..], num_bits);
         self.prev_pos += compressed_len;
         self.index += 1;
-        self.last_value = decompressed[actual_entries - 1];
-        decompressed.resize(actual_entries, 0);
-        Some(decompressed)
+        self.last_value = self.decompressed_block[actual_entries - 1];
+        self.read_entries = actual_entries;
+        //decompressed.resize(actual_entries, 0);
+        //Some(self.decompressed_block)
+    }
+
+    fn get(&self) -> Option<&[u32]> {
+        if self.index > self.column.block_inf.len() {
+            None
+        } else {
+            Some(&self.decompressed_block[..self.read_entries])
+        }
     }
 }
 
-impl<'a> IntoIterator for &'a CompressedColumn {
-    type Item = Vec<u32>;
-    type IntoIter = ColumnIterator<'a>;
+impl<'a> IntoStreamingIterator<'a> for &'a CompressedColumn {
+    //type Item = &'a Vec<u32>;
+    //type IntoIter = ColumnIterator<'a>;
 
-    fn into_iter(self) -> ColumnIterator<'a> {
+    fn into_streaming_iter(self) -> ColumnIterator<'a> {
         ColumnIterator {
+            decompressed_block: vec![0_u32; BitPacker4x::BLOCK_LEN],
             column: self,
             index: 0,
             bitpacker: BitPacker4x::new(),
             last_value: 0,
-            prev_pos: 0
+            prev_pos: 0,
+            read_entries: 0,
         }
     }
 }
@@ -101,19 +124,23 @@ mod tests {
             let size: usize = row.iter().map(|entry| if *entry==true {1} else {0}).sum();
             actual_count += size;
         }
-        let bitpacker = X2.bitpacker;
+        let bitpacker = BitPacker4x;
         let mut col_ind = 0;
         let mut count = 0;
         for column in X2.compressed_columns {
-            for block in &column {
+            let mut column_iter = column.into_streaming_iter();
+            let old_count = count;
+            while let Some(block) = column_iter.next() {
+            //for block in &column {
                 for entry in block {
-                    if !testX2.rows[entry as usize][col_ind] {
+                    if !testX2.rows[*entry as usize][col_ind] {
                         println!("col {} row {} not present in testX2.csv (count {})", col_ind, entry, count);
                     }
-                    assert!(testX2.rows[entry as usize][col_ind]);
+                    assert!(testX2.rows[*entry as usize][col_ind]);
                     count += 1;
                 }
             }
+            assert_eq!(count - old_count, column.size);
 
             col_ind += 1;
         }
@@ -171,9 +198,10 @@ mod tests {
         }
         count = 0;
         let cc = CompressedColumn { size: n, bytes: compressed_col, block_inf: compressed_lens };
-        for block in &cc {
+        let mut cc_iter = cc.into_streaming_iter();
+        while let Some(block) = cc_iter.next() {
             for entry in block {
-                assert_eq!(entry, my_data[count]);
+                assert_eq!(*entry, my_data[count]);
                 count += 1;
             }
         }
@@ -362,10 +390,12 @@ fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<At
     let mut sumn = sumk * f64::from_bits(beta[k].load());
     let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
     let old_beta_k = f64::from_bits(beta[k].load());
-    for block in column.into_iter() {
+    //for block in column.into_iter() {
+    let mut column_iter = column.into_streaming_iter();
+    while let Some(block) = column_iter.next() {
         for entry in block {
-            sumn += Y[entry as usize] - f64::from_bits(rowsum[entry as usize].load());
-            complete_row.push(entry as usize);
+            sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+            complete_row.push(*entry as usize);
         }
     }
     if sumk == 0.0 {
