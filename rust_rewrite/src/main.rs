@@ -6,9 +6,10 @@ use rayon::prelude::*;
 use crossbeam_utils::atomic::AtomicCell;
 use std::sync::Arc;
 use streaming_iterator::StreamingIterator;
-
-#[cfg(test)]
+use std::cell::{RefCell, RefMut};
 use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
+
 
 
 //TODO: replace actual_entries with final block
@@ -23,6 +24,7 @@ struct CompressedColumn {
     bytes: Vec<u8>,
     block_inf: Vec<(usize, u8, usize)>, //compressed_len, num_bits, actual_entries
     size: usize,
+    index: usize,
 }
 
 struct ColumnIterator<'a> {
@@ -33,6 +35,19 @@ struct ColumnIterator<'a> {
     last_value: u32,
     prev_pos: usize,
     read_entries: usize,
+}
+
+trait ReusableStreamingIterator {
+    fn clean(&mut self);
+}
+
+impl<'a> ReusableStreamingIterator for ColumnIterator<'a> {
+    fn clean(&mut self) {
+        self.index = 0;
+        self.last_value = 0;
+        self.prev_pos = 0;
+        self.read_entries = 0;
+    }
 }
 
 trait IntoStreamingIterator<'a> {
@@ -294,7 +309,8 @@ fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size}
+            let current_col_ind = (2*(p as isize -1) + 2*(p as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1))/2 + col2_ind as isize;
+            CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size, index: current_col_ind as usize}
         }).collect();
         compressed_combined_col
     })).collect();
@@ -318,8 +334,12 @@ fn row_to_col(row_X: XMatrix) -> XMatrixCols {
     XMatrixCols {cols}
 }
 
+thread_local! {
+    static COLUMN_CACHE: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+}
+
 // X should be column major
-fn simple_coordinate_descent_lasso(X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
+fn simple_coordinate_descent_lasso(mut X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
     let p = X.p;
     let n = X.n;
     println!("p: {}, n: {}", p, n);
@@ -337,15 +357,21 @@ fn simple_coordinate_descent_lasso(X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<At
     let halt_beta_diff = 1.0001;
     let mut error = calculate_error(&rowsum, &Y);
     println!("for testing purposes, initial e is {:.2}", error as f64);
-    let mut column_iter: Vec<ColumnIterator> = Vec::new();
 
+
+    let mut column_iters: Vec<ColumnIterator> = X.compressed_columns.iter().map(|col| col.into_streaming_iter()).collect();
 
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
-            X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
-                update_beta_cyclic(&column, &Y, &beta, n, p, &rowsum, lambda, k);
+            //X.compressed_columns.shuffle(&mut thread_rng());
+            //X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
+            column_iters.shuffle(&mut thread_rng());
+            column_iters.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                COLUMN_CACHE.with(|mut cache| {
+                    update_beta_cyclic(&mut column_iter, &Y, &beta, n, p, &rowsum, lambda, cache.borrow_mut());
+                });
             });
 
             let prev_error = error;
@@ -385,19 +411,26 @@ fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     error
 }
 
-fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, k: usize) {
-    let sumk = column.size as f64;
+fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, mut complete_row: RefMut<Vec<usize>>) {
+    column_iter.clean();
+    let k = column_iter.column.index;
+    let sumk = column_iter.column.size as f64;
     let mut sumn = sumk * f64::from_bits(beta[k].load());
-    let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
+    //let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
+    complete_row.clear();
     let old_beta_k = f64::from_bits(beta[k].load());
     //for block in column.into_iter() {
-    let mut column_iter = column.into_streaming_iter();
-    while let Some(block) = column_iter.next() {
-        for entry in block {
-            sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
-            complete_row.push(*entry as usize);
-        }
-    }
+
+    // use the function for debugging/profiling
+    read_iter_loop(column_iter, rowsum, &mut complete_row, &mut sumn, Y);
+    //let mut column_iter = column.into_streaming_iter();
+    //while let Some(block) = column_iter.next() {
+    //    for entry in block {
+    //        sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+    //        complete_row.push(*entry as usize);
+    //    }
+    //}
+
     if sumk == 0.0 {
         beta[k].store(0);
     } else {
@@ -406,8 +439,8 @@ fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<At
     let beta_k_diff = new_beta_k - old_beta_k;
     if beta_k_diff != 0.0 {
         // update rowsums if we have to
-            for i in complete_row {
-                atomic_inc(&rowsum[i], beta_k_diff);
+            for i in complete_row.iter() {
+                atomic_inc(&rowsum[*i], beta_k_diff);
                 //let mut current_rowsum = rowsum[i].load();
                 //let mut new_rowsum = current_rowsum + 1;
                 //while new_rowsum != current_rowsum {
@@ -415,6 +448,15 @@ fn update_beta_cyclic(column: &CompressedColumn, Y: &Vec<f64>, beta: &Vec<Arc<At
                 //    new_rowsum = rowsum[i].compare_and_swap(current_rowsum, (f64::from_bits(current_rowsum) + beta_k_diff).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
                 //}
             }
+        }
+    }
+}
+
+fn read_iter_loop(column_iter: &mut ColumnIterator, rowsum: &Vec<Arc<AtomicCell<u64>>>, complete_row: &mut RefMut<Vec<usize>>, sumn: &mut f64, Y: &[f64]) {
+    while let Some(block) = column_iter.next() {
+        for entry in block {
+            *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+            complete_row.push(*entry as usize);
         }
     }
 }
