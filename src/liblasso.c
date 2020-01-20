@@ -839,10 +839,11 @@ void update_max_rowsums(double new_value) {
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 //TODO: max lambda
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
-	int *column_entries = malloc(xmatrix_sparse.col_nz[k]*sizeof(int));
+	//int *column_entries = malloc(xmatrix_sparse.col_nz[k]*sizeof(int));
+	int *column_entries = column_entry_cache;
 	// From here on things should behave the same (this is set mostly for testing)
 	USE_INT = 1;
 
@@ -895,7 +896,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff *= Bk_diff;
 	if (Bk_diff > dBMax)
 		dBMax = Bk_diff;
-	free(column_entries);
+	//free(column_entries);
 	return dBMax;
 }
 
@@ -1173,6 +1174,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
+
+	int max_num_threads = omp_get_max_threads();
+	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
+	for (int i = 0; i <  max_num_threads; i++) {
+		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+	}
 	//int set_step_size
 	for (int iter = 0; lambda > final_lambda; iter++) {
 		//refresh();
@@ -1203,7 +1210,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 #endif
 				if (worth_updating(col_ysum, X2, k, n, lambda)) {
-					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 					total_updates++;
 					total_updates_entries += X2.col_nz[k];
 				}
