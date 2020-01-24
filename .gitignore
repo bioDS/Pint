@@ -1,3 +1,7 @@
+*
+!*.*
+
+
 ..Rcheck
 .kdev4
 .vscode
@@ -18,3 +22,14 @@ autoscan.log
 *.o
 *.so
 *test*
+*.pdf
+*.Po
+*.svg
+*.png
+*.csv
+*.bak
+*.rds
+*.history
+.RData
+.Rhistory
+*.code-workspace
