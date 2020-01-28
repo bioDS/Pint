@@ -4,6 +4,9 @@ use bitpacking::{BitPacker4x, BitPacker};
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 
+mod turbopfor;
+use crate::turbopfor::*;
+
 //TODO: use bitpacking
 //TODO: multithreading
 //TODO: replace actual_entries with final block

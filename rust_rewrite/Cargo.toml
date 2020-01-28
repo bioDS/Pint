@@ -3,9 +3,12 @@ name = "lasso_rust"
 version = "0.1.0"
 authors = ["Kieran Elmes <kelmes@caelus.nz>"]
 edition = "2018"
+links = "TurboPFor"
+build = "build.rs"
 
 [dependencies]
 csv = "1.1"
 clap = "2.33.0"
 bitpacking = "0.8.2"
 rand = "0.7.2"
+libc = "0.2.0"
