@@ -21,6 +21,11 @@ struct Compressed_Column {
     size: usize,
 }
 
+struct TurboPFor_Compressed_Column {
+    bytes: Vec<u8>,
+    size: usize
+}
+
 struct ColumnIterator<'a> {
     column: &'a Compressed_Column,
     index: usize,
@@ -98,6 +103,12 @@ struct Sparse_Xmatrix {
     p: usize,
     compressed_columns: Vec<Compressed_Column>,
     bitpacker: bitpacking::BitPacker4x
+}
+
+struct TurboPFor_Sparse_Xmatrix {
+    n: usize,
+    p: usize,
+    compressed_columns: Vec<TurboPFor_Compressed_Column>,
 }
 
 trait matrix_functions {
@@ -208,6 +219,37 @@ mod tests {
         }
         assert_eq!(found, n);
     }
+
+    fn test_turbopfor_matrix() {
+        let X_row = read_x_csv("testX.csv");
+        let X_col = row_to_col(X_row);
+        let Y = read_y_csv("testY.csv");
+        let X2 = x_to_x2_sparse_col(&X_col);
+
+        let testX2 = read_x_csv("./testX2.csv");
+        let mut actual_count: usize = 0;
+        for row in &testX2.rows {
+            let size: usize = row.iter().map(|entry| if *entry==true {1} else {0}).sum();
+            actual_count += size;
+        }
+        let mut col_ind = 0;
+        let mut count = 0;
+        for column in X2.compressed_columns {
+            for block in &column {
+                for entry in block {
+                    if !testX2.rows[entry as usize][col_ind] {
+                        println!("col {} row {} not present in testX2.csv (count {})", col_ind, entry, count);
+                    }
+                    assert!(testX2.rows[entry as usize][col_ind]);
+                    count += 1;
+                }
+            }
+
+            col_ind += 1;
+        }
+        assert_eq!(count, actual_count);
+        assert_eq!(col_ind, (X_col.cols.len()*(X_col.cols.len()+1))/2);
+    }
 }
 
 fn main() {
@@ -253,6 +295,43 @@ fn main() {
     }
 }
 
+fn x_to_x2_sparse_col_turbopfor(X: &XMatrix_Cols) -> TurboPFor_Sparse_Xmatrix {
+    let p = X.cols.len();
+    let p_int = (X.cols.len()*(X.cols.len()+1))/2;
+    let n = X.cols[0].len();
+    println!("building X2. n = {}, p = {}", n, p);
+    let mut col_ind = 0;
+
+    let mut compressed_columns: Vec<TurboPFor_Compressed_Column> = Vec::new();
+    let mut compressed_col_buffer = libc::malloc(std::mem::size_of::<i32>() * 4*n) as *mut u8;
+
+    let mut current_col_indices: Vec<u32> = Vec::new();
+    for col1_ind in 0..p {
+        for col2_ind in col1_ind..p {
+            let col1 = &X.cols[col1_ind];
+            let col2 = &X.cols[col2_ind];
+            let mut size = 0;
+            for k in 0..n {
+                if col1[k] == true && col2[k] == true{
+                    size += 1;
+                    current_col_indices.push(k as u32);
+                }
+            }
+
+            let mut compressed_col: Vec<u8> = Vec::new();
+
+            //TODO: actually compress the column
+            let compressed_size = compress_delta(&mut seq[..], array_size, arr);
+
+            //println!("pushing size {}, lens {}", size, compressed_lens.len());
+            compressed_columns.push(TurboPFor_Compressed_Column { bytes: compressed_col, size});
+
+            col_ind += 1;
+        }
+    }
+
+    TurboPFor_Sparse_Xmatrix { n, p: p_int, compressed_columns}
+}
 fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
     let p = X.cols.len();
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
