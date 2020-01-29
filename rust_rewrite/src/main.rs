@@ -222,22 +222,23 @@ mod tests {
             count += block_len;
         }
         count = 0;
-        let cc = CompressedColumn { size: n, bytes: compressed_col, block_inf: compressed_lens };
-        let mut cc_iter = cc.into_streaming_iter();
-        while let Some(block) = cc_iter.next() {
-            for entry in block {
-                assert_eq!(*entry, my_data[count]);
-                count += 1;
-            }
-        }
-        assert_eq!(found, n);
+        //let cc = CompressedColumn { size: n, bytes: compressed_col, block_inf: compressed_lens };
+        //let mut cc_iter = cc.into_streaming_iter();
+        //while let Some(block) = cc_iter.next() {
+        //    for entry in block {
+        //        assert_eq!(*entry, my_data[count]);
+        //        count += 1;
+        //    }
+        //}
+        //assert_eq!(found, n);
     }
 
+    #[test]
     fn test_turbopfor_matrix() {
         let X_row = read_x_csv("testX.csv");
         let X_col = row_to_col(X_row);
         let Y = read_y_csv("testY.csv");
-        let X2 = x_to_x2_sparse_col(&X_col);
+        let mut X2 = x_to_x2_sparse_col_turbopfor(&X_col);
 
         let testX2 = read_x_csv("./testX2.csv");
         let mut actual_count: usize = 0;
@@ -247,15 +248,16 @@ mod tests {
         }
         let mut col_ind = 0;
         let mut count = 0;
-        for column in X2.compressed_columns {
-            for block in &column {
-                for entry in block {
-                    if !testX2.rows[entry as usize][col_ind] {
-                        println!("col {} row {} not present in testX2.csv (count {})", col_ind, entry, count);
-                    }
-                    assert!(testX2.rows[entry as usize][col_ind]);
-                    count += 1;
+        let mut decompressed_column_buffer = vec![0_u32; X2.n];
+        for compressed_column in X2.compressed_columns {
+            decompress_delta(&compressed_column.bytes[..], compressed_column.size, &mut decompressed_column_buffer);
+            for entry in &decompressed_column_buffer {
+                println!("checking col {}, entry {}", col_ind, entry);
+                if !testX2.rows[*entry as usize][col_ind] {
+                    println!("col {} row {} not present in testX2.csv (count {})", col_ind, entry, count);
                 }
+                assert!(testX2.rows[*entry as usize][col_ind]);
+                count += 1;
             }
 
             col_ind += 1;
@@ -309,7 +311,7 @@ fn main() {
     }
 }
 
-fn x_to_x2_sparse_col_turbopfor(X: &XMatrix_Cols) -> TurboPFor_Sparse_Xmatrix {
+fn x_to_x2_sparse_col_turbopfor(X: &XMatrixCols) -> TurboPFor_Sparse_Xmatrix {
     let p = X.cols.len();
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
     let n = X.cols[0].len();
@@ -317,11 +319,13 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrix_Cols) -> TurboPFor_Sparse_Xmatrix {
     let mut col_ind = 0;
 
     let mut compressed_columns: Vec<TurboPFor_Compressed_Column> = Vec::new();
-    let mut compressed_col_buffer = libc::malloc(std::mem::size_of::<i32>() * 4*n) as *mut u8;
+    let mut compressed_col_buffer = vec![0_u8; n*4];
 
     let mut current_col_indices: Vec<u32> = Vec::new();
     for col1_ind in 0..p {
         for col2_ind in col1_ind..p {
+            current_col_indices.clear();
+            compressed_col_buffer.clear(); // shouldn't actually be necessary
             let col1 = &X.cols[col1_ind];
             let col2 = &X.cols[col2_ind];
             let mut size = 0;
@@ -332,13 +336,11 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrix_Cols) -> TurboPFor_Sparse_Xmatrix {
                 }
             }
 
-            let mut compressed_col: Vec<u8> = Vec::new();
+            let compressed_bytes = compress_delta(&mut current_col_indices[..]);
 
-            //TODO: actually compress the column
-            let compressed_size = compress_delta(&mut seq[..], array_size, arr);
-
+            assert_eq!(size, current_col_indices.len());
             //println!("pushing size {}, lens {}", size, compressed_lens.len());
-            compressed_columns.push(TurboPFor_Compressed_Column { bytes: compressed_col, size});
+            compressed_columns.push(TurboPFor_Compressed_Column { bytes: compressed_bytes, size});
 
             col_ind += 1;
         }

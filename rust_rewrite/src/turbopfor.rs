@@ -3,8 +3,8 @@ use libc::size_t;
 //#[link(name = "vp4c", kind="static")]
 #[link(name = "ic", kind="static")]
 extern {
-    pub fn p4ndenc32(in_: *mut u32, n: usize, out: *mut ::std::os::raw::c_uchar) -> usize;
-    pub fn p4nddec32(in_: *mut ::std::os::raw::c_uchar, n: usize, out: *mut u32) -> usize;
+    pub fn p4ndenc32(in_: *const u32, n: usize, out: *mut ::std::os::raw::c_uchar) -> usize;
+    pub fn p4nddec32(in_: *const::std::os::raw::c_uchar, n: usize, out: *mut u32) -> usize;
 }
 //#[link(name = "vp4d", kind="static")]
 //#[link(name = "bitunpack", kind="static")]
@@ -22,52 +22,53 @@ mod tests {
 
         let array_size = 100;
         let mut seq = [2_u32; 100];
-        //let mut seq2 = Box::new((1..100).collect());
         let mut seq2: Vec<u32> = (0..100).collect();
-        //let seq = vec![1_u32..100_u32];
-        //let test_seq = Box::new(seq.clone());
-        //let test_seq = [1; 100];
         let mut compressed_size = 0;
         let mut compressed_size2 = 0;
         unsafe {
-            let arr_ptr = libc::malloc(std::mem::size_of::<i32>() * array_size * 1);
-            let arr = arr_ptr as *mut u8;
-            let arr2_ptr = libc::malloc(std::mem::size_of::<i32>() * array_size * 1);
-            let arr2 = arr2_ptr as *mut u8;
-
             let mut test_arr = Box::new(vec![0_u32, array_size as u32]);
 
-            let compressed_size_test = compress_delta(&mut seq[..], array_size, arr2);
-            compressed_size = compress_delta(&mut seq[..], array_size, arr);
-            compressed_size2 = compress_delta(&mut seq2, array_size, arr2);
+            let compressed1: Vec<u8> = compress_delta(&mut seq[..]);
+            compressed_size = compressed1.len();
+            let mut compressed_seq = compress_delta(&mut seq2);
+            compressed_size2 = compressed_seq.len();
 
             println!("Compressed size: {}", compressed_size);
             println!("Compressed size 2: {}", compressed_size2);
 
-            let mut decompressed_seq = vec![0_u32; array_size * 2];
-            let decomrpessed_size = decompress_delta(arr2, array_size, &mut decompressed_seq);
+            let mut decompressed_seq = vec![0_u32; array_size*2];
+            let decomrpessed_size = decompress_delta(&mut compressed_seq, array_size, &mut decompressed_seq);
 
-            for element in &decompressed_seq[..array_size] {
+            for element in &decompressed_seq {
                 print!("{} ", element);
             }
             println!();
-
-
-            libc::free(arr_ptr);
-            libc::free(arr2_ptr);
-
-            println!("freed stuff from rust");
         }
     }
 }
 
-fn compress_delta(seq: &mut [u32], size: usize, arr: *mut ::std::os::raw::c_uchar) -> usize {
-    unsafe {
-        p4ndenc32(seq.as_mut_ptr(), size, arr)
+pub fn compress_delta(seq: &[u32]) -> Vec<u8> {
+    if seq.len() == 0 {
+        return vec![0_u8; 0];
     }
+    let size = seq.len();
+    let mut buffer = vec![0_u8; 16*size];
+    let mut compressed_size = -1;
+    //println!("size {}, capacity {}", size, buffer.capacity());
+    unsafe {
+        compressed_size = p4ndenc32(seq.as_ptr(), size, buffer.as_mut_ptr()) as isize;
+    }
+    if compressed_size < 0 {
+        panic!("failed to compress buffer");
+    }
+    buffer[..compressed_size as usize].to_vec()
 }
-fn decompress_delta(arr: *mut ::std::os::raw::c_uchar, size: usize, seq: &mut [u32]) -> usize {
+
+pub fn decompress_delta(arr: &[u8], size: usize, seq: &mut Vec<u32>) -> usize {
+    let mut bytes_read = -1;
+    seq.resize(size, 0);
     unsafe {
-        p4nddec32(arr, size, seq.as_mut_ptr())
+        bytes_read = p4nddec32(arr.as_ptr(), size, seq.as_mut_ptr()) as isize;
     }
+    bytes_read as usize
 }
