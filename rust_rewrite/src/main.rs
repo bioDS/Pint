@@ -28,7 +28,8 @@ struct CompressedColumn {
 
 struct TurboPFor_Compressed_Column {
     bytes: Vec<u8>,
-    size: usize
+    size: usize,
+    index: usize
 }
 
 struct ColumnIterator<'a> {
@@ -294,7 +295,7 @@ fn main() {
     println!("Y is {}", Y.len());
     assert_eq!(X_col.cols[0].len(), Y.len());
 
-    let X2 = x_to_x2_sparse_col(&X_col);
+    let X2 = x_to_x2_sparse_col_turbopfor(&X_col);
 
     let beta = simple_coordinate_descent_lasso(X2, Y);
 
@@ -318,14 +319,13 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrixCols) -> TurboPFor_Sparse_Xmatrix {
     println!("building X2. n = {}, p = {}", n, p);
     let mut col_ind = 0;
 
-    let mut compressed_columns: Vec<TurboPFor_Compressed_Column> = Vec::new();
-    let mut compressed_col_buffer = vec![0_u8; n*4];
+    //let mut compressed_columns: Vec<TurboPFor_Compressed_Column> = Vec::new();
+    //let mut compressed_col_buffer = vec![0_u8; n*4];
 
-    let mut current_col_indices: Vec<u32> = Vec::new();
-    for col1_ind in 0..p {
-        for col2_ind in col1_ind..p {
-            current_col_indices.clear();
-            compressed_col_buffer.clear(); // shouldn't actually be necessary
+    let compressed_columns = ((0..p).into_par_iter().flat_map(|col1_ind| {
+        let compressed_combined_col: Vec<TurboPFor_Compressed_Column> = (col1_ind..p).into_par_iter().map(|col2_ind| {
+            let mut current_col_indices: Vec<u32> = Vec::new();
+            //compressed_col_buffer.clear(); // shouldn't actually be necessary
             let col1 = &X.cols[col1_ind];
             let col2 = &X.cols[col2_ind];
             let mut size = 0;
@@ -340,11 +340,35 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrixCols) -> TurboPFor_Sparse_Xmatrix {
 
             assert_eq!(size, current_col_indices.len());
             //println!("pushing size {}, lens {}", size, compressed_lens.len());
-            compressed_columns.push(TurboPFor_Compressed_Column { bytes: compressed_bytes, size});
+            let current_col_ind = (2*(p as isize -1) + 2*(p as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1))/2 + col2_ind as isize;
+            TurboPFor_Compressed_Column { bytes: compressed_bytes, size, index: current_col_ind as usize}
+        }).collect();
+        compressed_combined_col
+    })).collect();
+    //let mut current_col_indices: Vec<u32> = Vec::new();
+    //for col1_ind in 0..p {
+    //    for col2_ind in col1_ind..p {
+    //        current_col_indices.clear();
+    //        compressed_col_buffer.clear(); // shouldn't actually be necessary
+    //        let col1 = &X.cols[col1_ind];
+    //        let col2 = &X.cols[col2_ind];
+    //        let mut size = 0;
+    //        for k in 0..n {
+    //            if col1[k] == true && col2[k] == true{
+    //                size += 1;
+    //                current_col_indices.push(k as u32);
+    //            }
+    //        }
 
-            col_ind += 1;
-        }
-    }
+    //        let compressed_bytes = compress_delta(&mut current_col_indices[..]);
+
+    //        assert_eq!(size, current_col_indices.len());
+    //        //println!("pushing size {}, lens {}", size, compressed_lens.len());
+    //        compressed_columns.push(TurboPFor_Compressed_Column { bytes: compressed_bytes, size, index: col_ind});
+
+    //        col_ind += 1;
+    //    }
+    //}
 
     TurboPFor_Sparse_Xmatrix { n, p: p_int, compressed_columns}
 }
@@ -416,11 +440,11 @@ fn row_to_col(row_X: XMatrix) -> XMatrixCols {
 }
 
 thread_local! {
-    static COLUMN_CACHE: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+    static COLUMN_CACHE: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 }
 
 // X should be column major
-fn simple_coordinate_descent_lasso(mut X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
+fn simple_coordinate_descent_lasso(mut X: TurboPFor_Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
     let p = X.p;
     let n = X.n;
     println!("p: {}, n: {}", p, n);
@@ -440,16 +464,15 @@ fn simple_coordinate_descent_lasso(mut X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Ar
     println!("for testing purposes, initial e is {:.2}", error as f64);
 
 
-    let mut column_iters: Vec<ColumnIterator> = X.compressed_columns.iter().map(|col| col.into_streaming_iter()).collect();
-
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
             //X.compressed_columns.shuffle(&mut thread_rng());
             //X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
-            column_iters.shuffle(&mut thread_rng());
-            column_iters.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+            X.compressed_columns.shuffle(&mut thread_rng());
+            X.compressed_columns.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+            //X.compressed_columns.iter_mut().enumerate().for_each(|(k, mut column_iter)|{
                 COLUMN_CACHE.with(|mut cache| {
                     update_beta_cyclic(&mut column_iter, &Y, &beta, n, p, &rowsum, lambda, cache.borrow_mut());
                 });
@@ -492,10 +515,9 @@ fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     error
 }
 
-fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, mut complete_row: RefMut<Vec<usize>>) {
-    column_iter.clean();
-    let k = column_iter.column.index;
-    let sumk = column_iter.column.size as f64;
+fn update_beta_cyclic(column: &mut TurboPFor_Compressed_Column, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, mut complete_row: RefMut<Vec<u32>>) {
+    let k = column.index;
+    let sumk = column.size as f64;
     let mut sumn = sumk * f64::from_bits(beta[k].load());
     //let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
     complete_row.clear();
@@ -503,7 +525,7 @@ fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec
     //for block in column.into_iter() {
 
     // use the function for debugging/profiling
-    read_iter_loop(column_iter, rowsum, &mut complete_row, &mut sumn, Y);
+    read_iter_loop(column, rowsum, &mut complete_row, &mut sumn, Y);
     //let mut column_iter = column.into_streaming_iter();
     //while let Some(block) = column_iter.next() {
     //    for entry in block {
@@ -521,7 +543,7 @@ fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec
     if beta_k_diff != 0.0 {
         // update rowsums if we have to
             for i in complete_row.iter() {
-                atomic_inc(&rowsum[*i], beta_k_diff);
+                atomic_inc(&rowsum[*i as usize], beta_k_diff);
                 //let mut current_rowsum = rowsum[i].load();
                 //let mut new_rowsum = current_rowsum + 1;
                 //while new_rowsum != current_rowsum {
@@ -533,12 +555,10 @@ fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec
     }
 }
 
-fn read_iter_loop(column_iter: &mut ColumnIterator, rowsum: &Vec<Arc<AtomicCell<u64>>>, complete_row: &mut RefMut<Vec<usize>>, sumn: &mut f64, Y: &[f64]) {
-    while let Some(block) = column_iter.next() {
-        for entry in block {
-            *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
-            complete_row.push(*entry as usize);
-        }
+fn read_iter_loop(column: &mut TurboPFor_Compressed_Column, rowsum: &Vec<Arc<AtomicCell<u64>>>, complete_row: &mut RefMut<Vec<u32>>, sumn: &mut f64, Y: &[f64]) {
+    decompress_delta(&column.bytes, column.size, complete_row.as_mut());
+    for entry in complete_row.as_slice() {
+        *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
     }
 }
 
