@@ -30,6 +30,7 @@ typedef struct {
 	double intercept;
 	XMatrix_sparse xmatrix_sparse;
 	int_pair *precalc_get_num;
+	int *column_cache;
 } UpdateFixture;
 
 typedef struct {
@@ -79,6 +80,7 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 
 	for (int i = 0; i < fixture->n; i++)
 		fixture->rowsum[i] = 0;
+	fixture->column_cache = malloc(fixture->n*sizeof(int));
 }
 
 static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
@@ -89,12 +91,13 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 	free(fixture->rowsum);
 	free(fixture->beta);
 	free(fixture->precalc_get_num);
+	free(fixture->column_cache);
 }
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1, FALSE);
-	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, 0, fixture->precalc_get_num);
+	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, 0, fixture->precalc_get_num, fixture->column_cache);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
@@ -220,7 +223,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, dBMax, 0, 1, fixture->precalc_get_num);
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, dBMax, 0, 1, fixture->precalc_get_num, fixture->column_cache);
 		}
 
 	int no_agreeing = 0;

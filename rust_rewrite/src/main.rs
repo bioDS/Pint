@@ -1,24 +1,29 @@
 use std::fs::File;
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 use bitpacking::{BitPacker4x, BitPacker};
-use rand::{thread_rng, Rng};
 use std::cmp::min;
+use rayon::prelude::*;
+use crossbeam_utils::atomic::AtomicCell;
+use std::sync::Arc;
+use streaming_iterator::StreamingIterator;
+use std::cell::{RefCell, RefMut};
+use rand::{thread_rng, Rng};
+use rand::seq::SliceRandom;
 
 mod turbopfor;
 use crate::turbopfor::*;
 
-//TODO: use bitpacking
-//TODO: multithreading
-//TODO: replace actual_entries with final block
+//TODO: limit threads
 
 struct XMatrix {
     rows: Vec<Vec<bool>>
 }
 
-struct Compressed_Column {
+struct CompressedColumn {
     bytes: Vec<u8>,
     block_inf: Vec<(usize, u8, usize)>, //compressed_len, num_bits, actual_entries
     size: usize,
+    index: usize,
 }
 
 struct TurboPFor_Compressed_Column {
@@ -27,82 +32,88 @@ struct TurboPFor_Compressed_Column {
 }
 
 struct ColumnIterator<'a> {
-    column: &'a Compressed_Column,
+    decompressed_block: Vec<u32>,
+    column: &'a CompressedColumn,
     index: usize,
     bitpacker: BitPacker4x,
     last_value: u32,
     prev_pos: usize,
+    read_entries: usize,
 }
 
-impl Iterator for ColumnIterator<'_> {
-    type Item = Vec<u32>;
+trait ReusableStreamingIterator {
+    fn clean(&mut self);
+}
 
-    fn next(&mut self) -> Option<Vec<u32>> {
-        if self.index == self.column.block_inf.len() {
-            return None;
-        }
-        //println!("doing something");
-        let bitpacker = self.bitpacker;
-        let mut col_ind = 0;
-        assert!(self.column.block_inf.len() > 0);
-        let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
-        //println!("len: {}, bits: {}, actual_entries {}", compressed_len, num_bits, actual_entries);
-        let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
-        //println!("reading from {}. {} entries. starting at position {} in bytes. reading {} bytes", self.last_value, actual_entries, self.prev_pos, compressed_len);
-        bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut decompressed[..], num_bits);
-        //print!("old prev_pos: {}", self.prev_pos);
-        self.prev_pos += compressed_len;
-        //println!(", new prev_pos: {}", self.prev_pos);
-        self.index += 1;
-        self.last_value = decompressed[actual_entries - 1];
-        decompressed.resize(actual_entries, 0);
-        //println!("new last value: {}", self.last_value);
-        //println!("first value: {} last value {}", decompressed[0], self.last_value);
-        Some(decompressed)
+impl<'a> ReusableStreamingIterator for ColumnIterator<'a> {
+    fn clean(&mut self) {
+        self.index = 0;
+        self.last_value = 0;
+        self.prev_pos = 0;
+        self.read_entries = 0;
     }
 }
 
-//impl<'a> IntoIterator for Compressed_Column {
-//    type Item = Vec<u32>;
-//    type IntoIter = ColumnIterator<'a>;
-//
-//    fn into_iter(self) -> ColumnIterator<'a> {
-//        //println!("self.block_inf.len() {}, size {}", self.block_inf.len(), self.size);
-//        ColumnIterator {
-//            column: &self,
-//            index: 0,
-//            bitpacker: BitPacker4x::new(),
-//            last_value: 0,
-//            prev_pos: 0
-//        }
-//    }
-//}
+trait IntoStreamingIterator<'a> {
+    fn into_streaming_iter(self) -> ColumnIterator<'a>;
+}
 
-impl<'a> IntoIterator for &'a Compressed_Column {
-    type Item = Vec<u32>;
-    type IntoIter = ColumnIterator<'a>;
+impl<'a> StreamingIterator for ColumnIterator<'a> {
+    type Item = [u32];
 
-    fn into_iter(self) -> ColumnIterator<'a> {
-        //println!("self.block_inf.len() {}, size {}", self.block_inf.len(), self.size);
+    fn advance (&mut self) {
+        if self.index == self.column.block_inf.len() {
+            self.index += 1;
+            return;
+        }
+        let bitpacker = self.bitpacker;
+        assert!(self.column.block_inf.len() > 0);
+        let (compressed_len,num_bits, actual_entries) = self.column.block_inf[self.index];
+        //let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
+        //let decompressed = &mut self.decompressed_block;
+        bitpacker.decompress_sorted(self.last_value, &self.column.bytes[self.prev_pos..self.prev_pos+compressed_len], &mut self.decompressed_block[..], num_bits);
+        self.prev_pos += compressed_len;
+        self.index += 1;
+        self.last_value = self.decompressed_block[actual_entries - 1];
+        self.read_entries = actual_entries;
+        //decompressed.resize(actual_entries, 0);
+        //Some(self.decompressed_block)
+    }
+
+    fn get(&self) -> Option<&[u32]> {
+        if self.index > self.column.block_inf.len() {
+            None
+        } else {
+            Some(&self.decompressed_block[..self.read_entries])
+        }
+    }
+}
+
+impl<'a> IntoStreamingIterator<'a> for &'a CompressedColumn {
+    //type Item = &'a Vec<u32>;
+    //type IntoIter = ColumnIterator<'a>;
+
+    fn into_streaming_iter(self) -> ColumnIterator<'a> {
         ColumnIterator {
+            decompressed_block: vec![0_u32; BitPacker4x::BLOCK_LEN],
             column: self,
             index: 0,
             bitpacker: BitPacker4x::new(),
             last_value: 0,
-            prev_pos: 0
+            prev_pos: 0,
+            read_entries: 0,
         }
     }
 }
 
-struct XMatrix_Cols {
+struct XMatrixCols {
     cols: Vec<Vec<bool>>
 }
 
-struct Sparse_Xmatrix {
+struct SparseXmatrix {
     n: usize,
     p: usize,
-    compressed_columns: Vec<Compressed_Column>,
-    bitpacker: bitpacking::BitPacker4x
+    compressed_columns: Vec<CompressedColumn>,
 }
 
 struct TurboPFor_Sparse_Xmatrix {
@@ -111,11 +122,11 @@ struct TurboPFor_Sparse_Xmatrix {
     compressed_columns: Vec<TurboPFor_Compressed_Column>,
 }
 
-trait matrix_functions {
+trait MatrixFunctions {
     fn next(&self);
 }
 
-impl matrix_functions for Sparse_Xmatrix {
+impl MatrixFunctions for SparseXmatrix {
     fn next(&self) {
     }
 }
@@ -131,25 +142,30 @@ mod tests {
         let Y = read_y_csv("testY.csv");
         let X2 = x_to_x2_sparse_col(&X_col);
 
+
         let testX2 = read_x_csv("./testX2.csv");
         let mut actual_count: usize = 0;
         for row in &testX2.rows {
             let size: usize = row.iter().map(|entry| if *entry==true {1} else {0}).sum();
             actual_count += size;
         }
-        let bitpacker = X2.bitpacker;
+        let bitpacker = BitPacker4x;
         let mut col_ind = 0;
         let mut count = 0;
         for column in X2.compressed_columns {
-            for block in &column {
+            let mut column_iter = column.into_streaming_iter();
+            let old_count = count;
+            while let Some(block) = column_iter.next() {
+            //for block in &column {
                 for entry in block {
-                    if !testX2.rows[entry as usize][col_ind] {
+                    if !testX2.rows[*entry as usize][col_ind] {
                         println!("col {} row {} not present in testX2.csv (count {})", col_ind, entry, count);
                     }
-                    assert!(testX2.rows[entry as usize][col_ind]);
+                    assert!(testX2.rows[*entry as usize][col_ind]);
                     count += 1;
                 }
             }
+            assert_eq!(count - old_count, column.size);
 
             col_ind += 1;
         }
@@ -162,7 +178,6 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mut my_data: Vec<u32> = Vec::new();
         let n = 513;
-        //let my_data: Vec<u32> = (0..n).collect();
         for _i in 0..n {
             my_data.push(my_data.last().unwrap_or(&0_u32) + rng.gen_range(0,100));
         }
@@ -197,12 +212,9 @@ mod tests {
         let mut found = 0;
         let mut last_value = 0;
         for (compressed_len, num_bits, actual_entries) in &compressed_lens {
-            println!("len: {}, bits: {}", compressed_len, num_bits);
             let mut decompressed = vec![0_u32; BitPacker4x::BLOCK_LEN];
-            println!("prev_pos: {}", prev_pos);
             bitpacker.decompress_sorted(last_value, &compressed_col[prev_pos..prev_pos+compressed_len], &mut decompressed[..], *num_bits);
             last_value = decompressed[actual_entries - 1];
-            println!("new last value: {}", last_value);
             prev_pos += compressed_len;
 
             assert_eq!(&my_data[count..count+*actual_entries], &decompressed[..*actual_entries]);
@@ -210,10 +222,11 @@ mod tests {
             count += block_len;
         }
         count = 0;
-        let cc = Compressed_Column { size: n, bytes: compressed_col, block_inf: compressed_lens };
-        for block in &cc {
+        let cc = CompressedColumn { size: n, bytes: compressed_col, block_inf: compressed_lens };
+        let mut cc_iter = cc.into_streaming_iter();
+        while let Some(block) = cc_iter.next() {
             for entry in block {
-                assert_eq!(entry, my_data[count]);
+                assert_eq!(*entry, my_data[count]);
                 count += 1;
             }
         }
@@ -277,6 +290,7 @@ fn main() {
     let X_col = row_to_col(X_row);
     let Y = read_y_csv(y_filename);
     println!("Y is {}", Y.len());
+    assert_eq!(X_col.cols[0].len(), Y.len());
 
     let X2 = x_to_x2_sparse_col(&X_col);
 
@@ -284,7 +298,7 @@ fn main() {
 
     // find large looking beta values
     for b_ind in 0..beta.len() {
-        let b = &beta[b_ind];
+        let b = f64::from_bits(beta[b_ind].load());
         if b.abs() > 500.0 {
             let (i1, i2) = match (get_num(b_ind, X_col.cols.len())) {
                 Ok(x) => x,
@@ -332,19 +346,19 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrix_Cols) -> TurboPFor_Sparse_Xmatrix {
 
     TurboPFor_Sparse_Xmatrix { n, p: p_int, compressed_columns}
 }
-fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
+
+fn x_to_x2_sparse_col(X: &XMatrixCols) -> SparseXmatrix {
     let p = X.cols.len();
     let p_int = (X.cols.len()*(X.cols.len()+1))/2;
     let n = X.cols[0].len();
     println!("building X2. n = {}, p = {}", n, p);
-    let mut col_ind = 0;
 
     let bitpacker = BitPacker4x::new();
     let block_len = BitPacker4x::BLOCK_LEN;
-    let mut compressed_columns: Vec<Compressed_Column> = Vec::new();
 
-    for col1_ind in 0..p {
-        for col2_ind in col1_ind..p {
+    //compressed_columns.
+    let compressed_columns = ((0..p).into_par_iter().flat_map(|col1_ind| {
+        let compressed_combined_col: Vec<CompressedColumn> = (col1_ind..p).into_par_iter().map(|col2_ind| {
             let mut current_col_indices: Vec<u32> = Vec::new();
             let col1 = &X.cols[col1_ind];
             let col2 = &X.cols[col2_ind];
@@ -369,24 +383,21 @@ fn x_to_x2_sparse_col(X: &XMatrix_Cols) -> Sparse_Xmatrix {
                 let mut compressed = vec![0_u8; 8*BitPacker4x::BLOCK_LEN];
                 let compressed_len = bitpacker.compress_sorted(last_value, &current_col_indices[ind*block_len..(ind+1)*block_len], &mut compressed[..], num_bits);
                 last_value = current_col_indices[ind*block_len + actual_entries - 1];
-                //println!("new last value: {}", last_value);
 
-                //println!("adding ({},{})", compressed_len, num_bits);
                 compressed_lens.push((compressed_len, num_bits, actual_entries));
                 compressed_col.extend_from_slice(&mut compressed[0..compressed_len]);
             }
 
-            //println!("pushing size {}, lens {}", size, compressed_lens.len());
-            compressed_columns.push(Compressed_Column { bytes: compressed_col, block_inf: compressed_lens, size});
+            let current_col_ind = (2*(p as isize -1) + 2*(p as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1)*(col1_ind as isize -1) - (col1_ind as isize -1))/2 + col2_ind as isize;
+            CompressedColumn { bytes: compressed_col, block_inf: compressed_lens, size, index: current_col_ind as usize}
+        }).collect();
+        compressed_combined_col
+    })).collect();
 
-            col_ind += 1;
-        }
-    }
-
-    Sparse_Xmatrix { n, p: p_int, compressed_columns, bitpacker }
+    SparseXmatrix { n, p: p_int, compressed_columns }
 }
 
-fn row_to_col(row_X: XMatrix) -> XMatrix_Cols {
+fn row_to_col(row_X: XMatrix) -> XMatrixCols {
     let rows = row_X.rows;
     let n = rows.len();
     let p = rows[0].len();
@@ -395,73 +406,55 @@ fn row_to_col(row_X: XMatrix) -> XMatrix_Cols {
 
     for row_ind in 0..n {
         for col_ind in 0..p {
-            //println!("col: {}, row: {}", col_ind, row_ind);
             cols[col_ind][row_ind] = rows[row_ind][col_ind];
         }
     }
 
-    XMatrix_Cols {cols}
+    XMatrixCols {cols}
 }
 
-fn print_x2_to_stdout(X2: &Vec<Vec<bool>>) {
-    let mut row_count = 0;
-    for row in X2 {
-        print!("\"{}\"", row_count);
-        for col in row {
-            if *col == true {
-                print!(",{}", 1);
-            } else {
-                print!(",{}", 0);
-            }
-        }
-        row_count += 1;
-        println!();
-    }
-}
-
-fn X2_from_X(X: XMatrix) -> Vec<Vec<bool>> {
-    let mut X2 = Vec::new();
-    for row in &X.rows {
-        let mut new_row: Vec<bool> = Vec::with_capacity(row.len()*row.len());
-        for i in 0..row.len() {
-            for j in i..row.len() {
-                new_row.push(row[i] && row[j]);
-            }
-        }
-        X2.push(new_row);
-    }
-
-    X2
+thread_local! {
+    static COLUMN_CACHE: RefCell<Vec<usize>> = RefCell::new(Vec::new());
 }
 
 // X should be column major
-fn simple_coordinate_descent_lasso(X: Sparse_Xmatrix, Y: Vec<f64>)  -> Vec<f64> {
+fn simple_coordinate_descent_lasso(mut X: SparseXmatrix, Y: Vec<f64>)  -> Vec<Arc<AtomicCell<u64>>> {
     let p = X.p;
     let n = X.n;
     println!("p: {}, n: {}", p, n);
-    let mut beta = vec![0.0; p];
-    let mut rowsum = vec![0.0; n];
-    let mut colsums = vec![0; p];
+    //let mut beta = vec![0.0; p];
+    let mut beta = Vec::with_capacity(p);
+    //let mut rowsum = vec![0.0; n];
+    let mut rowsum = Vec::with_capacity(n);//vec![AtomicCell::new(0.0); n];
+    for _ in 0..n {
+        rowsum.push(Arc::new(AtomicCell::new(0)));
+    }
+    for _ in 0..p {
+        beta.push(Arc::new(AtomicCell::new(0)));
+    }
     let mut lambda = 100.0; //TODO: find max lambda;
     let halt_beta_diff = 1.0001;
     let mut error = calculate_error(&rowsum, &Y);
     println!("for testing purposes, initial e is {:.2}", error as f64);
-    let mut column_iter: Vec<ColumnIterator> = Vec::new();
-    //for i in 0..X.compressed_columns.len() {
-    //    column_iter.push(X.compressed_columns[i].into_iter());
-    //}
+
+
+    let mut column_iters: Vec<ColumnIterator> = X.compressed_columns.iter().map(|col| col.into_streaming_iter()).collect();
+
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
         for iter in 0..100 {
             let mut iter_max_change = 0.0;
-            let mut k = 0;
-            //for (col) in &column_iter {
-            for (k,column) in X.compressed_columns.iter().enumerate() {
-                update_beta_cyclic(&column, &Y, &mut beta, n, p, &mut rowsum, lambda, k);
-            }
+            //X.compressed_columns.shuffle(&mut thread_rng());
+            //X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
+            column_iters.shuffle(&mut thread_rng());
+            column_iters.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                COLUMN_CACHE.with(|mut cache| {
+                    update_beta_cyclic(&mut column_iter, &Y, &beta, n, p, &rowsum, lambda, cache.borrow_mut());
+                });
+            });
+
             let prev_error = error;
             error = calculate_error(&rowsum, &Y);
-            //println!("error: {}", error);
             if prev_error/error < halt_beta_diff {
                 println!("Change was {:.2}. Halting after {} iterations. e: {:.2}", (prev_error/error), iter, error as f64);
                 break;
@@ -489,37 +482,71 @@ fn get_num(n: usize, p: usize) -> Result<(usize, usize), &'static str> {
     Err("Could not find value")
 }
 
-fn calculate_error(rowsums: &Vec<f64>, Y: &Vec<f64>) -> f64 {
+fn calculate_error(rowsums: &Vec<Arc<AtomicCell<u64>>>, Y: &Vec<f64>) -> f64 {
     let mut error = 0.0;
     for ind in 0..Y.len() {
-        error += (Y[ind] - rowsums[ind] as f64).powi(2);
+        error += (Y[ind] - f64::from_bits(rowsums[ind].load()) as f64).powi(2);
     }
     error
 }
 
-fn update_beta_cyclic(column: &Compressed_Column, Y: &Vec<f64>, beta: &mut Vec<f64>, n: usize, p: usize, rowsum: &mut Vec<f64>, lambda: f64, k: usize) {
-    let sumk = column.size as f64;
-    let mut sumn = sumk * beta[k];
-    let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
-    let old_beta_k = beta[k];
-    for block in column.into_iter() {
-        for entry in block {
-            sumn += Y[entry as usize] - rowsum[entry as usize] as f64;
-            complete_row.push(entry as usize);
-        }
-    }
+fn update_beta_cyclic(column_iter: &mut ColumnIterator, Y: &Vec<f64>, beta: &Vec<Arc<AtomicCell<u64>>>, n: usize, p: usize, rowsum: &Vec<Arc<AtomicCell<u64>>>, lambda: f64, mut complete_row: RefMut<Vec<usize>>) {
+    column_iter.clean();
+    let k = column_iter.column.index;
+    let sumk = column_iter.column.size as f64;
+    let mut sumn = sumk * f64::from_bits(beta[k].load());
+    //let mut complete_row: Vec<usize> = Vec::with_capacity(column.size);
+    complete_row.clear();
+    let old_beta_k = f64::from_bits(beta[k].load());
+    //for block in column.into_iter() {
+
+    // use the function for debugging/profiling
+    read_iter_loop(column_iter, rowsum, &mut complete_row, &mut sumn, Y);
+    //let mut column_iter = column.into_streaming_iter();
+    //while let Some(block) = column_iter.next() {
+    //    for entry in block {
+    //        sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+    //        complete_row.push(*entry as usize);
+    //    }
+    //}
+
     if sumk == 0.0 {
-        beta[k] = 0.0;
+        beta[k].store(0);
     } else {
-        beta[k] = soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk;
-    }
-    let beta_k_diff = beta[k] - old_beta_k;
-    // update rowsums if we have to
+        let new_beta_k = soft_threshold(sumn, lambda*(n as f64)/2.0)/sumk;
+        beta[k].store(new_beta_k.to_bits());
+    let beta_k_diff = new_beta_k - old_beta_k;
     if beta_k_diff != 0.0 {
-        for i in complete_row {
-            rowsum[i] += beta_k_diff;
+        // update rowsums if we have to
+            for i in complete_row.iter() {
+                atomic_inc(&rowsum[*i], beta_k_diff);
+                //let mut current_rowsum = rowsum[i].load();
+                //let mut new_rowsum = current_rowsum + 1;
+                //while new_rowsum != current_rowsum {
+                //    current_rowsum = rowsum[i].load();
+                //    new_rowsum = rowsum[i].compare_and_swap(current_rowsum, (f64::from_bits(current_rowsum) + beta_k_diff).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
+                //}
+            }
         }
     }
+}
+
+fn read_iter_loop(column_iter: &mut ColumnIterator, rowsum: &Vec<Arc<AtomicCell<u64>>>, complete_row: &mut RefMut<Vec<usize>>, sumn: &mut f64, Y: &[f64]) {
+    while let Some(block) = column_iter.next() {
+        for entry in block {
+            *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+            complete_row.push(*entry as usize);
+        }
+    }
+}
+
+fn atomic_inc(cell: &Arc<AtomicCell<u64>>, inc_value: f64) {
+                let mut current_value = cell.load();
+                let mut new_value = current_value + 1;
+                while new_value != current_value {
+                    current_value = cell.load();
+                    new_value = cell.compare_and_swap(current_value, (f64::from_bits(current_value) + inc_value).to_bits()); // Will waiting for this eventually be a bottleneck with enough cores?
+                }
 }
 
 fn soft_threshold(z: f64, gamma: f64) -> f64 {
@@ -545,7 +572,6 @@ fn read_x_csv(file_path: &str) -> XMatrix {
     };
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(file);
 
-    let mut row = 0;
     for record in reader.records() {
         let mut new_row: Vec<bool> = Vec::new();
         let actual_record = match record {
@@ -575,7 +601,6 @@ fn read_y_csv(file_path: &str) -> Vec<f64> {
     };
     let mut reader = csv::ReaderBuilder::new().has_headers(false).from_reader(file);
 
-    let mut row = 0;
     for record in reader.records() {
         let actual_record = match record {
             Ok(r) => r,

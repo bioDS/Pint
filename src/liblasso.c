@@ -839,10 +839,11 @@ void update_max_rowsums(double new_value) {
 // N.B. main effects are not first in the matrix, X[x][1] is the interaction between genes 0 and 1. (the main effect for gene 1 is at X[1][p])
 // That is to say that k<p is not a good indication of whether we are looking at an interaction or not.
 //TODO: max lambda
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int USE_INT, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
-	int *column_entries = malloc(xmatrix_sparse.col_nz[k]*sizeof(int));
+	//int *column_entries = malloc(xmatrix_sparse.col_nz[k]*sizeof(int));
+	int *column_entries = column_entry_cache;
 	// From here on things should behave the same (this is set mostly for testing)
 	USE_INT = 1;
 
@@ -895,7 +896,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff *= Bk_diff;
 	if (Bk_diff > dBMax)
 		dBMax = Bk_diff;
-	free(column_entries);
+	//free(column_entries);
 	return dBMax;
 }
 
@@ -954,6 +955,7 @@ double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda, do
 	return dBMax;
 }
 
+//TODO: think about +ve and -ve Y/rowsums here, this doesn't seem right
 int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
 	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
 		return TRUE;
@@ -1172,6 +1174,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
+
+	int max_num_threads = omp_get_max_threads();
+	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
+	for (int i = 0; i <  max_num_threads; i++) {
+		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+	}
 	//int set_step_size
 	for (int iter = 0; lambda > final_lambda; iter++) {
 		//refresh();
@@ -1202,7 +1210,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 #endif
 				if (worth_updating(col_ysum, X2, k, n, lambda)) {
-					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num);
+					dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, USE_INT, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 					total_updates++;
 					total_updates_entries += X2.col_nz[k];
 				}
@@ -1562,59 +1570,3 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int max_inte
 
 	return X2;
 }
-
-//TODO: sparse row matrix (for interaction counts)
-//XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_INT) {
-//	XMatrix_sparse_row X2;
-//	//int rowno, val;
-//	int length, colno;
-//	//int p_int = (p*(p+1))/2;
-//	int iter_done = 0;
-//
-//	X2.row_nz_indices = malloc(n*sizeof(ushort *));
-//	X2.row_nz = malloc(n*sizeof(int));
-//
-//	#pragma omp parallel for shared(X2, X) private(length, colno) shared(iter_done)
-//	for (int rowno = 0; rowno < n; rowno++) {
-//		GSList *current_row = NULL;
-//		// only include main effects (where i==j) unless USE_INT is set.
-//		for (int i = 0; i < p; i++) {
-//			for (int j = i; j < p; j++) {
-//				// only include main effects (where i==j) unless USE_INT is set.
-//				if (USE_INT || j == i) {
-//					if (USE_INT)
-//						// worked out by hand as being equivalent to the offset we would have reached.
-//						colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
-//					else
-//						colno = i;
-//					if (X[i][rowno] * X[j][rowno] == 1) {
-//						current_row = g_slist_prepend(current_row, (void*)(long)colno);
-//					}
-//
-//				}
-//			}
-//		}
-//		length = g_slist_length(current_row);
-//		current_row = g_slist_reverse(current_row);
-//
-//		X2.row_nz_indices[rowno] = malloc(length*sizeof(int));
-//		X2.row_nz[rowno] = length;
-//
-//		GSList *current_row_ind = current_row;
-//		int temp_counter = 0;
-//		while(current_row_ind != NULL) {
-//			X2.row_nz_indices[rowno][temp_counter++] = (int)(long)current_row_ind->data;
-//			current_row_ind = current_row_ind->next;
-//		}
-//
-//		g_slist_free(current_row);
-//		current_row = NULL;
-//		iter_done += 1;
-//		//if (omp_get_thread_num() == 0) {
-//		//	move(8,48);
-//		//	printw("%.1f%%\n", (float)iter_done*100/n);
-//		//	refresh();
-//		//}
-//	}
-//	return X2;
-//}
