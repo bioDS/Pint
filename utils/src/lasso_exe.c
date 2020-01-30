@@ -1,6 +1,5 @@
 #include <gsl/gsl_vector.h>
 #include "../../src/liblasso.h"
-//#include <ncurses.h>
 
 enum Output_Mode {quit, file, terminal};
 
@@ -15,9 +14,6 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-
-	//initscr();
-	//refresh();
 
 	char *scale = argv[3];
 	char *verbose = argv[2];
@@ -37,11 +33,6 @@ int main(int argc, char** argv) {
 	}
 
 
-
-
-	int USE_INT=0; // main effects only by default
-	if (strcmp(scale, "int") == 0)
-		USE_INT=1;
 
 	VERBOSE = 0;
 	if (strcmp(verbose, "T") == 0)
@@ -72,14 +63,8 @@ int main(int argc, char** argv) {
 
 	int **X2;
 	int nbeta;
-	//if (USE_INT) {
-	//	printf("converting to X2\n");
-	//	X2 = X2_from_X(xmatrix.X, N, xmatrix.actual_cols);
-	//	nbeta = (xmatrix.actual_cols*(xmatrix.actual_cols+1))/2;
-	//} else {
-		nbeta = xmatrix.actual_cols;
-		X2 = xmatrix.X;
-	//}
+	nbeta = xmatrix.actual_cols;
+	X2 = xmatrix.X;
 	printf("using nbeta = %d\n", nbeta);
 
 	if (xmatrix.X == NULL) {
@@ -92,22 +77,18 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 40, lambda, "cyclic", 10000, USE_INT, VERBOSE, overlap, 1.0001);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 40, lambda, "cyclic", 10000, VERBOSE, overlap, 1.0001);
 	int nbeta_int = nbeta;
-	if (USE_INT) {
-		nbeta_int = nbeta*(nbeta+1)/2;
-	}
-	//printw("done coordinate descent lasso, printing (%d) beta values:\n", nbeta_int);
+	nbeta_int = nbeta*(nbeta+1)/2;
 	if (beta == NULL) {
 		fprintf(stderr, "failed to estimate beta values\n");
 		return 1;
 	}
-	//for (int i = 0; i < nbeta; i++) {
-	//	printf("%f ", beta[i]);
-	//}
-	//printf("\n");
+	for (int i = 0; i < nbeta; i++) {
+		printf("%f ", beta[i]);
+	}
+	printf("\n");
 
-	//move(12,0);
 	printf("indices significantly non-zero (|x| > 1):\n");
 	int printed = 0;
 	int sig_beta_count = 0;
@@ -115,10 +96,8 @@ int main(int argc, char** argv) {
 
 	printf("\n\n");
 
-	//printw("\n");
 	free(xmatrix.X);
 	free(Y);
-	//move(22 + sig_beta_count,0);
 	printf("freeing X/Y\n");
 	switch(output_mode){
 		case terminal:
@@ -153,7 +132,7 @@ int main(int argc, char** argv) {
 	}
 	if (output_mode == terminal) {
 	}
-	endwin();
+	//endwin();
 	free_static_resources();
 	return 0;
 }
