@@ -323,7 +323,9 @@ fn x_to_x2_sparse_col_turbopfor(X: &XMatrixCols) -> TurboPFor_Sparse_Xmatrix {
     //let mut compressed_col_buffer = vec![0_u8; n*4];
 
     let compressed_columns = ((0..p).into_par_iter().flat_map(|col1_ind| {
+    //let compressed_columns = ((0..p).into_iter().flat_map(|col1_ind| {
         let compressed_combined_col: Vec<TurboPFor_Compressed_Column> = (col1_ind..p).into_par_iter().map(|col2_ind| {
+        //let compressed_combined_col: Vec<TurboPFor_Compressed_Column> = (col1_ind..p).into_iter().map(|col2_ind| {
             let mut current_col_indices: Vec<u32> = Vec::new();
             //compressed_col_buffer.clear(); // shouldn't actually be necessary
             let col1 = &X.cols[col1_ind];
@@ -463,6 +465,7 @@ fn simple_coordinate_descent_lasso(mut X: TurboPFor_Sparse_Xmatrix, Y: Vec<f64>)
     let mut error = calculate_error(&rowsum, &Y);
     println!("for testing purposes, initial e is {:.2}", error as f64);
 
+    //let thread_pieces = X.compressed_columns.chunks_mut(p / 4).collect();
 
     for lambda_seq in 0..50 {
         println!("lambda {}: {}", lambda_seq+1, lambda);
@@ -470,13 +473,20 @@ fn simple_coordinate_descent_lasso(mut X: TurboPFor_Sparse_Xmatrix, Y: Vec<f64>)
             let mut iter_max_change = 0.0;
             //X.compressed_columns.shuffle(&mut thread_rng());
             //X.compressed_columns.par_iter().enumerate().for_each(|(k, column)|{
-            X.compressed_columns.shuffle(&mut thread_rng());
-            X.compressed_columns.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
-            //X.compressed_columns.iter_mut().enumerate().for_each(|(k, mut column_iter)|{
-                COLUMN_CACHE.with(|mut cache| {
-                    update_beta_cyclic(&mut column_iter, &Y, &beta, n, p, &rowsum, lambda, cache.borrow_mut());
+            //X.compressed_columns.shuffle(&mut thread_rng());
+            for chunk in X.compressed_columns.chunks_mut(p / 4) {
+                //X.compressed_columns.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                chunk.shuffle(&mut thread_rng());
+                chunk.par_iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                //X.compressed_columns.iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                //for thread_piece in thread_pieces.par_iter() {
+                //    thread_piece.shuffle(&mut thread_rng());
+                //    thread_piece.iter_mut().enumerate().for_each(|(k, mut column_iter)|{
+                    COLUMN_CACHE.with(|mut cache| {
+                        update_beta_cyclic(&mut column_iter, &Y, &beta, n, p, &rowsum, lambda, cache.borrow_mut());
+                    });
                 });
-            });
+            }
 
             let prev_error = error;
             error = calculate_error(&rowsum, &Y);
@@ -557,9 +567,10 @@ fn update_beta_cyclic(column: &mut TurboPFor_Compressed_Column, Y: &Vec<f64>, be
 
 fn read_iter_loop(column: &mut TurboPFor_Compressed_Column, rowsum: &Vec<Arc<AtomicCell<u64>>>, complete_row: &mut RefMut<Vec<u32>>, sumn: &mut f64, Y: &[f64]) {
     decompress_delta(&column.bytes, column.size, complete_row.as_mut());
-    for entry in complete_row.as_slice() {
-        *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
-    }
+    //for entry in complete_row.as_slice() {
+    //    *sumn += Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load());
+    //}
+    *sumn += complete_row.iter().map(|entry| Y[*entry as usize] - f64::from_bits(rowsum[*entry as usize].load())).sum::<f64>();
 }
 
 fn atomic_inc(cell: &Arc<AtomicCell<u64>>, inc_value: f64) {
