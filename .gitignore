@@ -10,3 +10,4 @@ build/
 release/
 rust_rewrite/target/
 bench_set*
+bench_runs
