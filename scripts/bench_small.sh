@@ -6,6 +6,15 @@ BENCHMARK_SETS=/home/kieran/work/lasso_testing/bench_sets_small
 BASE_DIR=/home/kieran/work/lasso_testing
 OUTPUT_DIR=/home/kieran/work/lasso_testing/bench_runs
 
+LAMBDA_VALUE=0.1
+
+test_name=$1
+
+if [ -z test_name ]; then
+    echo "must supply a test name as an argument"
+    exit
+fi
+
 cd $BASE_DIR
 #current_run_dir="bench_runs/$(date)"
 mkdir -p "$current_run_dir"
