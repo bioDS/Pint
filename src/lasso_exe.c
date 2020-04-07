@@ -89,12 +89,12 @@ int main(int argc, char** argv) {
 
 	printf("\n");
 	////move(12,0);
-	printf("indices significantly negative (-500):\n");
+	printf("indices significantly negative (-3):\n");
 	int printed = 0;
 	int sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
 	for (int i = 0; i < nbeta_int;  i++) {
-		if (beta[i] < -500) {
+		if (beta[i] < -3) {
 			printed++;
 			sig_beta_count++;
 			int_pair ip = get_num(i, nbeta);
