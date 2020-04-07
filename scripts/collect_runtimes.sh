@@ -1,4 +1,4 @@
-if [ -z $1]; then
+if [ -z $1 ]; then
     echo "must supply a directory of logs as an argument"
     exit
 fi
