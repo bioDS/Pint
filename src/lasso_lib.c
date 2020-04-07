@@ -1,7 +1,7 @@
 #include "lasso_lib.h"
 #include <omp.h>
 #include <glib-2.0/glib.h>
-#include <ncurses.h>
+//#include <ncurses.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
@@ -529,14 +529,14 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 	}
 
 
-	printw("\nbins of size: ");
+	printf("\nbins of size: ");
 	for (int i = 0; i <= NumCores+1; i++) {
-		printw("[%d]: %d, ", i, num_bins_of_size[i]);
+		printf("[%d]: %d, ", i, num_bins_of_size[i]);
 	}
-	printw("\n");
-	refresh();
+	printf("\n");
+	//refresh;
 	int xpos, ypos;
-	getyx(stdscr, ypos, xpos);
+	//getyx(stdscr, ypos, xpos);
 	int *nothing = malloc(mergeset_count*sizeof(struct Beta_Set));
 
 	//TODO: rewrite this whole section to update sets in batches, then commit
@@ -551,16 +551,16 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		for (int iter2 = 0; iter2 < 2 && moved_something; iter2++) {
 			moved_something = 0;
 			for (int small_set = 1; small_set < NumCores - 1; small_set++) {
-				move(ypos, xpos);
-				printw("current state: ");
+				//move(ypos, xpos);
+				printf("current state: ");
 				for (int i = 0; i <= NumCores+1; i++)
-					printw("[%d]: %d, ", i, num_bins_of_size[i]);
-				printw("\nclearing set_size %d\n", small_set);
-				refresh();
+					printf("[%d]: %d, ", i, num_bins_of_size[i]);
+				printf("\nclearing set_size %d\n", small_set);
+				//refresh;
 				for (int iter = 0; iter < 50 && (iter < num_bins_of_size[small_set]); iter++) {
-					move(ypos+1, xpos);
-					printw("iter %d\n", iter);
-					refresh();
+					//move(ypos+1, xpos);
+					//printf("iter %d\n", iter);
+					//refresh;
 					// compare the first n columns of the `1' bin, w/ the first n of the last, to see
 					// if they can be merged.
 					int n;
@@ -591,17 +591,17 @@ Beta_Sets merge_find_beta_sets(XMatrix_sparse x2col, XMatrix_sparse_row x2row, i
 		}
 	}
 
-	printw("\nafter: bins of size: ");
+	printf("\nafter: bins of size: ");
 	for (int i = 0; i <= NumCores+1; i++) {
-		printw("[%d]: %d, ", i, num_bins_of_size[i]);
+		printf("[%d]: %d, ", i, num_bins_of_size[i]);
 	}
-	printw("\n");
-	refresh();
+	printf("\n");
+	//refresh;
 
 	//all_sets = remove_invalid_sets(all_sets, valid_mergesets, actual_p_int, new_mergeset_count, actual_set_sizes);
 
-	printw("some useful statistics:\n");
-	printw("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
+	printf("some useful statistics:\n");
+	printf("mean set size: %.1f\n", (float)actual_p_int/mergeset_count);
 
 	//TODO: only works for contiguous sets at the moment (if there)
 	int set_size, cur_set = 0;
@@ -643,9 +643,9 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 	for (int i = 0; i < p; i++)
 		X[i] = malloc(n*sizeof(int));
 
-	move(1,0);
-	printw("reading X from: \"%s\"\n", fn);
-	refresh();
+	//move(1,0);
+	printf("reading X from: \"%s\"\n", fn);
+	//refresh;
 
 	FILE *fp = fopen(fn, "r");
 	if (fp == NULL) {
@@ -695,9 +695,9 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
 		p = actual_cols;
 	}
-	move(2,0);
-	printw("read %dx%d, freeing stuff\n", row, actual_cols);
-	refresh();
+	//move(2,0);
+	printf("read %dx%d, freeing stuff\n", row, actual_cols);
+	//refresh;
 	free(buf);
 	XMatrix xmatrix;
 	xmatrix.X = X;
@@ -712,9 +712,9 @@ double *read_y_csv(char *fn, int n) {
 	memset(buf, 0, BUF_SIZE);
 	double *Y = malloc(n*sizeof(double));
 
-	move(3,0);
-	printw("reading Y from: \"%s\"\n", fn);
-	refresh();
+	//move(3,0);
+	printf("reading Y from: \"%s\"\n", fn);
+	//refresh;
 	FILE *fp = fopen(fn, "r");
 	if (fp == NULL) {
 		perror("opening failed");
@@ -756,9 +756,9 @@ double *read_y_csv(char *fn, int n) {
 		}
 	}
 
-	move(4,0);
-	printw("read %d lines, freeing stuff\n", col);
-	refresh();
+	//move(4,0);
+	printf("read %d lines, freeing stuff\n", col);
+	//refresh;
 	free(buf);
 	free(temp);
 	return Y;
@@ -1017,11 +1017,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	gsl_spmatrix *X_sparse = xmatrix.X_sparse;
 
-	move(7,0);
-	printw("calculating sparse interaction matrix (cols): \n");
-	refresh();
+	//move(7,0);
+	printf("calculating sparse interaction matrix (cols): \n");
+	//refresh;
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, USE_INT, TRUE);
-	printw("calculating sparse interaction matrix (rows): \n");
+	printf("calculating sparse interaction matrix (rows): \n");
 	XMatrix_sparse_row X2row = sparse_horizontal_X2_from_X(X, n, p, USE_INT);
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
@@ -1075,19 +1075,19 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double iter_lambda;
 	int use_cyclic = 0, use_greedy = 0;
 
-	//printw("original lambda: %f n: %d ", lambda, n);
+	//printf("original lambda: %f n: %d ", lambda, n);
 	//lambda = lambda;
-	//printw("effective lambda is %f\n", lambda);
+	//printf("effective lambda is %f\n", lambda);
 
-	move(8,0);
+	//move(8,0);
 	if (strcmp(method,"cyclic") == 0) {
-		printw("using cyclic descent\n");
+		printf("using cyclic descent\n");
 		use_cyclic = 1;
 	} else if (strcmp(method, "greedy") == 0) {
-		printw("using greedy descent\n");
+		printf("using greedy descent\n");
 		use_greedy = 1;
 	}
-	refresh();
+	//refresh;
 
 	if (use_greedy == 0 && use_cyclic == 0) {
 		fprintf(stderr, "exactly one of cyclic/greedy must be specified\n");
@@ -1117,24 +1117,24 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			total_col += X2.col_nz[i];
 		}
 	}
-	//move(9,0);
-	printw("\nlargest column has %d non-zero entries (out of %d)\n", largest_col, n);
-	//move(10,0);
-	printw("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
-	refresh();
+	////move(9,0);
+	printf("\nlargest column has %d non-zero entries (out of %d)\n", largest_col, n);
+	////move(10,0);
+	printf("mean column has %f non-zero entries (out of %d)\n", (float)total_col/n, n);
+	//refresh;
 
-	printw("finding simultaneously updateable beta sets... ");
-	refresh();
+	printf("finding simultaneously updateable beta sets... ");
+	//refresh;
 	Beta_Sets beta_sets;
 	if (USE_INT == 1)
 		beta_sets = find_beta_sets(X2, X2row, p_int, n);
 	else
 		beta_sets = find_beta_sets(X2, X2row, p, n);
-	printw(" done\n");
-	refresh();
+	printf(" done\n");
+	//refresh;
 
 	int scrx, scry;
-	getyx(stdscr, scry, scrx);
+	//getyx(stdscr, scry, scrx);
 
 	struct timespec start, end;
 	double cpu_time_used;
@@ -1142,7 +1142,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int *cols_to_update = malloc(p_int*sizeof(int));
 	clock_gettime(CLOCK_REALTIME, &start);
 	for (int iter = 0; iter < max_iter; iter++) {
-		refresh();
+		//refresh;
 		prev_error = error;
 		error = 0;
 		double dBMax = 0.0; // largest beta diff this cycle
@@ -1157,12 +1157,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//#pragma omp parallel for num_threads(1) reduction(+:count) // >1 threads will (unsurprisingly) lead to inconsistent (& not reproducable) results
 		//for (int k = 0; k < p_int; k++) {
 		//	if (k % (p_int/100) == 0) {
-		//		move(12,0);
-		//		printw("iteration %d: ", iter);
-		//		refresh();
-		//		move(12,15);
-		//		printw("%d%%", count++);
-		//		refresh();
+		//		//move(12,0);
+		//		printf("iteration %d: ", iter);
+		//		//refresh;
+		//		//move(12,15);
+		//		printf("%d%%", count++);
+		//		//refresh;
 		//	}
 
 			// update the predictor \Beta_k
@@ -1188,8 +1188,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			}
 		//}
 		haschanged = 0;
-		move(scry, scrx);
-		printw("\n\n");
+		//move(scry, scrx);
+		printf("\n\n");
 
 		// caculate cumulative error after update
 		if (USE_INT == 0)
@@ -1213,8 +1213,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				error += e_diff;
 			}
 		error /= n;
-		printw("mean squared error is now %f, w/ intercept %f\n", error, intercept);
-		printw("indices significantly negative (-500):\n");
+		printf("mean squared error is now %f, w/ intercept %f\n", error, intercept);
+		printf("indices significantly negative (-500):\n");
 		int printed = 0;
 		//TODO: remove hack to prevent printing too many for the terminal
 		for (int i = 0; i < p_int && printed < 10; i++) {
@@ -1222,30 +1222,30 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				printed++;
 				int_pair ip = get_num(i, p);
 				if (ip.i == ip.j)
-					printw("main: %d (%d):\t\t\t %f\n", i, ip.i + 1, beta[i]);
+					printf("main: %d (%d):\t\t\t %f\n", i, ip.i + 1, beta[i]);
 				else
-					printw("int: %d  (%d, %d):\t\t %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+					printf("int: %d  (%d, %d):\t\t %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
 			}
 		}
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
 		if (dBMax < HALT_BETA_DIFF) {
-			printw("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
+			printf("largest change (%f) was less than %d, halting\n", dBMax, HALT_BETA_DIFF);
 			return beta;
 		}
 
-		printw("done iteration %d\n", iter);
-		clrtobot();
+		//printf("done iteration %d\n", iter);
+		//clrtobot();
 	}
 
 	clock_gettime(CLOCK_REALTIME, &end);
 	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
 
-	printw("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f\%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
-	printw("cols: performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
-	printw("skipped entries %ld out of %ld a.k.a (%f\%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
+	printf("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f\%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	printf("cols: performed %d zero updates (%f\%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	printf("skipped entries %ld out of %ld a.k.a (%f\%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
 	free(precalc_get_num);
-	printw("entries: performed %d zero updates (%f\%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
+	printf("entries: performed %d zero updates (%f\%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
 	return beta;
 }
@@ -1323,9 +1323,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int USE_INT, int shuffle)
 		}
 		iter_done++;
 		if (omp_get_thread_num() == 0) {
-			move(7,48);
-			printw("%.1f%%\n", (float)iter_done*100/p);
-			refresh();
+			//move(7,48);
+			//printf("%.1f%%\n", (float)iter_done*100/p);
+			//refresh;
 		}
 	}
 
@@ -1404,9 +1404,9 @@ XMatrix_sparse_row sparse_horizontal_X2_from_X(int **X, int n, int p, int USE_IN
 		current_row = NULL;
 		iter_done += 1;
 		if (omp_get_thread_num() == 0) {
-			move(8,48);
-			printw("%.1f%%\n", (float)iter_done*100/n);
-			refresh();
+			//move(8,48);
+			//printf("%.1f%%\n", (float)iter_done*100/n);
+			//refresh;
 		}
 	}
 	return X2;
