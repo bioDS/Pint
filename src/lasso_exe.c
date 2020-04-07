@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
 	printf("total: %d\n", printed);
 
 	printf("\n\n");
-	printf("All non-zero indices");
+	printf("All non-zero indices\n");
 	printed = 0;
 	sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
