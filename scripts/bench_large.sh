@@ -9,4 +9,4 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 LAMBDA_VALUE=0.1
 
-bash $SCRIPT_DIR/bench.sh $BENCHMARK_SETS $BASE_DIR $OUTPUT_DIR $1
+bash $SCRIPT_DIR/bench.sh $BENCHMARK_SETS $BASE_DIR $OUTPUT_DIR "LARGE_$1"
