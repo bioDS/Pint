@@ -29,5 +29,5 @@ for bench_set in `ls $BENCHMARK_SETS`; do
     rows=`wc -l $y | cut -d' ' -f1`
     cols=`head -n1 $x | cut -d'"' -f3- | tr ',' ' ' | wc -w`
 
-    ./mergefind-release/src/lasso_exe $x $y cyclic int F $LAMBDA_VALUE $rows $cols > "$OUTPUT_DIR/$1/$bench_set.log"
+    ./mergefind-release/src/lasso_exe $x $y cyclic int F $LAMBDA_VALUE $rows $cols > "$OUTPUT_DIR/$test_name/$bench_set.log"
 done
