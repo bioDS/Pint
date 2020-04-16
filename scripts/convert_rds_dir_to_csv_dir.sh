@@ -1,5 +1,6 @@
 #!/usr/bin/bash
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 if [ -z $1 ]; then
     echo "usage convert_rds_dir_to_csv_dir.sh [from] [to]"
