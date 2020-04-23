@@ -1,0 +1,62 @@
+# for i in `cat data/4core_slow_records.txt  | head -n 17 | tail -n 16 | cut -d: -f1 | cut -d/ -f3`; do echo "$i"; echo -n "4cores: "; rg seconds "bench_runs/4cores_mergeset/$i"; echo -n "1core:  "; rg seconds "bench_runs/1core_mergeset/$i"; echo ""; done
+
+n1000_p100_SNR10_nbi0_nbij50_nlethals0_viol0_29540.log
+4cores: lasso done in 0.0403 seconds, columns skipped 3 out of 50500 a.k.a (0.005941%)
+1core:  lasso done in 0.0643 seconds, columns skipped 1 out of 50500 a.k.a (0.001980%)
+
+n1000_p100_SNR2_nbi100_nbij20_nlethals0_viol0_35184.log
+4cores: lasso done in 0.0407 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+1core:  lasso done in 0.0653 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+
+n1000_p100_SNR5_nbi20_nbij50_nlethals0_viol0_88730.log
+4cores: lasso done in 0.0409 seconds, columns skipped 8 out of 50500 a.k.a (0.015842%)
+1core:  lasso done in 0.0580 seconds, columns skipped 7 out of 50500 a.k.a (0.013861%)
+
+n1000_p100_SNR2_nbi50_nbij5_nlethals0_viol0_59393.log
+4cores: lasso done in 0.0412 seconds, columns skipped 39 out of 50500 a.k.a (0.077228%)
+1core:  lasso done in 0.0635 seconds, columns skipped 39 out of 50500 a.k.a (0.077228%)
+
+n1000_p100_SNR5_nbi0_nbij20_nlethals0_viol0_14265.log
+4cores: lasso done in 0.0421 seconds, columns skipped 1 out of 50500 a.k.a (0.001980%)
+1core:  lasso done in 0.0664 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR2_nbi50_nbij5_nlethals0_viol0_88751.log
+4cores: lasso done in 0.0426 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+1core:  lasso done in 0.0776 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR5_nbi50_nbij20_nlethals0_viol0_77121.log
+4cores: lasso done in 0.0427 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+1core:  lasso done in 0.0915 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR2_nbi100_nbij100_nlethals0_viol0_7988.log
+4cores: lasso done in 0.0429 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+1core:  lasso done in 0.0621 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR5_nbi0_nbij100_nlethals0_viol0_17622.log
+4cores: lasso done in 0.0440 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+1core:  lasso done in 0.0518 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+
+n1000_p100_SNR5_nbi0_nbij100_nlethals0_viol0_9404.log
+4cores: lasso done in 0.0453 seconds, columns skipped 18 out of 50500 a.k.a (0.035644%)
+1core:  lasso done in 0.0572 seconds, columns skipped 16 out of 50500 a.k.a (0.031683%)
+
+n1000_p100_SNR10_nbi0_nbij100_nlethals0_viol0_67249.log
+4cores: lasso done in 0.0477 seconds, columns skipped 6 out of 50500 a.k.a (0.011881%)
+1core:  lasso done in 0.0657 seconds, columns skipped 6 out of 50500 a.k.a (0.011881%)
+
+n1000_p100_SNR10_nbi50_nbij50_nlethals0_viol0_1927.log
+4cores: lasso done in 0.0492 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+1core:  lasso done in 0.0711 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR5_nbi20_nbij50_nlethals0_viol0_88630.log
+4cores: lasso done in 0.0524 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+1core:  lasso done in 0.0735 seconds, columns skipped 0 out of 50500 a.k.a (0.000000%)
+
+n1000_p100_SNR5_nbi0_nbij20_nlethals0_viol0_29143.log
+4cores: lasso done in 0.0596 seconds, columns skipped 4 out of 50500 a.k.a (0.007921%)
+1core:  lasso done in 0.0573 seconds, columns skipped 3 out of 50500 a.k.a (0.005941%)
+
+n1000_p100_SNR10_nbi0_nbij50_nlethals0_viol0_36981.log
+4cores: lasso done in 0.0617 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+1core:  lasso done in 0.0510 seconds, columns skipped 2 out of 50500 a.k.a (0.003960%)
+
