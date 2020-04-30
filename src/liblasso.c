@@ -10,8 +10,9 @@
 #ifdef USE_R
 	#include <R.h>
 #else
-	#include <ncurses.h>
-	#define Rprintf(args...) printw (args); refresh();
+	//#include <ncurses.h>
+	//#define Rprintf(args...) printw (args); refresh();
+	#define Rprintf(args...) printf (args);
 #endif
 
 #define NumSets (1<<12)
