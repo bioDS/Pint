@@ -6,8 +6,7 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
-#include <sys/time.h>
-#include <gmodule.h>
+#include <time.h>
 #ifdef NOT_R
 	#define Rprintf(args...) printf (args);
 #else
