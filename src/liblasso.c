@@ -43,6 +43,88 @@ int min(int a, int b) {
 	return b;
 }
 
+typedef struct Queue_Item {
+	void *contents;
+	void *next;
+} Queue_Item;
+
+typedef struct Queue {
+	Queue_Item *first_item;
+	Queue_Item *last_item;
+	int length;
+} Queue;
+
+Queue *queue_new() {
+	Queue *new_queue = malloc(sizeof(Queue));
+	new_queue->length = 0;
+	new_queue->first_item = NULL;
+	new_queue->last_item = NULL;
+
+	return new_queue;
+}
+
+int queue_is_empty(Queue *q) {
+	if (q->length == 0)
+		return TRUE;
+	return FALSE;
+}
+
+void queue_push_tail(Queue *q, void *item) {
+	struct Queue_Item *new_queue_item = malloc(sizeof(Queue_Item));
+	new_queue_item->contents = item;
+	new_queue_item->next = NULL;
+	// if the queue is currently empty we set both first and last
+	// item, rather than  last_item->next
+	if (queue_is_empty(q)) {
+		q->first_item = new_queue_item;
+		q->last_item = new_queue_item;
+	} else {
+		q->last_item->next = new_queue_item;
+		q->last_item = new_queue_item;
+	}
+	q->length++;
+}
+
+int queue_get_length(Queue *q) {
+	return q->length;
+}
+
+void *queue_pop_head(Queue *q) {
+	Queue_Item *first_item = q->first_item;
+	if (first_item == NULL) {
+		return NULL;
+	}
+
+	q->first_item = first_item->next;
+	// if we pop'd the only item, don't keep it as last.
+	if (NULL == q->first_item) {
+		q->last_item = NULL;
+	}
+	q->length--;
+
+	void *contents = first_item->contents;
+	free(first_item);
+
+	return contents;
+}
+
+/// Currently assumes that we want to free the contents
+/// of everything in the queue as well
+void queue_free(Queue *q) {
+	Queue_Item *current_item = q->first_item;
+	Queue_Item *next_item = current_item->next;
+
+	// free the queue contents
+	while (current_item != NULL) {
+		free(current_item->contents);
+		next_item = current_item->next;
+		free(current_item);
+		current_item = next_item;
+	}
+	// and the queue itself
+	free(q);
+}
+
 static int N;
 
 //TODO: the compiler should really do this
@@ -623,8 +705,10 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < min(i+max_interaction_distance,p); j++) {
-			GQueue *current_col = g_queue_new();
-			GQueue *current_col_actual = g_queue_new();
+			//GQueue *current_col = g_queue_new();
+			//GQueue *current_col_actual = g_queue_new();
+			Queue *current_col = queue_new();
+			Queue *current_col_actual = queue_new();
 			// worked out by hand as being equivalent to the offset we would have reached.
 			//TODO: include max_interaction_distance
 			colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
@@ -656,7 +740,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 						S8bWord tempword = to_s8b(count, col_entries);
 						total_count += count;
 						memcpy(word, &tempword, sizeof(S8bWord));
-						g_queue_push_tail(current_col, word);
+						queue_push_tail(current_col, word);
 						count = 0;
 						largest_entry = 0;
 						max_bits = max_size_given_entries[1];
@@ -675,17 +759,17 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 			S8bWord *word = malloc(sizeof(S8bWord));
 			S8bWord tempword = to_s8b(count, col_entries);
 			memcpy(word, &tempword, sizeof(S8bWord));
-			g_queue_push_tail(current_col, word);
+			queue_push_tail(current_col, word);
 			free(col_entries);
-			length = g_queue_get_length(current_col);
+			length = queue_get_length(current_col);
 
 			// push all our words to an array in X2
 			X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
 			X2.col_nz[colno] = total_nz_entries;
 			X2.col_nwords[colno] = length;
 			count = 0;
-			while (!g_queue_is_empty(current_col)) {
-				S8bWord *current_word = g_queue_pop_head(current_col);
+			while (!queue_is_empty(current_col)) {
+				S8bWord *current_word = queue_pop_head(current_col);
 				X2.compressed_indices[colno][count] = *current_word;
 				free(current_word);
 				count++;
@@ -693,8 +777,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 
 			//TODO: remove thise
 			// push actual columns for testing purposes
-			g_queue_free(current_col_actual);
-			g_queue_free(current_col);
+			queue_free(current_col_actual);
+			queue_free(current_col);
 			current_col = NULL;
 			current_col_actual = NULL;
 		}
