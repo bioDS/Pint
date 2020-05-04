@@ -4,8 +4,8 @@
 enum Output_Mode {quit, file, terminal};
 
 int main(int argc, char** argv) {
-	if (argc != 11) {
-		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename]\n");
+	if (argc != 12) {
+		fprintf(stderr, "usage: ./lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]\n");
 		printf("actual args(%d): '", argc);
 		for (int i = 0; i < argc; i++) {
 			printf("%s ", argv[i]);
@@ -54,7 +54,16 @@ int main(int argc, char** argv) {
 
 	double overlap = atof(argv[9]);
 	printf("using frac: %.2f\n", overlap);
-	
+
+	enum LOG_LEVEL log_level = NONE;
+	if (strcmp(argv[11], "i") == 0) {
+		log_level = ITER;
+	} else if (strcmp(argv[11], "l") == 0) {
+		log_level = LAMBDA;
+	} else if (strcmp(argv[11], "n") != 0) {
+		printf("using 'log_level = NONE', no valid argument given");
+	}
+
 	initialise_static_resources();
 
 	// testing: wip
@@ -77,7 +86,8 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 40, lambda, "cyclic", 10000, VERBOSE, overlap, 1.0001);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 
+			40, lambda, "cyclic", 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc);
 	int nbeta_int = nbeta;
 	nbeta_int = nbeta*(nbeta+1)/2;
 	if (beta == NULL) {

@@ -229,7 +229,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture, gco
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
-	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, "cyclic", 100, 0, 0.01, 1.0001);
+	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, "cyclic", 100, 0, 0.01, 1.0001, FALSE, 1, "test");
 
 	double acceptable_diff = 10;
 	int no_agreeing = 0;

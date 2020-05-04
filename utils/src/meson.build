@@ -18,6 +18,6 @@ lasso_exe = executable('lasso_exe', 'lasso_exe.c', link_with: liblasso,
 if get_option('use_opencl')
 	test_opencl_exe = executable('test_opencl_exe', 'test_opencl.c', link_with: liblasso, dependencies: [liblasso_deps, dependency('OpenCL')],)
 endif
-	
+
 
 x2fx_exe = executable('X2_from_X', 'X2_from_X.c', link_with: liblasso, dependencies: liblasso_deps)

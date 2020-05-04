@@ -421,6 +421,184 @@ double update_intercept_cyclic(double intercept, int **X, double *Y, double *bet
 	return new_intercept;
 }
 
+static long log_file_offset;
+
+// print to log: metadata required to resume from the log
+FILE *init_log(char *filename, int n, int p, int num_betas, char **job_args, int job_args_num) {
+	FILE *log_file = fopen(filename, "w+");
+	fprintf(log_file, "still running\n");
+	for (int i = 0; i < job_args_num; i++) {
+		fprintf(log_file, "%s ", job_args[i]);
+	}
+	fprintf(log_file, "\n");
+	fprintf(log_file, "lasso log file. metadata follows on the next few lines.\n \
+The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, $beta_2 ... $beta_k");
+	fprintf(log_file, "num_rows, num_cols, num_betas\n");
+	fprintf(log_file, "%d, %d, %d\n", n, p, num_betas);
+	log_file_offset = ftell(log_file);
+	return log_file;
+}
+
+static int log_pos = 0;
+// save the current beta values to a log, so the program can be resumed if it is interrupted
+void save_log(int iter, double lambda_value, int lambda_count, double *beta, int n_betas, FILE *log_file) {
+	// Rather than filling the log with beta values, we want to only keep two copies.
+	// The current one, and a backup in case we stop while writing the current one.
+	if (log_pos % 2 == 0) {
+		fseek(log_file, log_file_offset, SEEK_SET);
+	}
+	log_pos = (log_pos + 1) % 2;
+
+	// n.b. Each log line will be the same number of bytes regardless of the actual values here.
+	long line_start_pos = ftell(log_file);
+	fprintf(log_file, "w");
+	fprintf(log_file, "%.5d, %.5d, %+.6e\n", iter, lambda_count, lambda_value);
+	for (int i = 0; i < n_betas; i++) {
+		fprintf(log_file, "%+.6e, ", beta[i]);
+	}
+	fprintf(log_file, "\n");
+	long line_end_pos = ftell(log_file);
+	fseek(log_file, line_start_pos, SEEK_SET);
+	fprintf(log_file, " ");
+	fseek(log_file, line_end_pos, SEEK_SET);
+}
+
+//void save_log_full(int iter, double lambda, double *beta, int n_betas, FILE *log_file) {
+//	fprintf(log_file, "%d, %f\n", iter, lambda);
+//	for (int i = 0; i < n_betas; i++) {
+//		fprintf(log_file, "%f, ", beta[i]);
+//	}
+//	fprintf(log_file, "\n");
+//}
+
+void close_log(FILE *log_file) {
+	fseek(log_file, 0, SEEK_SET);
+	fprintf(log_file, "finished     \n");
+	fclose(log_file);
+}
+
+int check_can_restore_from_log(char *filename, int n, int p, int num_betas, char **job_args, int job_args_num) {
+	int buf_size = num_betas*16 + 500;
+	int can_use = FALSE;
+	FILE *log_file = fopen(filename, "r");
+	char *our_args = malloc(500);
+	char *buffer = malloc(buf_size);
+
+	memset(our_args, 0, sizeof(our_args));
+	for (int i = 0; i < job_args_num; i++) {
+		sprintf(our_args + strlen(our_args), "%s ", job_args[i]);
+	}
+	sprintf(our_args + strlen(our_args), "\n");
+
+	//printf("checking log\n");
+	fgets(buffer, buf_size, log_file);
+	//printf("comparing '%s', '%s'n", buffer, "still running");
+	if (strcmp(buffer, "still running\n") == 0) {
+		// there was an interrupted run, we should check if it was this one.
+		fgets(buffer, buf_size, log_file);
+		//printf("comparing '%s', '%s'\n", buffer, our_args);
+		if (strcmp(buffer, our_args) == 0) {
+			// the files were the same!
+			can_use = TRUE;
+		}
+
+	}
+
+	free(buffer);
+	free(our_args);
+	fclose(log_file);
+	return can_use;
+}
+
+// returns the opened log for future use.
+FILE *restore_from_log(char *filename, int n, int p, int num_betas, char **job_args, int job_args_num,
+		int *actual_iter, int *actual_lambda_count, double *actual_lambda_value, double *actual_beta) {
+    
+	FILE *log_file = fopen(filename, "r+");
+	int buf_size = num_betas*16 + 500;
+	char *buffer = malloc(buf_size);
+	Rprintf("restoring from log\n");
+
+	// (none of this actually changes, we just need to set the log_file_offset)
+	fprintf(log_file, "still running\n");
+	for (int i = 0; i < job_args_num; i++) {
+		fprintf(log_file, "%s ", job_args[i]);
+	}
+	fprintf(log_file, "\n");
+	fprintf(log_file, "lasso log file. metadata follows on the next few lines.\n \
+The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, $beta_2 ... $beta_k");
+	fprintf(log_file, "num_rows, num_cols, num_betas\n");
+	fprintf(log_file, "%d, %d, %d\n", n, p, num_betas);
+	log_file_offset = ftell(log_file);
+
+	// now we're at the first saved line, check whether it's a complete checkpoint.
+	int can_restore = TRUE;
+	fgets(buffer, buf_size, log_file);
+	printf("first buf: '%s'\n", buffer);
+	if (strncmp(buffer, "w", 1) == 0) {
+		printf("first entry unusable\n");
+		// line is incomplete, don't use it.
+		fgets(buffer, buf_size, log_file);
+		fgets(buffer, buf_size, log_file);
+		printf("second buf: '%s'\n", buffer);
+		if (strncmp(buffer, "w", 1) == 0) {
+			printf("second entry unusable\n");
+			// so is the other one, don't change anything.
+			can_restore = FALSE;
+			Rprintf("warning: failed to restore from log, all entries were invalid.\n");
+		}
+	} else {
+		// the first one was fine, but the second one may be more recent.
+		long first_pos = ftell(log_file);
+		int first_iter, first_lambda_count;
+		int second_iter, second_lambda_count;
+		double first_lambda_value;
+		double second_lambda_value;
+		sscanf(buffer, " %.5d, %.5d, %+.6e\n", first_iter, first_lambda_count, first_lambda_value);
+		fgets(buffer, buf_size, log_file);
+		fgets(buffer, buf_size, log_file);
+		long second_pos = ftell(log_file);
+		sscanf(buffer, " %.5d, %.5d, %+.6e\n", second_iter, second_lambda_count, second_lambda_value);
+		if (strncmp(buffer, "w", 1) == 0 
+		|| first_lambda_count > second_lambda_count
+		|| (first_lambda_count == second_lambda_count && first_iter > second_iter)) {
+			printf("first entry > second_entry\n");
+			// but we can't/shouldn't use this one, go back to the first
+			fseek(log_file, first_pos, SEEK_SET);
+		}
+	}
+	if (can_restore) {
+		char *test_val = " 00001 0.02 012";
+		// buffer contains the current lambda and iter values.
+		int first_iter = -1, first_lambda_count = -1;
+		double first_lambda_value = -1; 
+		printf("final buf: '%s'\n", buffer);
+		sscanf(buffer, " %d, %d, %le", &first_iter, &first_lambda_count, &first_lambda_value);
+		printf("%d, %d, %f\n", first_iter, first_lambda_count, first_lambda_value);
+		sscanf(buffer, " %d, %d, %le\n", actual_iter, actual_lambda_count, actual_lambda_value);
+		printf("lambda_count is now %d, lambda is now %f, iter is now %d\n", *actual_lambda_count, *actual_lambda_value, *actual_iter);
+		// we actually only need the beta values, which are on the current line.
+		fgets(buffer, buf_size, log_file);
+
+		//printf("values_buf: '%s'\n", buffer);
+		long offset = 0;
+		for (int i = 0; i < num_betas; i++) {
+			//printf("values_buf: '%s'\n", buffer + offset);
+			//printf("reading beta %d\n", i);
+			int ret = sscanf(buffer + offset, "%le, ", &actual_beta[i]);
+			if (ret != 1) {
+				printf("failed to match value in log, bad things will now happen\n");
+			}
+			//printf("value %lf\n", actual_beta[i]);
+			offset += 15;
+		}
+	}
+
+	free(buffer);
+	Rprintf("done restoring from log\n");
+	return log_file;
+}
+
 //TODO: think about +ve and -ve Y/rowsums here, this doesn't seem right
 //int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
 //	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
@@ -446,7 +624,10 @@ double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, 
  * TODO: add an intercept
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
-double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, int max_interaction_distance, double lambda_min, double lambda_max, char *method, int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff) {
+double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, 
+		int max_interaction_distance, double lambda_min, double lambda_max, char *method, 
+		int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff, enum LOG_LEVEL log_level,
+		char **job_args, int job_args_num) {
 	double lambda = lambda_max;
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
@@ -540,7 +721,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
-	double final_lambda = lambda_min;
+	//double final_lambda = lambda_min;
+	//TODO: having this >0 broke the logs. ==0 might break something else.
+	//TODO: hacky that doesn't work. figure out what this should be.
+	double final_lambda = 0;
+	final_lambda = (pow(0.9,50))*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
@@ -550,8 +735,24 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	for (int i = 0; i <  max_num_threads; i++) {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
 	}
+
+	FILE *log_file;
+	char *log_filename = "lasso_log.log";
+	int iter = 0;
+	if (check_can_restore_from_log(log_filename, n, p, p_int, job_args, job_args_num)) {
+		Rprintf("We can restore from a partial log!\n");
+		restore_from_log(log_filename, n, p, p_int, job_args, job_args_num, &iter, &lambda_count, &lambda, beta);
+	} else {
+		Rprintf("no partial log for current job found\n");
+	}
+	if (log_level != NONE)
+		log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
+
 	//int set_step_size
-	for (int iter = 0; lambda > final_lambda; iter++) {
+	for (; lambda > final_lambda; iter++) {
+		// save current beta values to log each iteration
+		if (log_level == ITER)
+			save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 		prev_error = error;
 		double dBMax = 0.0; // largest beta diff this cycle
 
@@ -575,7 +776,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (!set_min_lambda) {
 			if (fabs(dBMax) > 0) {
 				set_min_lambda = TRUE;
-				final_lambda = (pow(0.9,50))*lambda;
+				//final_lambda = (pow(0.9,50))*lambda;
 				Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
 			} else {
 				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
@@ -595,18 +796,28 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
 			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
 			Rprintf(" %d(%f)", lambda_count, lambda);
+
+			if (log_level == LAMBDA)
+				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
+
 			lambda_count++;
 			lambda *= 0.9;
 			iter_count += iter;
 			iter = 0;
 		} else if (iter == max_iter) {
 			Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
+
+			if (log_level == LAMBDA)
+				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
+
 			lambda_count++;
 			lambda *= 0.9;
 			iter_count += iter;
 			iter = 0;
 		}
 	}
+	if (log_level != NONE)
+		close_log(log_file);
 	Rprintf("\nfinished at lambda = %f\n", lambda);
 	Rprintf("after %d total iters\n", iter_count);
 
