@@ -533,6 +533,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 
 	// now we're at the first saved line, check whether it's a complete checkpoint.
 	int can_restore = TRUE;
+	long first_pos = ftell(log_file);
 	fgets(buffer, buf_size, log_file);
 	printf("first buf: '%s'\n", buffer);
 	if (strncmp(buffer, "w", 1) == 0) {
@@ -549,26 +550,27 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 		}
 	} else {
 		// the first one was fine, but the second one may be more recent.
-		long first_pos = ftell(log_file);
 		int first_iter, first_lambda_count;
 		int second_iter, second_lambda_count;
 		double first_lambda_value;
 		double second_lambda_value;
-		sscanf(buffer, " %.5d, %.5d, %+.6e\n", first_iter, first_lambda_count, first_lambda_value);
+		sscanf(buffer, " %d, %d, %le\n", &first_iter, &first_lambda_count, &first_lambda_value);
 		fgets(buffer, buf_size, log_file);
 		fgets(buffer, buf_size, log_file);
 		long second_pos = ftell(log_file);
-		sscanf(buffer, " %.5d, %.5d, %+.6e\n", second_iter, second_lambda_count, second_lambda_value);
+		sscanf(buffer, " %d, %d, %le\n", &second_iter, &second_lambda_count, &second_lambda_value);
+		printf("first_lambda_count: %d\n", first_lambda_count);
+		printf("second_lambda_count: %d\n", second_lambda_count);
 		if (strncmp(buffer, "w", 1) == 0 
 		|| first_lambda_count > second_lambda_count
 		|| (first_lambda_count == second_lambda_count && first_iter > second_iter)) {
 			printf("first entry > second_entry\n");
 			// but we can't/shouldn't use this one, go back to the first
 			fseek(log_file, first_pos, SEEK_SET);
+			fgets(buffer, buf_size, log_file);
 		}
 	}
 	if (can_restore) {
-		char *test_val = " 00001 0.02 012";
 		// buffer contains the current lambda and iter values.
 		int first_iter = -1, first_lambda_count = -1;
 		double first_lambda_value = -1; 
@@ -585,6 +587,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 		for (int i = 0; i < num_betas; i++) {
 			//printf("values_buf: '%s'\n", buffer + offset);
 			//printf("reading beta %d\n", i);
+			actual_beta[i] = 0.0;
 			int ret = sscanf(buffer + offset, "%le, ", &actual_beta[i]);
 			if (ret != 1) {
 				printf("failed to match value in log, bad things will now happen\n");
@@ -741,7 +744,23 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int iter = 0;
 	if (check_can_restore_from_log(log_filename, n, p, p_int, job_args, job_args_num)) {
 		Rprintf("We can restore from a partial log!\n");
-		restore_from_log(log_filename, n, p, p_int, job_args, job_args_num, &iter, &lambda_count, &lambda, beta);
+		restore_from_log(log_filename, n, p, p_int, job_args, job_args_num, &iter, 
+				&lambda_count, &lambda, beta);
+		// we need to recalculate the rowsums
+		for (int col = 0; col < p_int; col++) {
+			int entry = -1;
+			for (int i = 0; i < X2.col_nwords[col]; i++) {
+				S8bWord word = X2.compressed_indices[col][i];
+				for (int j = 0; j < group_size[word.selector]; j++) {
+					int diff = word.values & masks[word.selector];
+					if (diff != 0) {
+						entry += diff;
+						rowsum[entry] += beta[col];
+					}
+					word.values >>= item_width[word.selector];
+				}
+			}
+		}
 	} else {
 		Rprintf("no partial log for current job found\n");
 	}
