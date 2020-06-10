@@ -39,3 +39,15 @@ minimal.supp
 x.mtx
 config.*
 configure.scan
+*.a
+*.gcda
+*.dat
+src/.deps*
+simulated_data
+small_x2_correct_beta
+run/*
+testing_stuff/
+libtool
+lto_pgo
+.buildconfig
+config/*

@@ -1,0 +1,2 @@
+PKG_CFLAGS = -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=600 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include -I/usr/share/R/include -fopenmp -I../
+PKG_LIBS = -L/usr/lib/R/lib -lglib-2.0 -Wl,-Bsymbolic-functions -lncurses -ltinfo -Wl,--export-dynamic -fopenmp -Wl,-Bsymbolic-functions -Wl,-z,relro -lR -lgsl -lgslcblas -lm -lgomp
