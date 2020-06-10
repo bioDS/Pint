@@ -1,7 +1,3 @@
-*
-!*.*
-
-
 ..Rcheck
 .kdev4
 .vscode
@@ -33,3 +29,13 @@ autoscan.log
 .RData
 .Rhistory
 *.code-workspace
+man/*
+normInfectX_1.2/*
+build/*
+.vscode/
+ltmain.sh
+output.txt
+minimal.supp
+x.mtx
+config.*
+configure.scan
