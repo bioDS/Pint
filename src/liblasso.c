@@ -358,7 +358,9 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	return nums;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, 
+						  double lambda, double *beta, int k, double dBMax, double intercept,
+						  int_pair *precalc_get_num, int *column_entry_cache,) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
