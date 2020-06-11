@@ -36,17 +36,20 @@ typedef struct XMatrix {
 	int actual_cols;
 } XMatrix;
 
-typedef struct column_set_entry {
-	int value;
-	int nextEntry;
-} ColEntry;
-
 typedef struct Column_Set {
 	int size;
-	ColEntry *cols;
+	int *cols;
+	int **overlap_matrix;
 } Column_Set;
 
+typedef struct Column_Partition {
+	Column_Set *sets;
+	int count;
+} Column_Partition;
+
 typedef struct XMatrix_sparse {
+	int n;
+	int p;
 	int *col_nz;
 	int *col_nwords;
 	unsigned short **col_nz_indices;
@@ -77,6 +80,8 @@ XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(int num, int p);
 void free_static_resources();
 void initialise_static_resources();
+Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, int total_columns);
+int find_overlap(int *col1, int *col2, int col1_size, int col2_size);
 
 #define TRUE 1
 #define FALSE 0
