@@ -622,6 +622,131 @@ double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, 
 	return error;
 }
 
+/* decompresses column k from X2 into full_column
+* returns the size of the column
+*/
+int decompress_column(XMatrix_sparse X2, int *full_column, int max_column_size, int k) {
+	int col_entry_pos = 0;
+	int entry = -1;
+	for (int i = 0; i < X2.col_nwords[k]; i++) {
+		S8bWord word = X2.compressed_indices[k][i];
+		for (int j = 0; j < group_size[word.selector]; j++) {
+			int diff = word.values & masks[word.selector];
+			if (diff != 0) {
+				entry += diff;
+				full_column[col_entry_pos] = entry;
+				col_entry_pos++;
+			}
+			word.values >>= item_width[word.selector];
+		}
+	}
+
+	return col_entry_pos;
+}
+
+/* Finds the overlap between two fully decompressed (but still sparse) columns.
+ */
+int find_overlap(int *col1, int *col2, int col1_size, int col2_size) {
+	int current_col1_index = 0;
+	int current_col2_index = 0;
+	int overlap = 0;
+	while(current_col1_index < col1_size && current_col2_index < col2_size) {
+		while (col1[current_col1_index] < col2[current_col2_index] && current_col1_index < col1_size) {
+			current_col1_index++;
+		}
+		while (col2[current_col2_index] < col1[current_col1_index] && current_col2_index < col2_size) {
+			current_col2_index++;
+		}
+
+		if (col1[current_col1_index] == col2[current_col2_index]
+		 && current_col1_index < col1_size
+		 && current_col2_index < col2_size) {
+			overlap++;
+			current_col2_index++;
+		} 
+		//else {
+		//	if (col1[current_col1_index] < col2[current_col2_index])
+		//		current_col1_index++;
+		//	if (col1[current_col2_index] < col1[current_col1_index])
+		//		current_col2_index++;
+		//}
+	}
+
+	return overlap;
+}
+
+/* TODO: we should sort the matrix so the blocks end up containing similar sized columns.
+ * TODO: This function/struct is overkill if we're doing sequential chunks of the matrix.
+ * Divides the X2 matrix into sets of columns, with determined
+ * error overlap between every pair of columns in the set.
+ */
+Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, int total_columns) {
+	int number_of_column_sets = 0;
+	Queue *column_set_queue = queue_new();
+	int *first_column = malloc(X2.n*sizeof(int));
+	int *second_column = malloc(X2.n*sizeof(int));
+
+	Rprintf("dividing matrix into blocks of size %d\n", block_size);
+
+	// iterate through the matrix, assigning each sequential group of `block_size` columns to a new set.
+	for (int block_start_column = 0; block_start_column < total_columns; block_start_column += block_size) {
+		int size = min(total_columns - block_start_column, block_size);
+		int *cols = malloc(size*sizeof(int));
+		int **overlap_matrix = malloc(block_size * sizeof(int *));
+		for (int i = 0; i < block_size; i++) {
+			overlap_matrix[i] = malloc(block_size * sizeof(int));
+		}
+
+		// assign everything from block_start to block_start + size to this block.
+		for (int column_in_block = 0; column_in_block < size; column_in_block++) {
+			cols[column_in_block] = block_start_column + column_in_block;
+		}
+
+		// find \forall {i, j} \sum_i^n ( xik . xij )
+		// i.e. for each pair of columns in the matrix, how much they overlap.
+		for (int first_col = 0; first_col < size; first_col++) {
+			for (int second_col = 0; second_col < first_col; second_col++) {
+				// find the overlap between first_col and second_col
+				int actual_first_col = cols[first_col];
+				int actual_second_col = cols[second_col];
+
+				//printf("%d: %d, %d: %d\n", first_col, actual_first_col, second_col, actual_second_col);
+
+				int col1_size = decompress_column(X2, first_column, X2.n, actual_first_col);
+				int col2_size = decompress_column(X2, second_column, X2.n, actual_second_col);
+
+				int overlap = find_overlap(first_column, second_column, col1_size, col2_size);
+
+				overlap_matrix[first_col][second_col] = overlap;
+				overlap_matrix[second_col][first_col] = overlap;
+			}
+		}
+
+		Column_Set *new_colset = malloc(sizeof(Column_Set));
+		new_colset->size = size;
+		new_colset->cols = cols;
+		new_colset->overlap_matrix = overlap_matrix;
+		number_of_column_sets++;
+		queue_push_tail(column_set_queue, new_colset);
+	}
+
+	Column_Set *sets = malloc(number_of_column_sets * sizeof(Column_Set));
+	for (int i = 0; !queue_is_empty(column_set_queue); i++) {
+		Column_Set *current_colset = queue_pop_head(column_set_queue);
+		memcpy(&sets[i], current_colset, sizeof(Column_Set));
+		free(current_colset);
+	}
+	
+
+	queue_free(column_set_queue);
+	free(first_column);
+	free(second_column);
+	Column_Partition column_partition;
+	column_partition.count = number_of_column_sets;
+	column_partition.sets = sets;
+	return column_partition;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.

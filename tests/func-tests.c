@@ -430,6 +430,87 @@ static void check_X2_encoding() {
 	printf("correct number of words\n");
 }
 
+void test_find_overlap() {
+	//col1: {1,0,0,1,0,0,1,0,0,1};
+	//col2: {0,0,1,0,1,1,1,0,0,1};
+
+	// extra overlap at end to see if we end up hitting it somehow,
+	// last value is not actually part of the column.
+	{
+		int col1[5] = {0,3,6,7,10};
+		int col2[6] = {2,4,5,6,9,10};
+
+		int overlap = find_overlap(col1, col2, 4, 5);
+		printf("overlap: %d == 1?\n", overlap);
+		g_assert_true(overlap == 1);
+
+		overlap = find_overlap(col2, col1, 5, 4);
+		printf("overlap: %d == 1?\n", overlap);
+		g_assert_true(overlap == 1);
+	}
+
+	{
+		int col1[5] = {0,3,4,7,10};
+		int col2[6] = {4,5,6,7,9,10};
+
+		int overlap = find_overlap(col1, col2, 4, 5);
+		printf("overlap: %d == 2?\n", overlap);
+		g_assert_true(overlap == 2);
+
+		overlap = find_overlap(col2, col1, 5, 4);
+		printf("overlap: %d == 2?\n", overlap);
+		g_assert_true(overlap == 2);
+	}
+}
+
+void test_block_division() {
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 10, 4);
+	int **testX2Tiny = X2_from_X(X.X, 10, 4);
+	for (int i = 0; i < 10; i++) {
+		for (int j = 0; j < 10; j++) {
+			printf("%d,", testX2Tiny[i][j]);
+		}
+		printf("\n");
+	}
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 10, 4, -1, -1);
+	int block_size = 4;
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
+
+	g_assert_true(column_partition.count == 3);
+
+	g_assert_true(column_partition.sets[0].size == 4);
+	{
+		int correct_values[4] = {0,1,2,3};
+		for (int i = 0; i < 4; i++)
+			g_assert_true(column_partition.sets[0].cols[i] == correct_values[i]);
+		g_assert_true(column_partition.sets[0].overlap_matrix[0][1] == 0);
+		g_assert_true(column_partition.sets[0].overlap_matrix[1][2] == 0);
+		g_assert_true(column_partition.sets[0].overlap_matrix[0][3] == 2);
+	}
+
+	g_assert_true(column_partition.sets[1].size == 4);
+	{
+		int correct_values[4] = {4,5,6,7};
+		for (int i = 0; i < 4; i++)
+			g_assert_true(column_partition.sets[1].cols[i] == correct_values[i]);
+		g_assert_true(column_partition.sets[1].overlap_matrix[0][1] == 1);
+		g_assert_true(column_partition.sets[1].overlap_matrix[0][3] == 1);
+		g_assert_true(column_partition.sets[1].overlap_matrix[1][2] == 0);
+		g_assert_true(column_partition.sets[1].overlap_matrix[1][3] == 1);
+		g_assert_true(column_partition.sets[1].overlap_matrix[2][3] == 0);
+		g_assert_true(column_partition.sets[1].overlap_matrix[2][3] == 0);
+	}
+
+	g_assert_true(column_partition.sets[2].size == 2);
+	{
+		int correct_values[4] = {8,9,-1,-1};
+		for (int i = 0; i < 2; i++)
+			g_assert_true(column_partition.sets[2].cols[i] == correct_values[i]);
+		g_assert_true(column_partition.sets[2].overlap_matrix[0][1] == 2);
+	}
+
+}
+
 
 int main (int argc, char *argv[]) {
 	initialise_static_resources();
