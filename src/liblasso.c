@@ -258,6 +258,7 @@ XMatrix read_x_csv(char *fn, int n, int p) {
 		printf("number of columns < p, should p have been %d?\n", actual_cols);
 		p = actual_cols;
 	}
+	printf("X: read %d columns from file\n", actual_cols);
 	free(buf);
 	XMatrix xmatrix;
 	xmatrix.X = X;
@@ -769,13 +770,21 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("using %d threads\n", NumCores);
 
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, TRUE);
+	int p_int = get_p_int(p, max_interaction_distance);
+
+	long total_column_size = 0;
+	for (int i = 0; i < p_int; i++) {
+		total_column_size += X2.col_nz[i];
+	}
+	Rprintf("mean column size: %f\n", (double)total_column_size/(double)p_int);
+
+	Rprintf("dividing matrix into updateable sets\n");
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
 		max_cumulative_rowsums[i] = 0;
 	}
 
-	int p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance == -1) {
 		max_interaction_distance = p_int/2+1;
 	}
@@ -1027,7 +1036,7 @@ int **X2_from_X(int **X, int n, int p) {
 		int offset = 0;
 		for (int i = 0; i < p; i++) {
 			for (int j = i; j < p; j++) {
-				X2[row][offset++] = X[row][i] * X[row][j];
+				X2[row][offset++] = X[i][row] * X[j][row];
 			}
 		}
 	}
@@ -1050,7 +1059,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	X2.compressed_indices = malloc(p_int*sizeof(int *));
-	X2.col_nz_indices = malloc(p_int*sizeof(int *));
+	//X2.col_nz_indices = malloc(p_int*sizeof(int *));
 	X2.col_nz = malloc(p_int*sizeof(int));
 	memset(X2.col_nz, 0, p_int*sizeof(int));
 	X2.col_nwords = malloc(p_int*sizeof(int));
@@ -1173,6 +1182,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	free(X2.col_nz);
 	free(X2.col_nwords);
 	free(r);
+	X2.n = n;
+	X2.p = p_int;
 	X2.compressed_indices = permuted_indices;
 	X2.col_nz = permuted_nz;
 	X2.col_nwords = permuted_nwords;
