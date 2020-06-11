@@ -17,7 +17,6 @@ aclocal.m4
 autoscan.log
 *.o
 *.so
-*test*
 *.pdf
 *.Po
 *.svg
@@ -51,3 +50,5 @@ libtool
 lto_pgo
 .buildconfig
 config/*
+*test_*
+*_test*

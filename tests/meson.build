@@ -13,3 +13,5 @@ test('cyclic coordinate descent - shuffled interactions', func_tests, args: ['-p
 test('compare_n', func_tests, args: ['-p', '/func/test-check-n'],)
 test('merge_n', func_tests, args: ['-p', '/func/test-merge-n'],)
 test('X2 encoding', func_tests, args: ['-p', '/func/test-X2-encoding'],)
+test('block division', func_tests, args: ['-p', '/func/test-block-division'],)
+test('find overlap', func_tests, args: ['-p', '/func/test-find-overlap'],)
