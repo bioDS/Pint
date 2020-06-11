@@ -306,8 +306,8 @@ static void check_X2_encoding() {
 
 	printf("size of s8bword struct: %d (int is %ld)\n", sizeof(S8bWord), sizeof(int));
 
-	int item_width[15] = {0,   0,   1,  2,  3,  4,  5,  6,  7, 8, 10, 12, 15, 20, 30, 60};
-	int group_size[15] = {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6,  5,  4,  3,  2,  1};
+	int item_width[16] = {0,   0,   1,  2,  3,  4,  5,  6,  7, 8, 10, 12, 15, 20, 30, 60};
+	int group_size[16] = {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6,  5,  4,  3,  2,  1};
 	int masks[16];
 	for (int i = 0; i < 16; i++)
 		masks[i] = (1<<item_width[i]) - 1;
