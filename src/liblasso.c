@@ -678,6 +678,7 @@ int find_overlap(int *col1, int *col2, int col1_size, int col2_size) {
 
 /* TODO: we should sort the matrix so the blocks end up containing similar sized columns.
  * TODO: This function/struct is overkill if we're doing sequential chunks of the matrix.
+ * TODO: we only need the diagonal of the overlap matrix
  * Divides the X2 matrix into sets of columns, with determined
  * error overlap between every pair of columns in the set.
  */
