@@ -1,5 +1,4 @@
 #include "liblasso.h"
-#include "../TurboPFor/vp4.h"
 #include "config.h"
 #include <omp.h>
 #include <gsl/gsl_rng.h>
