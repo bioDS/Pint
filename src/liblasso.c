@@ -481,6 +481,9 @@ int check_can_restore_from_log(char *filename, int n, int p, int num_betas, char
 	int buf_size = num_betas*16 + 500;
 	int can_use = FALSE;
 	FILE *log_file = fopen(filename, "r");
+	if (log_file == NULL) {
+		return FALSE;
+	}
 	char *our_args = malloc(500);
 	char *buffer = malloc(buf_size);
 
