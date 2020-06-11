@@ -921,7 +921,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
 	p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance < 0)
-		max_interaction_distance = p;
+		max_interaction_distance = p_int;
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	X2.compressed_indices = malloc(p_int*sizeof(int *));
