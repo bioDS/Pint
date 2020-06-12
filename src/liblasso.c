@@ -358,17 +358,83 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	return nums;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, 
+double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
+						  double lambda, double *beta, double dBMax, double intercept,
+						  int_pair *precalc_get_num, int *column_entry_cache, Column_Partition column_partition) {
+	int *column_entries = column_entry_cache;
+
+	//TODO: not this.
+	double *delta_beta = malloc(X2.p * sizeof(double));
+	double *delta_beta_hat = malloc(X2.p * sizeof(double));
+
+	// for every block b
+	for (int b = 0; b < column_partition.count; b++) {
+		// for every column k in block b at position ki in the block
+		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
+			int k = column_partition.sets[b].cols[ki];
+			delta_beta[ki] = 0.0;
+			double sumk = X2.col_nz[k];
+			//double sumn = X2.col_nz[k]*beta[k];
+			double sumn = 0.0;
+
+			// find the delta_beta for column j
+
+			//if (X2.col_nz[k] > 0) {
+			//	for (int i = 0; i < n; i++) {
+			//		delta_beta[ki] += testX2Tiny[i][k] * (Y[i] - rowsum[i]);
+			//	}
+			//	delta_beta[ki] /= X2.col_nz[k];
+			//}
+
+			int col_entry_pos = 0;
+			int entry = -1;
+			for (int i = 0; i < X2.col_nwords[k]; i++) {
+				S8bWord word = X2.compressed_indices[k][i];
+				for (int j = 0; j < group_size[word.selector]; j++) {
+					int diff = word.values & masks[word.selector];
+					if (diff != 0) {
+						entry += diff;
+						sumn += Y[entry] - intercept - rowsum[entry];
+						col_entry_pos++;
+					}
+					word.values >>= item_width[word.selector];
+				}
+			}
+
+			// TODO: This is probably slower than necessary.
+			double Bk_diff = beta[k];
+			if (sumk == 0.0) {
+				delta_beta[ki] = 0.0;
+				beta[k] = 0.0;
+			} else {
+				delta_beta[ki] = soft_threshold(sumn, lambda*n/2)/sumk;
+			}
+
+		}
+		// then correct for simultaneous updates
+		//TODO: we decompress the column a second time here, should we cache the entire block instead?
+		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2);
+		Bk_diff *= Bk_diff;
+		if (Bk_diff > dBMax)
+			dBMax = Bk_diff;
+		}
+	free(delta_beta);
+	free(delta_beta_hat);
+
+	return dBMax;
+}
+
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, int k, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int *column_entry_cache) {
-	double sumk = xmatrix_sparse.col_nz[k];
-	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
+	double sumk = X2.col_nz[k];
+	double sumn = X2.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
 
 	int col_entry_pos = 0;
 	int entry = -1;
-	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
-		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+	for (int i = 0; i < X2.col_nwords[k]; i++) {
+		S8bWord word = X2.compressed_indices[k][i];
 		for (int j = 0; j < group_size[word.selector]; j++) {
 			int diff = word.values & masks[word.selector];
 			if (diff != 0) {
@@ -391,14 +457,14 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
 	if (Bk_diff != 0) {
-		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+		for (int e = 0; e < X2.col_nz[k]; e++) {
 			int i = column_entries[e];
 			#pragma omp atomic
 			rowsum[i] += Bk_diff;
 		}
 	} else {
 		zero_updates++;
-		zero_updates_entries += xmatrix_sparse.col_nz[k];
+		zero_updates_entries += X2.col_nz[k];
 	}
 
 
@@ -755,8 +821,11 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
  * TODO: currently sequentially uses delta_beta_hat, we would like to use delta_beta in parallel,
  * but there are some scalability questions to be answered there.
  * we pass delta_beta_hat to avoid excessive malloc'ing.
+ * 
+ * return value: the largest update performed.
  */
-void correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2) {
+double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2) {
+	double largest_delta_beta_hat = 0.0;
 	for (int k = 0; k < column_set.size; k++) {
 		int actual_k = column_set.cols[k];
 		printf("beta[%d]: %f, delta_beta[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta[k]);
@@ -774,6 +843,8 @@ void correct_beta_updates(Column_Set column_set, double *beta, double *delta_bet
 			//finally, add \delta \beta_k
 			delta_beta_hat[k] = delta_beta[k] - diff;
 			beta[actual_k] += delta_beta_hat[k];
+			if (delta_beta_hat[k] > largest_delta_beta_hat)
+				largest_delta_beta_hat = delta_beta_hat[k];
 			// update rowsums
 			int entry = -1;
 			for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
@@ -791,6 +862,7 @@ void correct_beta_updates(Column_Set column_set, double *beta, double *delta_bet
 		}
 		printf("beta[%d]: %f, delta_beta_hat[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta_hat[k]);
 	}
+	return largest_delta_beta_hat;
 }
 
 /* Edgeworths's algorithm:

@@ -82,7 +82,10 @@ void free_static_resources();
 void initialise_static_resources();
 Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, int total_columns);
 int find_overlap(int *col1, int *col2, int col1_size, int col2_size);
-void correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2);
+double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2);
+double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
+						  double lambda, double *beta, double dBMax, double intercept,
+						  int_pair *precalc_get_num, int *column_entry_cache, Column_Partition column_partition);
 
 #define TRUE 1
 #define FALSE 0

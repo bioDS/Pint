@@ -600,6 +600,73 @@ void test_correct_beta_updates() {
 	}
 }
 
+void test_update_beta_partition() {
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 11, 4);
+	int **testX2Tiny = X2_from_X(X.X, 11, 4);
+	printf("X2:\n");
+	for (int i = 0; i < 11; i++) {
+		for (int j = 0; j < 10; j++) {
+			printf("%d,", testX2Tiny[i][j]);
+		}
+		printf("\n");
+	}
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
+	int block_size = 4;
+
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
+
+	// arbitrary beta changes for each column, check to see if they're accumulated correctly.
+	double Y[11] = {17.1, 79.10, 29.10, 95.5, 27.3, 36.3, 37.1, 49.8, 89.2, 89.8, 42.3, 90.6};
+	double beta[10] = {3.4, 0.0, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
+	double check_beta[10] = {3.4, 5.7, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
+	double delta_beta[10];
+	double check_delta_beta[10];
+	double delta_beta_hat[10];
+	//double error[11];
+	double rowsum[11];
+	double check_rowsum[11];
+
+	int n = 11;
+	int p = 10;
+
+	// Initialise rowsums
+	for (int i = 0; i < n; i++) {
+		rowsum[i] = 0.0;
+		check_rowsum[i] = 0.0;
+		for (int j = 0; j < p; j++) {
+			rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
+			check_rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
+		}
+		//error[i] = Y[i] - rowsum[i];
+	}
+	int_pair *precalc_get_num = malloc(p*sizeof(int_pair));
+	int offset = 0;
+	for (int i = 0; i < p; i++) {
+		for (int j = i; j < 4; j++) {
+			precalc_get_num[offset].i = i;
+			precalc_get_num[offset].j = j;
+			offset++;
+		}
+	}
+
+	int *thread_column_cache = malloc(n*sizeof(int));
+	for (int k = 0; k < p; k++)
+		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_cache);
+
+	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_cache, column_partition);
+
+	for (int j = 0; j < p; j++) {
+		printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
+		g_assert_true(fabs(beta[j] - check_beta[j]) < 0.001 );
+	}
+	for (int i = 0; i < n; i++) {
+		printf("checking rowsum[%d] (%f) == %f\n", i, rowsum[i], check_rowsum[i]);
+		g_assert_true(fabs(rowsum[i] - check_rowsum[i]) < 0.001 );
+	}
+
+	free(thread_column_cache);
+	free(precalc_get_num);
+}
 
 int main (int argc, char *argv[]) {
 	initialise_static_resources();
@@ -619,6 +686,7 @@ int main (int argc, char *argv[]) {
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-find-overlap", test_find_overlap);
 	g_test_add_func("/func/test-correct-beta-updates", test_correct_beta_updates);
+	g_test_add_func("/func/test-update-beta-partition", test_update_beta_partition);
 
 	return g_test_run();
 }
