@@ -464,15 +464,15 @@ void test_find_overlap() {
 }
 
 void test_block_division() {
-	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 10, 4);
-	int **testX2Tiny = X2_from_X(X.X, 10, 4);
-	for (int i = 0; i < 10; i++) {
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 11, 4);
+	int **testX2Tiny = X2_from_X(X.X, 11, 4);
+	for (int i = 0; i < 11; i++) {
 		for (int j = 0; j < 10; j++) {
 			printf("%d,", testX2Tiny[i][j]);
 		}
 		printf("\n");
 	}
-	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 10, 4, -1, -1);
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
 	int block_size = 4;
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
 
@@ -495,6 +495,7 @@ void test_block_division() {
 			g_assert_true(column_partition.sets[1].cols[i] == correct_values[i]);
 		g_assert_true(column_partition.sets[1].overlap_matrix[0][1] == 1);
 		g_assert_true(column_partition.sets[1].overlap_matrix[0][3] == 1);
+		g_assert_true(column_partition.sets[1].overlap_matrix[0][2] == 1);
 		g_assert_true(column_partition.sets[1].overlap_matrix[1][2] == 0);
 		g_assert_true(column_partition.sets[1].overlap_matrix[1][3] == 1);
 		g_assert_true(column_partition.sets[1].overlap_matrix[2][3] == 0);
