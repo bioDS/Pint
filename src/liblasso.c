@@ -360,9 +360,7 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
-						  int_pair *precalc_get_num, int *column_entry_cache, Column_Partition column_partition) {
-	int *column_entries = column_entry_cache;
-
+						  int_pair *precalc_get_num, int **column_entry_caches, Column_Partition column_partition) {
 	//TODO: not this.
 	double *delta_beta = malloc(X2.p * sizeof(double));
 	double *delta_beta_hat = malloc(X2.p * sizeof(double));
@@ -370,6 +368,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// for every block b
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
+		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) reduction(max: dBMax) //schedule(static, 1)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			int k = column_partition.sets[b].cols[ki];
 			delta_beta[ki] = 0.0;
@@ -407,7 +406,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 				delta_beta[ki] = 0.0;
 				beta[k] = 0.0;
 			} else {
-				delta_beta[ki] = soft_threshold(sumn, lambda*n/2)/sumk;
+				delta_beta[ki] = soft_threshold(sumn, lambda*n/2)/sumk; //TODO: should this be applied only to the delta?
 			}
 
 		}
@@ -828,18 +827,18 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 	double largest_delta_beta_hat = 0.0;
 	for (int k = 0; k < column_set.size; k++) {
 		int actual_k = column_set.cols[k];
-		printf("beta[%d]: %f, delta_beta[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta[k]);
+		// printf("beta[%d]: %f, delta_beta[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta[k]);
 		double diff = 0.0;
 		if (X2.col_nz[actual_k] != 0) {
 			// sum over j < k
 			for (int j = 0; j < k; j++) {
 				diff += delta_beta_hat[j] * (double)column_set.overlap_matrix[k][j];
-				printf("diff += %f * %d (overlap between %d,%d)\n", delta_beta_hat[j], column_set.overlap_matrix[k][j], k, j);
+				// printf("diff += %f * %d (overlap between %d,%d)\n", delta_beta_hat[j], column_set.overlap_matrix[k][j], k, j);
 			}
 
 			// divide by 1/{s_k}
 			diff /= (double)X2.col_nz[actual_k];
-			printf("diff: %f\n", diff);
+			// printf("diff: %f\n", diff);
 			//finally, add \delta \beta_k
 			delta_beta_hat[k] = delta_beta[k] - diff;
 			beta[actual_k] += delta_beta_hat[k];
@@ -854,13 +853,13 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 					if (col_diff != 0) {
 						entry += col_diff;
 						rowsum[entry] += delta_beta_hat[k];
-						printf("rowsum[%d] += delta_beta_hat[%d] : %f\n", entry, k, delta_beta_hat[k]);
+						// printf("rowsum[%d] += delta_beta_hat[%d] : %f\n", entry, k, delta_beta_hat[k]);
 					}
 					word.values >>= item_width[word.selector];
 				}
 			}
 		}
-		printf("beta[%d]: %f, delta_beta_hat[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta_hat[k]);
+		// printf("beta[%d]: %f, delta_beta_hat[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta_hat[k]);
 	}
 	return largest_delta_beta_hat;
 }
@@ -896,6 +895,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("mean column size: %f\n", (double)total_column_size/(double)p_int);
 
 	Rprintf("dividing matrix into updateable sets\n");
+	int block_size = 4; //TODO: automatically set this to something reasonable.
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, X2.p);
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
@@ -1037,14 +1038,17 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// it might be possible to do something better than this.
 		if (set_min_lambda == TRUE)
 			gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
-		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
-		for (int i = 0; i < p_int; i++) {
-			int k = iter_permutation->data[i];
+		//#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
+		//for (int i = 0; i < p_int; i++) {
+		//	int k = iter_permutation->data[i];
 
-			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
-			total_updates++;
-			total_updates_entries += X2.col_nz[k];
-		}
+		//	dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+		//	total_updates++;
+		//	total_updates_entries += X2.col_nz[k];
+		//}
+
+		dBMax = update_beta_partition(xmatrix, X2, Y, rowsum, n, p, lambda, beta, dBMax, intercept, precalc_get_num, thread_column_caches, column_partition);
+		total_updates += p_int;
 
 		if (!set_min_lambda) {
 			if (fabs(dBMax) > 0) {

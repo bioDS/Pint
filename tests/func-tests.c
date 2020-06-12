@@ -649,11 +649,16 @@ void test_update_beta_partition() {
 		}
 	}
 
-	int *thread_column_cache = malloc(n*sizeof(int));
+	int max_num_threads = 4;
+	int largest_col = n;
+	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
+	for (int i = 0; i <  max_num_threads; i++) {
+		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+	}
 	for (int k = 0; k < p; k++)
-		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_cache);
+		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[0]);
 
-	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_cache, column_partition);
+	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition);
 
 	for (int j = 0; j < p; j++) {
 		printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
@@ -664,7 +669,9 @@ void test_update_beta_partition() {
 		g_assert_true(fabs(rowsum[i] - check_rowsum[i]) < 0.001 );
 	}
 
-	free(thread_column_cache);
+	for (int i = 0; i <  max_num_threads; i++) {
+		free(thread_column_caches[i]);
+	}
 	free(precalc_get_num);
 }
 
