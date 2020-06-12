@@ -619,9 +619,7 @@ void test_update_beta_partition() {
 	double Y[11] = {17.1, 79.10, 29.10, 95.5, 27.3, 36.3, 37.1, 49.8, 89.2, 89.8, 42.3, 90.6};
 	double beta[10] = {3.4, 0.0, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
 	double check_beta[10] = {3.4, 5.7, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
-	double delta_beta[10];
 	double check_delta_beta[10];
-	double delta_beta_hat[10];
 	//double error[11];
 	double rowsum[11];
 	double check_rowsum[11];
@@ -656,9 +654,12 @@ void test_update_beta_partition() {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
 	}
 	for (int k = 0; k < p; k++)
-		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[0]);
+		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0.0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[0]);
 
-	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition);
+	double *delta_beta = malloc(block_size*sizeof(double));
+	double *delta_beta_hat = malloc(block_size*sizeof(double));
+	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
+						delta_beta, delta_beta_hat);
 
 	for (int j = 0; j < p; j++) {
 		printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
@@ -673,6 +674,8 @@ void test_update_beta_partition() {
 		free(thread_column_caches[i]);
 	}
 	free(precalc_get_num);
+	free(delta_beta);
+	free(delta_beta_hat);
 }
 
 int main (int argc, char *argv[]) {

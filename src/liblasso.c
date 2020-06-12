@@ -360,20 +360,22 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
-						  int_pair *precalc_get_num, int **column_entry_caches, Column_Partition column_partition) {
+						  int_pair *precalc_get_num, int **column_entry_caches, Column_Partition column_partition,
+						  double *delta_beta, double *delta_beta_hat) {
 	//TODO: not this.
-	double *delta_beta = malloc(X2.p * sizeof(double));
-	double *delta_beta_hat = malloc(X2.p * sizeof(double));
+	// double *delta_beta = malloc(X2.p * sizeof(double));
+	// double *delta_beta_hat = malloc(X2.p * sizeof(double));
 
 	// for every block b
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
-		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) reduction(max: dBMax) //schedule(static, 1)
+		//#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) reduction(max: dBMax) //schedule(static, 1)
+		#pragma omp parallel for num_threads(NumCores) reduction(max: dBMax)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			int k = column_partition.sets[b].cols[ki];
 			delta_beta[ki] = 0.0;
 			double sumk = X2.col_nz[k];
-			//double sumn = X2.col_nz[k]*beta[k];
+			// double sumn = X2.col_nz[k]*beta[k];
 			double sumn = 0.0;
 
 			// find the delta_beta for column j
@@ -406,19 +408,21 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 				delta_beta[ki] = 0.0;
 				beta[k] = 0.0;
 			} else {
-				delta_beta[ki] = soft_threshold(sumn, lambda*n/2)/sumk; //TODO: should this be applied only to the delta?
+				double delta_beta_k = soft_threshold(sumn, (lambda*n)/2.0)/sumk; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
+				// printf("sunk: %f, sumn: %f, new beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
+				delta_beta[ki] = delta_beta_k;
 			}
 
 		}
 		// then correct for simultaneous updates
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
 		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2);
-		Bk_diff *= Bk_diff;
-		if (Bk_diff > dBMax)
-			dBMax = Bk_diff;
+		//Bk_diff *= Bk_diff;
+		if (fabs(Bk_diff) > dBMax)
+			dBMax = fabs(Bk_diff);
 		}
-	free(delta_beta);
-	free(delta_beta_hat);
+	// free(delta_beta);
+	// free(delta_beta_hat);
 
 	return dBMax;
 }
@@ -427,7 +431,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double 
 						  double lambda, double *beta, int k, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = X2.col_nz[k];
-	double sumn = X2.col_nz[k]*beta[k];
+	// double sumn = X2.col_nz[k]*beta[k];
+	double sumn = 0.0;
 	int *column_entries = column_entry_cache;
 
 	int col_entry_pos = 0;
@@ -451,7 +456,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double 
 	if (sumk == 0.0) {
 		beta[k] = 0.0;
 	} else {
-		beta[k] = soft_threshold(sumn, lambda*n/2)/sumk;
+		beta[k] += soft_threshold(sumn, (lambda*n)/2.0)/sumk;
+		// printf("sumk: %f, sumn: %f, new beta[%d] = %f\n", sumk, sumn, k, beta[k]);
 	}
 	Bk_diff = beta[k] - Bk_diff;
 	// update every rowsum[i] w/ effects of beta change.
@@ -767,7 +773,9 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
 
 		// assign everything from block_start to block_start + size to this block.
 		for (int column_in_block = 0; column_in_block < size; column_in_block++) {
+			// int permuted_column = X2.permutation->data[block_start_column + column_in_block];
 			cols[column_in_block] = block_start_column + column_in_block;
+			// cols[column_in_block] = permuted_column;
 		}
 
 		// find \forall {i, j} \sum_i^n ( xik . xij )
@@ -881,12 +889,15 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int_pair *precalc_get_num;
 	int **X = xmatrix.X;
 	N = n;
-
+	int p_int = get_p_int(p, max_interaction_distance);
 	NumCores = omp_get_num_procs();
+	int block_size = NumCores*2; //TODO: automatically set this to something reasonable.
+	double *delta_beta = malloc(block_size * sizeof(double));
+	double *delta_beta_hat = malloc(block_size * sizeof(double));
+
 	Rprintf("using %d threads\n", NumCores);
 
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, TRUE);
-	int p_int = get_p_int(p, max_interaction_distance);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
 
 	long total_column_size = 0;
 	for (int i = 0; i < p_int; i++) {
@@ -895,8 +906,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("mean column size: %f\n", (double)total_column_size/(double)p_int);
 
 	Rprintf("dividing matrix into updateable sets\n");
-	int block_size = 4; //TODO: automatically set this to something reasonable.
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, X2.p);
+	printf("column_set 0 (size %d) has cols of the following sizes:\n", column_partition.sets[0].size);
+
+	for (int i = 0; i < column_partition.sets[0].size; i++) {
+		printf("%d, ", X2.col_nz[column_partition.sets[0].cols[i]]);
+	}
+	printf("\n");
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
@@ -1036,8 +1052,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// update the predictor \Beta_k
 		//TODO: shuffling is single-threaded and significantly-ish (40s -> 60s? on the workstation) slows things down.
 		// it might be possible to do something better than this.
-		if (set_min_lambda == TRUE)
-			gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
+		//if (set_min_lambda == TRUE)
+		//	gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 		//#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
 		//for (int i = 0; i < p_int; i++) {
 		//	int k = iter_permutation->data[i];
@@ -1047,7 +1063,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		//	total_updates_entries += X2.col_nz[k];
 		//}
 
-		dBMax = update_beta_partition(xmatrix, X2, Y, rowsum, n, p, lambda, beta, dBMax, intercept, precalc_get_num, thread_column_caches, column_partition);
+		dBMax = update_beta_partition(xmatrix, X2, Y, rowsum, n, p, lambda, beta, dBMax, intercept, precalc_get_num, thread_column_caches, column_partition,
+										delta_beta, delta_beta_hat);
 		total_updates += p_int;
 
 		if (!set_min_lambda) {
@@ -1145,6 +1162,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	free(X2.compressed_indices);
 	free(X2.col_nz);
 	free(X2.col_nwords);
+	free(delta_beta);
+	free(delta_beta_hat);
 
 
 	return beta;
@@ -1162,6 +1181,19 @@ int **X2_from_X(int **X, int n, int p) {
 		}
 	}
 	return X2;
+}
+
+int compare_column_size(const void *xp, const void *yp, int *column_sizes) {
+	int x = *(const int *)xp;
+	int y = *(const int *)yp;
+	int a = column_sizes[x];
+	int b = column_sizes[y];
+	if (a < b)
+		return 1;
+	else if (a > b)
+		return -1;
+	else
+		return 0;
 }
 
 
@@ -1282,9 +1314,12 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	printf("mean count: %f\n", (double)total_count/(double)total_words);
 	printf("mean size: %f\n", (double)total_sum/(double)total_entries);
 
-	gsl_rng *r;
+	// For error compensation, sort the martix by column size.
 	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
 	gsl_permutation_init(permutation);
+	qsort_r(permutation->data, permutation->size, sizeof(size_t*), compare_column_size, X2.col_nz);
+
+	gsl_rng *r;
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
 	r = gsl_rng_alloc(T);
