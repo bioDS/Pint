@@ -617,6 +617,7 @@ int main (int argc, char *argv[]) {
 	g_test_add_func("/func/test-block-division", test_block_division);
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-find-overlap", test_find_overlap);
+	g_test_add_func("/func/test-correct-beta-updates", test_correct_beta_updates);
 
 	return g_test_run();
 }
