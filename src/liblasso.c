@@ -750,6 +750,49 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
 	return column_partition;
 }
 
+/* Corrects the beta values updated in column set, assuming they were updated at the same time
+ * and we want them to be effectively sequential.
+ * TODO: currently sequentially uses delta_beta_hat, we would like to use delta_beta in parallel,
+ * but there are some scalability questions to be answered there.
+ * we pass delta_beta_hat to avoid excessive malloc'ing.
+ */
+void correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2) {
+	for (int k = 0; k < column_set.size; k++) {
+		int actual_k = column_set.cols[k];
+		printf("beta[%d]: %f, delta_beta[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta[k]);
+		double diff = 0.0;
+		if (X2.col_nz[actual_k] != 0) {
+			// sum over j < k
+			for (int j = 0; j < k; j++) {
+				diff += delta_beta_hat[j] * (double)column_set.overlap_matrix[k][j];
+				printf("diff += %f * %d (overlap between %d,%d)\n", delta_beta_hat[j], column_set.overlap_matrix[k][j], k, j);
+			}
+
+			// divide by 1/{s_k}
+			diff /= (double)X2.col_nz[actual_k];
+			printf("diff: %f\n", diff);
+			//finally, add \delta \beta_k
+			delta_beta_hat[k] = delta_beta[k] - diff;
+			beta[actual_k] += delta_beta_hat[k];
+			// update rowsums
+			int entry = -1;
+			for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
+				S8bWord word = X2.compressed_indices[actual_k][i];
+				for (int j = 0; j < group_size[word.selector]; j++) {
+					int col_diff = word.values & masks[word.selector];
+					if (col_diff != 0) {
+						entry += col_diff;
+						rowsum[entry] += delta_beta_hat[k];
+						printf("rowsum[%d] += delta_beta_hat[%d] : %f\n", entry, k, delta_beta_hat[k]);
+					}
+					word.values >>= item_width[word.selector];
+				}
+			}
+		}
+		printf("beta[%d]: %f, delta_beta_hat[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta_hat[k]);
+	}
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.

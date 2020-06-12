@@ -511,6 +511,94 @@ void test_block_division() {
 
 }
 
+void test_update_beta_block() {
+
+}
+
+void test_correct_beta_updates() {
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 11, 4);
+	int **testX2Tiny = X2_from_X(X.X, 11, 4);
+	printf("X2:\n");
+	for (int i = 0; i < 11; i++) {
+		for (int j = 0; j < 10; j++) {
+			printf("%d,", testX2Tiny[i][j]);
+		}
+		printf("\n");
+	}
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
+	int block_size = 4;
+
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
+
+	// arbitrary beta changes for each column, check to see if they're accumulated correctly.
+	double Y[11] = {17.1, 79.10, 29.10, 95.5, 27.3, 36.3, 37.1, 49.8, 89.2, 89.8, 42.3, 90.6};
+	double beta[10] = {3.4, 5.7, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
+	double check_beta[10] = {3.4, 5.7, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
+	double delta_beta[10];
+	double check_delta_beta[10];
+	double delta_beta_hat[10];
+	//double error[11];
+	double rowsum[11];
+	double check_rowsum[11];
+
+	int n = 11;
+	int p = 10;
+
+	// Initialise rowsums
+	for (int i = 0; i < n; i++) {
+		rowsum[i] = 0.0;
+		check_rowsum[i] = 0.0;
+		for (int j = 0; j < p; j++) {
+			rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
+			check_rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
+		}
+		//error[i] = Y[i] - rowsum[i];
+		printf("r%d: %f\n", i, rowsum[i]);
+	}
+
+	//update_beta_cyclic(X, X2, Y, rowsum, n, p, 0.0, beta, j, 0)
+	// Calculate delta betas
+	for (int b = 0; b < column_partition.count; b++) {
+		for (int ji = 0; ji < column_partition.sets[b].size; ji++) {
+			int j = column_partition.sets[b].cols[ji];
+			delta_beta[ji] = 0.0;
+			if (X2.col_nz[j] > 0) {
+				for (int i = 0; i < n; i++) {
+					delta_beta[ji] += testX2Tiny[i][j] * (Y[i] - rowsum[i]);
+				}
+				delta_beta[ji] /= X2.col_nz[j];
+			}
+		}
+		correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2);
+	}
+	for (int j = 0; j < p; j++) {
+		check_delta_beta[j] = 0.0;
+		if (X2.col_nz[j] > 0) {
+			for (int i = 0; i < n; i++) {
+				check_delta_beta[j] += testX2Tiny[i][j] * (Y[i] - check_rowsum[i]);
+			}
+			check_delta_beta[j] /= X2.col_nz[j];
+			for (int i = 0; i < n; i++) {
+				check_rowsum[i] += check_delta_beta[j] * (double)testX2Tiny[i][j];
+			}
+			check_beta[j] += check_delta_beta[j];
+		}
+	}
+
+	for (int j = 0; j < p; j++) {
+		printf("actual delta_hat_beta[%d]: %f\n", j, check_delta_beta[j]);
+	}
+
+	for (int j = 0; j < 10; j++) {
+		printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
+		g_assert_true(fabs(beta[j] - check_beta[j]) < 0.001);
+	}
+	for (int i = 0; i < 11; i++) {
+		printf("checking rowsum[%d] (%f) == %f\n", i, rowsum[i], check_rowsum[i]);
+		g_assert_true(fabs(rowsum[i] - check_rowsum[i]) < 0.001);
+	}
+}
+
 
 int main (int argc, char *argv[]) {
 	initialise_static_resources();
