@@ -604,6 +604,11 @@ void test_correct_beta_updates() {
 		printf("checking rowsum[%d] (%f) == %f\n", i, rowsum[i], check_rowsum[i]);
 		g_assert_true(fabs(rowsum[i] - check_rowsum[i]) < 0.001);
 	}
+
+	for (int i = 0; i < block_size; i++) {
+		free(column_entry_caches[i]);
+	}
+	free(column_entry_caches);
 }
 
 void test_update_beta_partition_lambda0() {
