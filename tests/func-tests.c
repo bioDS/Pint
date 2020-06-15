@@ -88,7 +88,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE, FALSE);
 	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, fixture->precalc_get_num, fixture->column_cache);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
@@ -188,7 +188,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 	printf("starting interaction test\n");
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle, FALSE);
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
@@ -225,7 +225,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture, gco
 	fixture->p = 35;
 	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE, FALSE);
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
@@ -279,7 +279,7 @@ static void check_X2_encoding() {
 	int p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, 1, -1);
+	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE, FALSE);
 
 	// mean entry size
 	long total = 0;
@@ -472,7 +472,7 @@ void test_block_division() {
 		}
 		printf("\n");
 	}
-	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, FALSE, FALSE);
 	int block_size = 4;
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
 
@@ -526,8 +526,13 @@ void test_correct_beta_updates() {
 		}
 		printf("\n");
 	}
-	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, FALSE, FALSE);
 	int block_size = 4;
+
+	int **column_entry_caches = malloc(block_size*sizeof(int*));
+	for (int i = 0; i < block_size; i++) {
+		column_entry_caches[i] = malloc(X2.n*sizeof(int));
+	}
 
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
 
@@ -567,10 +572,11 @@ void test_correct_beta_updates() {
 				for (int i = 0; i < n; i++) {
 					delta_beta[ji] += testX2Tiny[i][j] * (Y[i] - rowsum[i]);
 				}
-				delta_beta[ji] /= X2.col_nz[j];
+				// delta_beta[ji] /= X2.col_nz[j];
 			}
+			decompress_column(X2, column_entry_caches[ji], X2.n, j);
 		}
-		correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2);
+		correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, 0.0, column_entry_caches);
 	}
 	for (int j = 0; j < p; j++) {
 		check_delta_beta[j] = 0.0;
@@ -600,7 +606,14 @@ void test_correct_beta_updates() {
 	}
 }
 
-void test_update_beta_partition() {
+void test_update_beta_partition_lambda0() {
+	test_update_beta_partition(0.0);
+}
+void test_update_beta_partition_lambda1() {
+	test_update_beta_partition(6.4);
+}
+
+void test_update_beta_partition(double lambda) {
 	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/testXTiny.csv", 11, 4);
 	int **testX2Tiny = X2_from_X(X.X, 11, 4);
 	printf("X2:\n");
@@ -610,30 +623,30 @@ void test_update_beta_partition() {
 		}
 		printf("\n");
 	}
-	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, -1);
+	int n = 11;
+	int p = 10;
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, 11, 4, -1, FALSE, FALSE);
 	int block_size = 4;
 
-	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, 10);
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, p);
 
 	// arbitrary beta changes for each column, check to see if they're accumulated correctly.
 	double Y[11] = {17.1, 79.10, 29.10, 95.5, 27.3, 36.3, 37.1, 49.8, 89.2, 89.8, 42.3, 90.6};
 	double beta[10] = {3.4, 0.0, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
-	double check_beta[10] = {3.4, 5.7, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
+	double check_beta[10] = {3.4, 0.0, 2.3, 55.0, 34.2, 23.1, 56.2, 17.2, 19.2, 0.2, 10.9};
 	double check_delta_beta[10];
 	//double error[11];
 	double rowsum[11];
 	double check_rowsum[11];
 
-	int n = 11;
-	int p = 10;
 
 	// Initialise rowsums
 	for (int i = 0; i < n; i++) {
 		rowsum[i] = 0.0;
 		check_rowsum[i] = 0.0;
 		for (int j = 0; j < p; j++) {
-			rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
-			check_rowsum[i] += beta[j] * (double)testX2Tiny[i][j];
+			rowsum[i] 		+= beta[j] * (double)testX2Tiny[i][j];
+			check_rowsum[i]	+= beta[j] * (double)testX2Tiny[i][j];
 		}
 		//error[i] = Y[i] - rowsum[i];
 	}
@@ -654,11 +667,11 @@ void test_update_beta_partition() {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
 	}
 	for (int k = 0; k < p; k++)
-		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, 0.0, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[0]);
+		update_beta_cyclic(X, X2, Y, check_rowsum, n, p, lambda, check_beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[0]);
 
 	double *delta_beta = malloc(block_size*sizeof(double));
 	double *delta_beta_hat = malloc(block_size*sizeof(double));
-	update_beta_partition(X, X2, Y, rowsum, n, p, 0.0, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
+	update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
 						delta_beta, delta_beta_hat);
 
 	for (int j = 0; j < p; j++) {
@@ -696,7 +709,8 @@ int main (int argc, char *argv[]) {
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-find-overlap", test_find_overlap);
 	g_test_add_func("/func/test-correct-beta-updates", test_correct_beta_updates);
-	g_test_add_func("/func/test-update-beta-partition", test_update_beta_partition);
+	g_test_add_func("/func/test-update-beta-partition", test_update_beta_partition_lambda0);
+	g_test_add_func("/func/test-update-beta-partition-lambda", test_update_beta_partition_lambda1);
 
 	return g_test_run();
 }

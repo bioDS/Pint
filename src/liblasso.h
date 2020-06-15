@@ -67,7 +67,7 @@ typedef struct {
 } int_pair;
 
 int **X2_from_X(int **X, int n, int p);
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int permute, int max_interaction_distance);
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_distance, int shuffle, int order);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, int max_interaction_distance, 
 		double lambda_min, double lambda_max, char *method, int max_iter, int VERBOSE, double frac_overlap_allowed, 
 		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num);
@@ -82,11 +82,12 @@ void free_static_resources();
 void initialise_static_resources();
 Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, int total_columns);
 int find_overlap(int *col1, int *col2, int col1_size, int col2_size);
-double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2);
+double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2, double lambda, int **column_entry_caches);
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int **thread_column_caches, Column_Partition column_partition,
 						  double *delta_beta, double *delta_beta_hat);
+int decompress_column(XMatrix_sparse X2, int *full_column, int max_column_size, int k);
 
 #define TRUE 1
 #define FALSE 0

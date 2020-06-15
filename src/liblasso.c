@@ -373,6 +373,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		#pragma omp parallel for num_threads(NumCores) reduction(max: dBMax)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			int k = column_partition.sets[b].cols[ki];
+			int *column_entries = column_entry_caches[ki];
 			delta_beta[ki] = 0.0;
 			double sumk = X2.col_nz[k];
 			// double sumn = X2.col_nz[k]*beta[k];
@@ -395,6 +396,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 					int diff = word.values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
+						column_entries[col_entry_pos] = entry;
 						sumn += Y[entry] - intercept - rowsum[entry];
 						col_entry_pos++;
 					}
@@ -405,18 +407,19 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 			// TODO: This is probably slower than necessary.
 			double Bk_diff = beta[k];
 			if (sumk == 0.0) {
-				delta_beta[ki] = 0.0;
 				beta[k] = 0.0;
+				delta_beta[ki] = -beta[k];
+				// printf("sumk was 0, delta_beta_%d: %f\n", k, delta_beta[ki]);
 			} else {
-				double delta_beta_k = soft_threshold(sumn, (lambda*n)/2.0)/sumk; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
-				// printf("sunk: %f, sumn: %f, new beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
+				double delta_beta_k = sumn; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
+				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
 				delta_beta[ki] = delta_beta_k;
 			}
 
 		}
 		// then correct for simultaneous updates
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2);
+		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
 		//Bk_diff *= Bk_diff;
 		if (fabs(Bk_diff) > dBMax)
 			dBMax = fabs(Bk_diff);
@@ -431,8 +434,8 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double 
 						  double lambda, double *beta, int k, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = X2.col_nz[k];
-	// double sumn = X2.col_nz[k]*beta[k];
-	double sumn = 0.0;
+	double sumn = X2.col_nz[k]*beta[k];
+	//double sumn = 0.0;
 	int *column_entries = column_entry_cache;
 
 	int col_entry_pos = 0;
@@ -453,13 +456,15 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double 
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
+	// printf("bk[%d] = %f\n", k, beta[k]);
 	if (sumk == 0.0) {
 		beta[k] = 0.0;
 	} else {
-		beta[k] += soft_threshold(sumn, (lambda*n)/2.0)/sumk;
+		beta[k] = soft_threshold(sumn, (lambda*n)/2.0)/sumk;
 		// printf("sumk: %f, sumn: %f, new beta[%d] = %f\n", sumk, sumn, k, beta[k]);
 	}
 	Bk_diff = beta[k] - Bk_diff;
+	// printf("bk_diff[%d]: %f\n",k, Bk_diff);
 	// update every rowsum[i] w/ effects of beta change.
 	if (Bk_diff != 0) {
 		for (int e = 0; e < X2.col_nz[k]; e++) {
@@ -786,12 +791,13 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
 				int actual_first_col = cols[first_col];
 				int actual_second_col = cols[second_col];
 
-				//printf("%d: %d, %d: %d\n", first_col, actual_first_col, second_col, actual_second_col);
+				// printf("%d: %d, %d: %d\n", first_col, actual_first_col, second_col, actual_second_col);
 
 				int col1_size = decompress_column(X2, first_column, X2.n, actual_first_col);
 				int col2_size = decompress_column(X2, second_column, X2.n, actual_second_col);
 
 				int overlap = find_overlap(first_column, second_column, col1_size, col2_size);
+				// printf("overlap between %d,%d += %d\n", first_col, second_col, overlap);
 
 				overlap_matrix[first_col][second_col] = overlap;
 				overlap_matrix[second_col][first_col] = overlap;
@@ -831,7 +837,7 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
  * 
  * return value: the largest update performed.
  */
-double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2) {
+double correct_beta_updates(Column_Set column_set, double *beta, double *delta_beta, int num_beta, double *delta_beta_hat, double *rowsum, XMatrix_sparse X2, double lambda, int **column_entry_caches) {
 	double largest_delta_beta_hat = 0.0;
 	for (int k = 0; k < column_set.size; k++) {
 		int actual_k = column_set.cols[k];
@@ -841,31 +847,37 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 			// sum over j < k
 			for (int j = 0; j < k; j++) {
 				diff += delta_beta_hat[j] * (double)column_set.overlap_matrix[k][j];
-				// printf("diff += %f * %d (overlap between %d,%d)\n", delta_beta_hat[j], column_set.overlap_matrix[k][j], k, j);
+				// printf("diff += %f * %d (overlap between %d,%d) -\n", delta_beta_hat[j], column_set.overlap_matrix[k][j], k, j);
 			}
 
 			// divide by 1/{s_k}
-			diff /= (double)X2.col_nz[actual_k];
+			// diff /= (double)X2.col_nz[actual_k];
 			// printf("diff: %f\n", diff);
 			//finally, add \delta \beta_k
-			delta_beta_hat[k] = delta_beta[k] - diff;
+			delta_beta_hat[k] = soft_threshold(beta[actual_k]*X2.col_nz[actual_k] + delta_beta[k] - diff, lambda*X2.n/2.0)/X2.col_nz[actual_k] - beta[actual_k];
+			// printf("delta_beta_%d = threshold(%f*%d + %f - %f,%f)/%d - %f\n", 
+				// k, beta[k], X2.col_nz[actual_k], delta_beta[k], diff, lambda*X2.n/2.0, X2.col_nz[actual_k], beta[actual_k]);
 			beta[actual_k] += delta_beta_hat[k];
 			if (delta_beta_hat[k] > largest_delta_beta_hat)
 				largest_delta_beta_hat = delta_beta_hat[k];
 			// update rowsums
-			int entry = -1;
 			for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
-				S8bWord word = X2.compressed_indices[actual_k][i];
-				for (int j = 0; j < group_size[word.selector]; j++) {
-					int col_diff = word.values & masks[word.selector];
-					if (col_diff != 0) {
-						entry += col_diff;
-						rowsum[entry] += delta_beta_hat[k];
-						// printf("rowsum[%d] += delta_beta_hat[%d] : %f\n", entry, k, delta_beta_hat[k]);
-					}
-					word.values >>= item_width[word.selector];
-				}
+				int entry = column_entry_caches[k][i];
+			 	rowsum[entry] += delta_beta_hat[k];
 			}
+			// int entry = -1;
+			// for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
+			// 	S8bWord word = X2.compressed_indices[actual_k][i];
+			// 	for (int j = 0; j < group_size[word.selector]; j++) {
+			// 		int col_diff = word.values & masks[word.selector];
+			// 		if (col_diff != 0) {
+			// 			entry += col_diff;
+			// 			rowsum[entry] += delta_beta_hat[k];
+			// 			// printf("rowsum[%d] += delta_beta_hat[%d] : %f\n", entry, k, delta_beta_hat[k]);
+			// 		}
+			// 		word.values >>= item_width[word.selector];
+			// 	}
+			// }
 		}
 		// printf("beta[%d]: %f, delta_beta_hat[%d] = %f\n", actual_k, beta[actual_k], k, delta_beta_hat[k]);
 	}
@@ -897,7 +909,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	Rprintf("using %d threads\n", NumCores);
 
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE, TRUE);
 
 	long total_column_size = 0;
 	for (int i = 0; i < p_int; i++) {
@@ -1004,7 +1016,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int lambda_count = 1;
 	int iter_count = 0;
 
-	int max_num_threads = omp_get_max_threads();
+	// int max_num_threads = omp_get_max_threads();
+	int max_num_threads = block_size;
 	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
 	for (int i = 0; i <  max_num_threads; i++) {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
@@ -1198,7 +1211,7 @@ int compare_column_size(const void *xp, const void *yp, int *column_sizes) {
 
 
 // TODO: write a test comparing this to non-sparse X2
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_distance, int shuffle) {
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_distance, int shuffle, int order) {
 	XMatrix_sparse X2;
 	int colno, val, length;
 	
@@ -1317,7 +1330,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	// For error compensation, sort the martix by column size.
 	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
 	gsl_permutation_init(permutation);
-	qsort_r(permutation->data, permutation->size, sizeof(size_t*), compare_column_size, X2.col_nz);
+	if (order == TRUE)
+		qsort_r(permutation->data, permutation->size, sizeof(size_t*), compare_column_size, X2.col_nz);
 
 	gsl_rng *r;
 	gsl_rng_env_setup();
