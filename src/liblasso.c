@@ -861,7 +861,7 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 			if (delta_beta_hat[k] > largest_delta_beta_hat)
 				largest_delta_beta_hat = delta_beta_hat[k];
 			// update rowsums
-			for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
+			for (int i = 0; i < X2.col_nz[actual_k]; i++) {
 				int entry = column_entry_caches[k][i];
 			 	rowsum[entry] += delta_beta_hat[k];
 			}
