@@ -574,6 +574,7 @@ void test_correct_beta_updates() {
 				}
 				// delta_beta[ji] /= X2.col_nz[j];
 			}
+			printf("setting column_entry_caches[%d]\n", ji);
 			decompress_column(X2, column_entry_caches[ji], X2.n, j);
 		}
 		correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, 0.0, column_entry_caches);
@@ -610,6 +611,8 @@ void test_correct_beta_updates() {
 	}
 	free(column_entry_caches);
 }
+
+void test_update_beta_partition(double lambda);
 
 void test_update_beta_partition_lambda0() {
 	test_update_beta_partition(0.0);
