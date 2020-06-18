@@ -390,7 +390,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
 			int k = column_partition.sets[b].cols[ki];
-			int *column_entries = column_entry_caches[ki];
+			// int *column_entries = column_entry_caches[ki];
 			// delta_beta[ki] = 0.0;
 			double sumk = X2.col_nz[k];
 			// double sumn = X2.col_nz[k]*beta[k];
@@ -405,7 +405,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 					int diff = word.values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
-						column_entries[col_entry_pos] = entry;
+						// column_entries[col_entry_pos] = entry;
 						sumn += Y[entry];
 						sumn -= intercept;
 						double re = rowsum[entry];
@@ -420,28 +420,29 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 			double Bk_diff = beta[k];
 			if (sumk == 0.0) {
 				// beta[k] = 0.0;
-				delta_beta[ki] = -beta[k];
+				// delta_beta[ki] = -beta[k];
 				// printf("sumk was 0, delta_beta_%d: %f\n", k, delta_beta[ki]);
 			} else {
 				double delta_beta_k = sumn; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
-				delta_beta[ki] = delta_beta_k;
+				// delta_beta[ki] = delta_beta_k;
 			}
 
 		}
 		// then correct for simultaneous updates
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
+		// double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
 		//Bk_diff *= Bk_diff;
-		if (fabs(Bk_diff) > dBMax)
-			dBMax = fabs(Bk_diff);
+		// if (fabs(Bk_diff) > dBMax)
+		// 	dBMax = fabs(Bk_diff);
 		}
 
 	// printf("used %d cores on avg.\n", iter_cores/column_partition.count);
 	// free(delta_beta);
 	// free(delta_beta_hat);
 
-	return dBMax;
+	// return dBMax;
+	return 0.0;
 }
 
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
