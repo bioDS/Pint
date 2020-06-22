@@ -375,8 +375,11 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		// 	total_updates_entries += X2.col_nz[k];
 		// }
 
+	// #pragma omp parallel
+	// {
 	// for every block b
 	int iter_cores = 0;
+	// #pragma omp parallel
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
 		// #pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) reduction(max: dBMax) //schedule(static, 1)
@@ -386,12 +389,12 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		//int use_threads = min(NumCores, (column_partition.mean_size / 1000));
 		// #pragma omp parallel for num_threads(use_threads) shared(Y)//TODO: profiling suggests that this loop in particular takes longer in parallel than on one core. False sharing of delta_beta?
 		// #pragma omp parallel
-		#pragma omp parallel for
+		#pragma omp parallel for schedule(static,5)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
 			int k = column_partition.sets[b].cols[ki];
-			// int *column_entries = column_entry_caches[ki];
-			// delta_beta[ki] = 0.0;
+			int *column_entries = column_entry_caches[ki];
+			delta_beta[ki] = 0.0;
 			double sumk = X2.col_nz[k];
 			// double sumn = X2.col_nz[k]*beta[k];
 			double sumn = 0.0;
@@ -405,7 +408,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 					int diff = word.values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
-						// column_entries[col_entry_pos] = entry;
+						column_entries[col_entry_pos] = entry;
 						sumn += Y[entry];
 						sumn -= intercept;
 						double re = rowsum[entry];
@@ -417,25 +420,26 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 			}
 
 			// TODO: This is probably slower than necessary.
-			double Bk_diff = beta[k];
+			// double Bk_diff = beta[k];
 			if (sumk == 0.0) {
 				// beta[k] = 0.0;
-				// delta_beta[ki] = -beta[k];
+				delta_beta[ki] = -beta[k];
 				// printf("sumk was 0, delta_beta_%d: %f\n", k, delta_beta[ki]);
 			} else {
 				double delta_beta_k = sumn; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
-				// delta_beta[ki] = delta_beta_k;
+				delta_beta[ki] = delta_beta_k;
 			}
 
-		}
+		// }
 		// then correct for simultaneous updates
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		// double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
-		//Bk_diff *= Bk_diff;
-		// if (fabs(Bk_diff) > dBMax)
-		// 	dBMax = fabs(Bk_diff);
+		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
+		Bk_diff *= Bk_diff;
+		 if (fabs(Bk_diff) > dBMax)
+		 	dBMax = fabs(Bk_diff);
 		}
+	}
 
 	// printf("used %d cores on avg.\n", iter_cores/column_partition.count);
 	// free(delta_beta);
@@ -471,7 +475,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double 
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
-	// printf("bk[%d] = %f\n", k, beta[k]);
+	//// printf("bk[%d] = %f\n", k, beta[k]);
 	if (sumk == 0.0) {
 		beta[k] = 0.0;
 	} else {

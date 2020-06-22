@@ -702,7 +702,7 @@ void test_update_beta_partition(double lambda) {
 void test_update_beta_partition_repeat() {
 	int n = 10000;
 	int p = 1000;
-	int block_size = 40;
+	int block_size = 400;
 	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
 	printf("reading Y\n");
 	double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
@@ -720,6 +720,7 @@ void test_update_beta_partition_repeat() {
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, p);
 
 	printf("initialising variables\n");
+	// omp_set_num_threads(8);
 	// Initialise rowsums
 	for (int col = 0; col < p_int; col++) {
 		int entry = -1;
@@ -756,12 +757,102 @@ void test_update_beta_partition_repeat() {
 	double *delta_beta = malloc(block_size*sizeof(double));
 	double *delta_beta_hat = malloc(block_size*sizeof(double));
 
-	int num_updates = 100000;
+	int num_updates = 1000;
 	printf("updating beta %d times\n", num_updates);
 	double time1 = omp_get_wtime();
 	for (int i = 0; i < num_updates; i++)
 		update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
 						delta_beta, delta_beta_hat);
+	double time2 = omp_get_wtime();
+	printf("total time: %f\n", time2 - time1);
+
+	//for (int j = 0; j < p; j++) {
+	//	printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
+	//	g_assert_true(fabs(beta[j] - check_beta[j]) < 0.001 );
+	//}
+	//for (int i = 0; i < n; i++) {
+	//	printf("checking rowsum[%d] (%f) == %f\n", i, rowsum[i], check_rowsum[i]);
+	//	g_assert_true(fabs(rowsum[i] - check_rowsum[i]) < 0.001 );
+	//}
+
+	double sum = 0.0;
+	for (int i = 0; i < p_int; i++)
+		sum += beta[i];
+	printf("final beta sum (to avoid optimising out updates) %f\n", sum);
+	printf("freeing things\n");
+	for (int i = 0; i <  max_num_threads; i++) {
+		free(thread_column_caches[i]);
+	}
+	free(thread_column_caches);
+	free(precalc_get_num);
+	free(delta_beta);
+	free(delta_beta_hat);
+	free(beta);
+}
+void test_update_beta_cyclic_repeat() {
+	int n = 10000;
+	int p = 1000;
+	int block_size = 40;
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
+	printf("reading Y\n");
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
+	int **testX2= X2_from_X(X.X, 11, 4);
+	int p_int = (p*(p+1))/2;
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, 1, FALSE, FALSE);
+	double lambda = 6.46;
+
+	double *beta = malloc(p_int * sizeof(double));
+	memset(beta, 0, p_int*sizeof(double));
+	double *rowsum = malloc(n * sizeof(double));
+	memset(rowsum, 0, n*sizeof(double));
+
+	printf("dividing into blocks\n");
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, p);
+
+	printf("initialising variables\n");
+	// omp_set_num_threads(8);
+	// Initialise rowsums
+	for (int col = 0; col < p_int; col++) {
+		int entry = -1;
+		for (int i = 0; i < X2.col_nwords[col]; i++) {
+			S8bWord word = X2.compressed_indices[col][i];
+			for (int j = 0; j < group_size[word.selector]; j++) {
+				int diff = word.values & masks[word.selector];
+				if (diff != 0) {
+					entry += diff;
+					rowsum[entry] += beta[col];
+				}
+				word.values >>= item_width[word.selector];
+			}
+		}
+	}
+	int_pair *precalc_get_num = malloc(p*sizeof(int_pair));
+	int offset = 0;
+	for (int i = 0; i < p; i++) {
+		for (int j = i; j < 4; j++) {
+			precalc_get_num[offset].i = i;
+			precalc_get_num[offset].j = j;
+			offset++;
+		}
+	}
+
+	// int max_num_threads = 4;
+	int max_num_threads = block_size;
+	int largest_col = n;
+	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
+	for (int i = 0; i <  max_num_threads; i++) {
+		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+	}
+
+	double *delta_beta = malloc(block_size*sizeof(double));
+	double *delta_beta_hat = malloc(block_size*sizeof(double));
+
+	int num_updates = 1000;
+	printf("updating beta %d times\n", num_updates);
+	double time1 = omp_get_wtime();
+	for (int i = 0; i < num_updates; i++)
+		for (int k = 0; k < X2.p; k++)
+			update_beta_cyclic(X, X2, Y, rowsum, n, p, lambda, beta, k, 0.0, 0.0, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 	double time2 = omp_get_wtime();
 	printf("total time: %f\n", time2 - time1);
 
@@ -810,6 +901,7 @@ int main (int argc, char *argv[]) {
 	g_test_add_func("/func/test-update-beta-partition", test_update_beta_partition_lambda0);
 	g_test_add_func("/func/test-update-beta-partition-lambda", test_update_beta_partition_lambda1);
 	g_test_add_func("/func/test-update-beta-partition-repeat", test_update_beta_partition_repeat);
+	g_test_add_func("/func/test-update-beta-cyclic-repeat", test_update_beta_cyclic_repeat);
 
 	return g_test_run();
 }
