@@ -778,22 +778,24 @@ int find_overlap(int *col1, int *col2, int col1_size, int col2_size) {
  * error overlap between every pair of columns in the set.
  */
 Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, int total_columns) {
+	NumCores = omp_get_max_threads(); //TODO: only set this once.
 	int number_of_column_sets = 0;
-	Queue *column_set_queue = queue_new();
+	Queue **thread_column_set_queues = malloc(NumCores*sizeof(Queue*));;
 	// int *first_column = malloc(X2.n*sizeof(int));
 	// int *second_column = malloc(X2.n*sizeof(int));
-	// NumCores = omp_get_max_threads(); //TODO: only set this once.
 	int **first_columns = malloc(NumCores*sizeof(int*));
 	int **second_columns = malloc(NumCores*sizeof(int*));
 
 	for (int i = 0; i < NumCores; i++) {
 		first_columns[i] = malloc(X2.n*sizeof(int));
 		second_columns[i] = malloc(X2.n*sizeof(int));
+		thread_column_set_queues[i] = queue_new();
 	}
 
 	Rprintf("dividing matrix into blocks of size %d\n", block_size);
 
 	// iterate through the matrix, assigning each sequential group of `block_size` columns to a new set.
+	#pragma omp parallel for reduction(+: number_of_column_sets)
 	for (int block_start_column = 0; block_start_column < total_columns; block_start_column += block_size) {
 		int total_size = 0;
 		int size = min(total_columns - block_start_column, block_size);
@@ -840,23 +842,25 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
 		new_colset->overlap_matrix = overlap_matrix;
 		new_colset->mean_size = ((double)total_size)/(double)size;
 		number_of_column_sets++;
-		queue_push_tail(column_set_queue, new_colset);
+		queue_push_tail(thread_column_set_queues[omp_get_thread_num()], new_colset);
 	}
 
 	Column_Set *sets = malloc(number_of_column_sets * sizeof(Column_Set));
-	for (int i = 0; !queue_is_empty(column_set_queue); i++) {
-		Column_Set *current_colset = queue_pop_head(column_set_queue);
-		memcpy(&sets[i], current_colset, sizeof(Column_Set));
-		free(current_colset);
+	int set_index = 0;
+	for (int thread_queue_index = 0; thread_queue_index < NumCores; thread_queue_index++) {
+		for (; !queue_is_empty(thread_column_set_queues[thread_queue_index]); set_index++) {
+			Column_Set *current_colset = queue_pop_head(thread_column_set_queues[thread_queue_index]);
+			memcpy(&sets[set_index], current_colset, sizeof(Column_Set));
+			free(current_colset);
+		}
 	}
-	
-
-	queue_free(column_set_queue);
 
 	for (int i = 0; i < NumCores; i++) {
 		free(first_columns[i]);
 		free(second_columns[i]);
+		queue_free(thread_column_set_queues[i]);
 	}
+	free(thread_column_set_queues);
 	free(first_columns);
 	free(second_columns);
 	Column_Partition column_partition;
@@ -940,7 +944,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	N = n;
 	int p_int = get_p_int(p, max_interaction_distance);
 	NumCores = omp_get_num_procs();
-	int block_size = NumCores*2; //TODO: automatically set this to something reasonable.
+	int block_size = NumCores*25; //TODO: automatically set this to something reasonable.
 	double *delta_beta = malloc(block_size * sizeof(double));
 	double *delta_beta_hat = malloc(block_size * sizeof(double));
 
