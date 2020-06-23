@@ -713,6 +713,7 @@ void test_update_beta_partition(double lambda) {
 	free(delta_beta);
 	free(delta_beta_hat);
 }
+<<<<<<< HEAD
 double test_update_beta_partition_repeat_multiplier(int num_updates, int multiplier, XMatrix X, XMatrix_sparse X2, double *Y) {
 	int n = 10000;
 	int p = 1000;
@@ -722,6 +723,18 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 	//double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
 	int p_int = (p*(p+1))/2;
 	//XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, -1, FALSE, FALSE);
+=======
+void test_update_beta_partition_repeat() {
+	int n = 10000;
+	int p = 1000;
+	int block_size = 400;
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
+	printf("reading Y\n");
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
+	int **testX2= X2_from_X(X.X, 11, 4);
+	int p_int = (p*(p+1))/2;
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, -1, FALSE, FALSE);
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 	double lambda = 6.46;
 
 	double *beta = malloc(p_int * sizeof(double));
@@ -730,7 +743,11 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 	memset(rowsum, 0, n*sizeof(double));
 
 	printf("dividing into blocks\n");
+<<<<<<< HEAD
 	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, X2.p);
+=======
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, p);
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 
 	printf("initialising variables\n");
 	// omp_set_num_threads(8);
@@ -761,24 +778,41 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 
 	// int max_num_threads = 4;
 	int max_num_threads = block_size;
+<<<<<<< HEAD
 	int largest_col = X2.n;
+=======
+	int largest_col = n;
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
 	for (int i = 0; i <  max_num_threads; i++) {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
 	}
 
+<<<<<<< HEAD
 	double *delta_beta = malloc(100*block_size*sizeof(double));
 	double *delta_beta_hat = malloc(block_size*sizeof(double));
 
+=======
+	double *delta_beta = malloc(block_size*sizeof(double));
+	double *delta_beta_hat = malloc(block_size*sizeof(double));
+
+	int num_updates = 1000;
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 	printf("updating beta %d times\n", num_updates);
 	double time1 = omp_get_wtime();
 	for (int i = 0; i < num_updates; i++)
 		update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
+<<<<<<< HEAD
 						delta_beta, delta_beta_hat, MULTIPLIER);
 	double time2 = omp_get_wtime();
 	double total_time = time2 - time1;
 	printf("total time: %f\n", total_time);
 	printf("iters/second: %f\n", (double)num_updates/total_time);
+=======
+						delta_beta, delta_beta_hat);
+	double time2 = omp_get_wtime();
+	printf("total time: %f\n", time2 - time1);
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 
 	//for (int j = 0; j < p; j++) {
 	//	printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
@@ -802,6 +836,7 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 	free(delta_beta);
 	free(delta_beta_hat);
 	free(beta);
+<<<<<<< HEAD
 	return total_time;
 }
 void test_update_beta_partition_repeat() {
@@ -824,6 +859,8 @@ void test_update_beta_partition_repeat() {
 		double time4 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y);
 		printf("relative speedup: %f\n", time1/time4);
 	}
+=======
+>>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 }
 void test_update_beta_cyclic_repeat() {
 	int n = 10000;
