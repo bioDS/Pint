@@ -4,6 +4,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
 #include <glib-2.0/glib.h>
+#include <omp.h>
 
 /* int **X2_from_X(int **X, int n, int p); */
 /* double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method); */
@@ -512,6 +513,20 @@ void test_block_division() {
 
 }
 
+void test_block_division_large_time() {
+	int n = 10000;
+	int p = 1000;
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
+	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, -1, TRUE, FALSE);
+	int block_size = 400;
+
+	double start_time = omp_get_wtime();
+	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, X2.p);
+	double end_time = omp_get_wtime();
+
+	printf("time taken: %f seconds\n", end_time - start_time);
+}
+
 void test_update_beta_block() {
 
 }
@@ -714,6 +729,7 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
 	g_test_add_func("/func/test-block-division", test_block_division);
+	g_test_add_func("/func/tests-block-division-large-time", test_block_division_large_time);
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-find-overlap", test_find_overlap);
 	g_test_add_func("/func/test-correct-beta-updates", test_correct_beta_updates);
