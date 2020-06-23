@@ -12,6 +12,8 @@
 	#include <R.h>
 #endif
 
+#define MULTIPLIER 100
+
 static int NumCores = 1;
 
 const static int NORMALISE_Y = 0;
@@ -386,7 +388,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		//int use_threads = min(NumCores, (column_partition.mean_size / 1000));
 		// #pragma omp parallel for num_threads(use_threads) shared(Y)//TODO: profiling suggests that this loop in particular takes longer in parallel than on one core. False sharing of delta_beta?
 		// #pragma omp parallel
-		#pragma omp parallel for
+		#pragma omp parallel for schedule(static,MULTIPLIER)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
 			int k = column_partition.sets[b].cols[ki];
@@ -420,12 +422,12 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 			double Bk_diff = beta[k];
 			if (sumk == 0.0) {
 				// beta[k] = 0.0;
-				delta_beta[ki] = -beta[k];
+				delta_beta[ki*100] = -beta[k];
 				// printf("sumk was 0, delta_beta_%d: %f\n", k, delta_beta[ki]);
 			} else {
 				double delta_beta_k = sumn; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
-				delta_beta[ki] = delta_beta_k;
+				delta_beta[ki*100] = delta_beta_k;
 			}
 
 		}
@@ -800,9 +802,9 @@ Column_Partition divide_into_blocks_of_size(XMatrix_sparse X2, int block_size, i
 		int total_size = 0;
 		int size = min(total_columns - block_start_column, block_size);
 		int *cols = malloc(size*sizeof(int));
-		int **overlap_matrix = malloc(block_size * sizeof(int *));
+		short **overlap_matrix = malloc(block_size * sizeof(short *));
 		for (int i = 0; i < block_size; i++) {
-			overlap_matrix[i] = malloc(block_size * sizeof(int));
+			overlap_matrix[i] = malloc(block_size * sizeof(short));
 		}
 
 		// assign everything from block_start to block_start + size to this block.
@@ -894,7 +896,7 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 			// diff /= (double)X2.col_nz[actual_k];
 			// printf("diff: %f\n", diff);
 			//finally, add \delta \beta_k
-			delta_beta_hat[k] = soft_threshold(beta[actual_k]*X2.col_nz[actual_k] + delta_beta[k] - diff, lambda*X2.n/2.0)/X2.col_nz[actual_k] - beta[actual_k];
+			delta_beta_hat[k] = soft_threshold(beta[actual_k]*X2.col_nz[actual_k] + delta_beta[k*100] - diff, lambda*X2.n/2.0)/X2.col_nz[actual_k] - beta[actual_k];
 			// printf("delta_beta_%d = threshold(%f*%d + %f - %f,%f)/%d - %f\n", 
 				// k, beta[k], X2.col_nz[actual_k], delta_beta[k], diff, lambda*X2.n/2.0, X2.col_nz[actual_k], beta[actual_k]);
 			beta[actual_k] += delta_beta_hat[k];
@@ -944,13 +946,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	N = n;
 	int p_int = get_p_int(p, max_interaction_distance);
 	NumCores = omp_get_num_procs();
-	int block_size = NumCores*25; //TODO: automatically set this to something reasonable.
-	double *delta_beta = malloc(block_size * sizeof(double));
+	int block_size = NumCores*MULTIPLIER; //TODO: automatically set this to something reasonable.
+	double *delta_beta = malloc(100*block_size * sizeof(double));
 	double *delta_beta_hat = malloc(block_size * sizeof(double));
 
 	Rprintf("using %d threads\n", NumCores);
 
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE, TRUE);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, TRUE, FALSE);
 
 	long total_column_size = 0;
 	for (int i = 0; i < p_int; i++) {

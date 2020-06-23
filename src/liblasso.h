@@ -39,7 +39,7 @@ typedef struct XMatrix {
 typedef struct Column_Set {
 	int size;
 	int *cols;
-	int **overlap_matrix;
+	short **overlap_matrix;
 	double mean_size;
 } Column_Set;
 
