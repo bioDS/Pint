@@ -695,7 +695,7 @@ void test_update_beta_partition(double lambda) {
 	double *delta_beta = malloc(block_size*sizeof(double));
 	double *delta_beta_hat = malloc(block_size*sizeof(double));
 	update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
-						delta_beta, delta_beta_hat, MULTIPLIER);
+						delta_beta, delta_beta_hat, MULTIPLIER, FALSE);
 
 	for (int j = 0; j < p; j++) {
 		printf("checking beta[%d] (%f) == %f\n", j, beta[j], check_beta[j]);
@@ -713,7 +713,13 @@ void test_update_beta_partition(double lambda) {
 	free(delta_beta);
 	free(delta_beta_hat);
 }
-double test_update_beta_partition_repeat_multiplier(int num_updates, int multiplier, XMatrix X, XMatrix_sparse X2, double *Y) {
+
+struct Times {
+	double total_time;
+	double correction_time;
+};
+
+struct Times test_update_beta_partition_repeat_multiplier(int num_updates, int multiplier, XMatrix X, XMatrix_sparse X2, double *Y, int use_correction) {
 	int n = 10000;
 	int p = 1000;
 	int block_size = omp_get_max_threads()*multiplier;
@@ -771,10 +777,11 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 	double *delta_beta_hat = malloc(block_size*sizeof(double));
 
 	printf("updating beta %d times\n", num_updates);
+	double correction_time = 0.0;
 	double time1 = omp_get_wtime();
 	for (int i = 0; i < num_updates; i++)
-		update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
-						delta_beta, delta_beta_hat, MULTIPLIER);
+		correction_time += update_beta_partition(X, X2, Y, rowsum, n, p, lambda, beta, 0.0, 0.0, precalc_get_num, thread_column_caches, column_partition,
+						delta_beta, delta_beta_hat, MULTIPLIER, use_correction);
 	double time2 = omp_get_wtime();
 	double total_time = time2 - time1;
 	printf("total time: %f\n", total_time);
@@ -802,7 +809,10 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 	free(delta_beta);
 	free(delta_beta_hat);
 	free(beta);
-	return total_time;
+	struct Times times;
+	times.total_time = total_time;
+	times.correction_time = correction_time;
+	return times;
 }
 void test_update_beta_partition_repeat() {
 	int n = 10000;
@@ -815,14 +825,28 @@ void test_update_beta_partition_repeat() {
 	int num_updates = 5;
 	int max_threads = omp_get_max_threads();
 	for (int multiplier = 10; multiplier < 1025; multiplier *= 2) {
+		printf("Without correction:\n");
 		printf("using multiplier: %d\n", multiplier);
 		printf("1 thread:\n");
 		omp_set_num_threads(1);
-		double time1 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y);
+		struct Times times1 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y, FALSE);
+		printf("correction time was %f (%.1f%%)\n", times1.correction_time, times1.correction_time*100/times1.total_time);
 		printf("%d threads:\n", max_threads);
 		omp_set_num_threads(max_threads);
-		double time4 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y);
-		printf("relative speedup: %f\n", time1/time4);
+		struct Times times4 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y, FALSE);
+		printf("correction time was %f (%.1f%%)\n", times4.correction_time, times4.correction_time*100/times4.total_time);
+		printf("relative speedup: %f\n", times1.total_time/times4.total_time);
+		printf("With correction:\n");
+		printf("using multiplier: %d\n", multiplier);
+		printf("1 thread:\n");
+		omp_set_num_threads(1);
+		times1 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y, TRUE);
+		printf("correction time was %f (%.1f%%)\n", times1.correction_time, times1.correction_time*100/times1.total_time);
+		printf("%d threads:\n", max_threads);
+		omp_set_num_threads(max_threads);
+		times4 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y, TRUE);
+		printf("correction time was %f (%.1f%%)\n", times4.correction_time, times4.correction_time*100/times4.total_time);
+		printf("relative speedup: %f\n", times1.total_time/times4.total_time);
 	}
 }
 void test_update_beta_cyclic_repeat() {

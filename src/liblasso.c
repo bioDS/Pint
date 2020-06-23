@@ -362,35 +362,14 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int **column_entry_caches, Column_Partition column_partition,
-						  double *delta_beta, double *delta_beta_hat, int multiplier) {
-	//TODO: not this.
-	// double *delta_beta = malloc(X2.p * sizeof(double));
-	// double *delta_beta_hat = malloc(X2.p * sizeof(double));
-
-		//#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
-		// for (int i = 0; i < p_int; i++) {
-		// 	int k = iter_permutation->data[i];
-
-		// 	dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches);
-		// 	total_updates++;
-		// 	total_updates_entries += X2.col_nz[k];
-		// }
-
-	// #pragma omp parallel
-	// {
+						  double *delta_beta, double *delta_beta_hat, int multiplier, int use_correction) {
 	// for every block b
 	int iter_cores = 0;
 	double test_sum = 0.0;
+	double correction_time = 0.0;
 	// #pragma omp parallel
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
-		// #pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries) reduction(max: dBMax) //schedule(static, 1)
-		//int use_threads = min(NumCores, (int)(column_partition.sets[b].mean_size / 1000) + 1);
-		// use_threads = 1;
-		//iter_cores += use_threads;
-		//int use_threads = min(NumCores, (column_partition.mean_size / 1000));
-		// #pragma omp parallel for num_threads(use_threads) shared(Y)//TODO: profiling suggests that this loop in particular takes longer in parallel than on one core. False sharing of delta_beta?
-		// #pragma omp parallel
 		#pragma omp parallel for schedule(static,multiplier) reduction(+: test_sum)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
@@ -432,12 +411,17 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
 				delta_beta[ki*100] = delta_beta_k;
 			}
-		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		//double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
-		//Bk_diff *= Bk_diff;
-		// if (fabs(Bk_diff) > dBMax)
-		// 	dBMax = fabs(Bk_diff);
 			test_sum += sumn;
+		}
+		//TODO: we decompress the column a second time here, should we cache the entire block instead?
+		if (use_correction) {
+			double time1 = omp_get_wtime();
+			double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
+			double time2 = omp_get_wtime();
+			correction_time += time2 - time1;
+			Bk_diff *= Bk_diff;
+			 if (fabs(Bk_diff) > dBMax)
+			 	dBMax = fabs(Bk_diff);
 		}
 	}
 
@@ -446,7 +430,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// free(delta_beta_hat);
 
 	// return dBMax;
-	return test_sum;
+	return correction_time;
 }
 
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
@@ -910,6 +894,7 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 				int entry = column_entry_caches[k][i];
 				// printf("entry: %d = column_entry_caches[%d][%d]\n", entry, k, i);
 			 	rowsum[entry] += delta_beta_hat[k];
+				// printf("done\n");
 			}
 			// int entry = -1;
 			// for (int i = 0; i < X2.col_nwords[actual_k]; i++) {
@@ -1123,7 +1108,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// }
 
 		dBMax = update_beta_partition(xmatrix, X2, Y, rowsum, n, p, lambda, beta, dBMax, intercept, precalc_get_num, thread_column_caches, column_partition,
-										delta_beta, delta_beta_hat, MULTIPLIER);
+										delta_beta, delta_beta_hat, MULTIPLIER, TRUE);
 		//total_updates += p_int;
 
 		if (!set_min_lambda) {
