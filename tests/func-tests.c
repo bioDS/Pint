@@ -813,13 +813,14 @@ void test_update_beta_partition_repeat() {
 	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, -1, FALSE, FALSE);
 	double lambda = 6.46;
 	int num_updates = 5;
+	int max_threads = omp_get_max_threads();
 	for (int multiplier = 10; multiplier < 1025; multiplier *= 2) {
 		printf("using multiplier: %d\n", multiplier);
 		printf("1 thread:\n");
 		omp_set_num_threads(1);
 		double time1 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y);
-		printf("4 threads:\n");
-		omp_set_num_threads(4);
+		printf("%d threads:\n", max_threads);
+		omp_set_num_threads(max_threads);
 		double time4 = test_update_beta_partition_repeat_multiplier(num_updates, multiplier, X, X2, Y);
 		printf("relative speedup: %f\n", time1/time4);
 	}
