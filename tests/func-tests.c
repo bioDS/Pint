@@ -807,6 +807,7 @@ double test_update_beta_partition_repeat_multiplier(int num_updates, int multipl
 void test_update_beta_partition_repeat() {
 	int n = 10000;
 	int p = 1000;
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
 	double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
 	int p_int = (p*(p+1))/2;
 	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, -1, FALSE, FALSE);
@@ -826,7 +827,9 @@ void test_update_beta_partition_repeat() {
 void test_update_beta_cyclic_repeat() {
 	int n = 10000;
 	int p = 1000;
+	XMatrix X = read_x_csv("/home/kieran/work/lasso_testing/X_nlethals50_v15803.csv", n, p);
 	printf("reading Y\n");
+	double *Y = read_y_csv("/home/kieran/work/lasso_testing/Y_nlethals50_v15803.csv", n);
 	int p_int = (p*(p+1))/2;
 	XMatrix_sparse X2 = sparse_X2_from_X(X.X, n, p, 1, FALSE, FALSE);
 	double lambda = 6.46;
@@ -835,9 +838,6 @@ void test_update_beta_cyclic_repeat() {
 	memset(beta, 0, p_int*sizeof(double));
 	double *rowsum = malloc(n * sizeof(double));
 	memset(rowsum, 0, n*sizeof(double));
-
-	printf("dividing into blocks\n");
-	Column_Partition column_partition = divide_into_blocks_of_size(X2, block_size, p);
 
 	printf("initialising variables\n");
 	// omp_set_num_threads(8);
@@ -866,16 +866,12 @@ void test_update_beta_cyclic_repeat() {
 		}
 	}
 
-	// int max_num_threads = 4;
-	int max_num_threads = block_size;
+	int max_num_threads = 1;
 	int largest_col = n;
 	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
 	for (int i = 0; i <  max_num_threads; i++) {
 		thread_column_caches[i] = malloc(largest_col*sizeof(int));
 	}
-
-	double *delta_beta = malloc(block_size*sizeof(double));
-	double *delta_beta_hat = malloc(block_size*sizeof(double));
 
 	int num_updates = 1000;
 	printf("updating beta %d times\n", num_updates);
@@ -905,8 +901,6 @@ void test_update_beta_cyclic_repeat() {
 	}
 	free(thread_column_caches);
 	free(precalc_get_num);
-	free(delta_beta);
-	free(delta_beta_hat);
 	free(beta);
 }
 

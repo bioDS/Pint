@@ -380,10 +380,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// {
 	// for every block b
 	int iter_cores = 0;
-<<<<<<< HEAD
 	double test_sum = 0.0;
-=======
->>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 	// #pragma omp parallel
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
@@ -394,11 +391,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		//int use_threads = min(NumCores, (column_partition.mean_size / 1000));
 		// #pragma omp parallel for num_threads(use_threads) shared(Y)//TODO: profiling suggests that this loop in particular takes longer in parallel than on one core. False sharing of delta_beta?
 		// #pragma omp parallel
-<<<<<<< HEAD
 		#pragma omp parallel for schedule(static,multiplier) reduction(+: test_sum)
-=======
-		#pragma omp parallel for schedule(static,5)
->>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
 			int k = column_partition.sets[b].cols[ki];
@@ -439,23 +432,12 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
 				delta_beta[ki*100] = delta_beta_k;
 			}
-<<<<<<< HEAD
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
 		//double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
 		//Bk_diff *= Bk_diff;
 		// if (fabs(Bk_diff) > dBMax)
 		// 	dBMax = fabs(Bk_diff);
 			test_sum += sumn;
-=======
-
-		// }
-		// then correct for simultaneous updates
-		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
-		Bk_diff *= Bk_diff;
-		 if (fabs(Bk_diff) > dBMax)
-		 	dBMax = fabs(Bk_diff);
->>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 		}
 	}
 
@@ -464,11 +446,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// free(delta_beta_hat);
 
 	// return dBMax;
-<<<<<<< HEAD
 	return test_sum;
-=======
-	return 0.0;
->>>>>>> 7f60867137bcab81ee15552d0463e8e651ebeb96
 }
 
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
