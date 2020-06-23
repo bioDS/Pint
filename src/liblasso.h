@@ -11,6 +11,7 @@
 // are all ids the same size?
 #define ID_LEN 20
 #define BUF_SIZE 16384
+#define MULTIPLIER 10
 
 static int VERBOSE;
 
@@ -87,7 +88,7 @@ double correct_beta_updates(Column_Set column_set, double *beta, double *delta_b
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int **thread_column_caches, Column_Partition column_partition,
-						  double *delta_beta, double *delta_beta_hat);
+						  double *delta_beta, double *delta_beta_hat, int multiplier);
 int decompress_column(XMatrix_sparse X2, int *full_column, int max_column_size, int k);
 
 #define TRUE 1

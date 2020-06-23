@@ -12,7 +12,6 @@
 	#include <R.h>
 #endif
 
-#define MULTIPLIER 100
 
 static int NumCores = 1;
 
@@ -363,7 +362,7 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
 						  double lambda, double *beta, double dBMax, double intercept,
 						  int_pair *precalc_get_num, int **column_entry_caches, Column_Partition column_partition,
-						  double *delta_beta, double *delta_beta_hat) {
+						  double *delta_beta, double *delta_beta_hat, int multiplier) {
 	//TODO: not this.
 	// double *delta_beta = malloc(X2.p * sizeof(double));
 	// double *delta_beta_hat = malloc(X2.p * sizeof(double));
@@ -381,6 +380,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// {
 	// for every block b
 	int iter_cores = 0;
+	double test_sum = 0.0;
 	// #pragma omp parallel
 	for (int b = 0; b < column_partition.count; b++) {
 		// for every column k in block b at position ki in the block
@@ -391,15 +391,15 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 		//int use_threads = min(NumCores, (column_partition.mean_size / 1000));
 		// #pragma omp parallel for num_threads(use_threads) shared(Y)//TODO: profiling suggests that this loop in particular takes longer in parallel than on one core. False sharing of delta_beta?
 		// #pragma omp parallel
-		#pragma omp parallel for schedule(static,MULTIPLIER)
+		#pragma omp parallel for schedule(static,multiplier) reduction(+: test_sum)
 		for (int ki = 0; ki < column_partition.sets[b].size; ki++) {
 			// #pragma omp for
 			int k = column_partition.sets[b].cols[ki];
 			int *column_entries = column_entry_caches[ki];
 			delta_beta[ki] = 0.0;
 			double sumk = X2.col_nz[k];
-			// double sumn = X2.col_nz[k]*beta[k];
-			double sumn = 0.0;
+			double sumn = X2.col_nz[k]*beta[k];
+			// double sumn = 0.0;
 
 			// find the delta_beta for column k
 			int col_entry_pos = 0;
@@ -425,19 +425,19 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 			// double Bk_diff = beta[k];
 			if (sumk == 0.0) {
 				// beta[k] = 0.0;
-				// delta_beta[ki*100] = -beta[k];
+				delta_beta[ki*100] = -beta[k];
 				// printf("sumk was 0, delta_beta_%d: %f\n", k, delta_beta[ki]);
 			} else {
 				double delta_beta_k = sumn; //TODO: should this be applied only to the delta? (probably, but the paper should be updated to reflect this, etc.)
 				// printf("sunk: %f, sumn: %f, delta_beta_%d: %f\n", sumk, sumn, k, delta_beta_k);
-				// delta_beta[ki*100] = delta_beta_k;
-				delta_beta[ki] = delta_beta_k;
+				delta_beta[ki*100] = delta_beta_k;
 			}
 		//TODO: we decompress the column a second time here, should we cache the entire block instead?
-		double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
-		Bk_diff *= Bk_diff;
-		 if (fabs(Bk_diff) > dBMax)
-		 	dBMax = fabs(Bk_diff);
+		//double Bk_diff = correct_beta_updates(column_partition.sets[b], beta, delta_beta, p, delta_beta_hat, rowsum, X2, lambda, column_entry_caches);
+		//Bk_diff *= Bk_diff;
+		// if (fabs(Bk_diff) > dBMax)
+		// 	dBMax = fabs(Bk_diff);
+			test_sum += sumn;
 		}
 	}
 
@@ -446,7 +446,7 @@ double update_beta_partition(XMatrix xmatrix, XMatrix_sparse X2, double *Y, doub
 	// free(delta_beta_hat);
 
 	// return dBMax;
-	return 0.0;
+	return test_sum;
 }
 
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse X2, double *Y, double *rowsum, int n, int p, 
@@ -1123,7 +1123,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// }
 
 		dBMax = update_beta_partition(xmatrix, X2, Y, rowsum, n, p, lambda, beta, dBMax, intercept, precalc_get_num, thread_column_caches, column_partition,
-										delta_beta, delta_beta_hat);
+										delta_beta, delta_beta_hat, MULTIPLIER);
 		//total_updates += p_int;
 
 		if (!set_min_lambda) {
