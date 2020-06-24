@@ -1,0 +1,472 @@
+/func/test-update-beta-partition-repeat: X: read 1000 columns from file
+mean count: 7.044789
+mean size: 58.187381
+correction 0:
+using multiplier: 1
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 1
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 2.643607
+nc, 1: iters/second: 1.891355
+correction 1:
+using multiplier: 1
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 1
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.289632 (9.7%)
+1 threads:
+c, 1: total time: 2.974334
+c, 1: iters/second: 1.681049
+correction 0:
+using multiplier: 1
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 8
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 1.842743
+nc, 8: iters/second: 2.713346
+correction 1:
+using multiplier: 1
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 8
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 8: correction time was 0.296877 (13.9%)
+8 threads:
+c, 8: total time: 2.142027
+c, 8: iters/second: 2.334238
+correction 0:
+using multiplier: 2
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 2
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.897017
+nc, 1: iters/second: 2.635717
+correction 1:
+using multiplier: 2
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 2
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.296960 (13.6%)
+1 threads:
+c, 1: total time: 2.180294
+c, 1: iters/second: 2.293269
+correction 0:
+using multiplier: 2
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 16
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 1.093548
+nc, 8: iters/second: 4.572273
+correction 1:
+using multiplier: 2
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 16
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 8: correction time was 1.100605 (42.3%)
+8 threads:
+c, 8: total time: 2.603392
+c, 8: iters/second: 1.920571
+correction 0:
+using multiplier: 4
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 4
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.494523
+nc, 1: iters/second: 3.345549
+correction 1:
+using multiplier: 4
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 4
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.284140 (16.0%)
+1 threads:
+c, 1: total time: 1.774779
+c, 1: iters/second: 2.817252
+correction 0:
+using multiplier: 4
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 32
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.635828
+nc, 8: iters/second: 7.863762
+correction 1:
+using multiplier: 4
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 32
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 8: correction time was 0.864934 (47.9%)
+8 threads:
+c, 8: total time: 1.804967
+c, 8: iters/second: 2.770134
+correction 0:
+using multiplier: 8
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 8
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.288236
+nc, 1: iters/second: 3.881277
+correction 1:
+using multiplier: 8
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 8
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.278212 (17.4%)
+1 threads:
+c, 1: total time: 1.597018
+c, 1: iters/second: 3.130835
+correction 0:
+using multiplier: 8
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 64
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.357564
+nc, 8: iters/second: 13.983512
+correction 1:
+using multiplier: 8
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 64
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 8: correction time was 0.698329 (57.6%)
+8 threads:
+c, 8: total time: 1.212600
+c, 8: iters/second: 4.123371
+correction 0:
+using multiplier: 16
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 16
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.205471
+nc, 1: iters/second: 4.147756
+correction 1:
+using multiplier: 16
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 16
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.273887 (18.5%)
+1 threads:
+c, 1: total time: 1.476876
+c, 1: iters/second: 3.385525
+correction 0:
+using multiplier: 16
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 128
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.276749
+nc, 8: iters/second: 18.066919
+correction 1:
+using multiplier: 16
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 128
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1579226.864323
+freeing things
+c, 8: correction time was 0.624363 (63.4%)
+8 threads:
+c, 8: total time: 0.984853
+c, 8: iters/second: 5.076900
+correction 0:
+using multiplier: 32
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 32
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.161203
+nc, 1: iters/second: 4.305880
+correction 1:
+using multiplier: 32
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 32
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.280245 (19.2%)
+1 threads:
+c, 1: total time: 1.462556
+c, 1: iters/second: 3.418673
+correction 0:
+using multiplier: 32
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 256
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.217090
+nc, 8: iters/second: 23.031908
+correction 1:
+using multiplier: 32
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 256
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1600564.791435
+freeing things
+c, 8: correction time was 0.725006 (73.3%)
+8 threads:
+c, 8: total time: 0.989677
+c, 8: iters/second: 5.052154
+correction 0:
+using multiplier: 64
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 64
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.121746
+nc, 1: iters/second: 4.457338
+correction 1:
+using multiplier: 64
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 64
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1657801.293544
+freeing things
+c, 1: correction time was 0.301527 (21.0%)
+1 threads:
+c, 1: total time: 1.436543
+c, 1: iters/second: 3.480578
+correction 0:
+using multiplier: 64
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 512
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.197920
+nc, 8: iters/second: 25.262722
+correction 1:
+using multiplier: 64
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 512
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1619229.593671
+freeing things
+c, 8: correction time was 0.962033 (81.2%)
+8 threads:
+c, 8: total time: 1.185348
+c, 8: iters/second: 4.218170
+correction 0:
+using multiplier: 128
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 128
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.121340
+nc, 1: iters/second: 4.458951
+correction 1:
+using multiplier: 128
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 128
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1578791.348977
+freeing things
+c, 1: correction time was 0.356528 (24.3%)
+1 threads:
+c, 1: total time: 1.468486
+c, 1: iters/second: 3.404867
+correction 0:
+using multiplier: 128
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 1024
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.174690
+nc, 8: iters/second: 28.622129
+correction 1:
+using multiplier: 128
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 1024
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1412021.940552
+freeing things
+c, 8: correction time was 1.498361 (88.6%)
+8 threads:
+c, 8: total time: 1.691325
+c, 8: iters/second: 2.956262
+correction 0:
+using multiplier: 256
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 256
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 1: correction time was 0.000000 (0.0%)
+1 threads:
+nc, 1: total time: 1.114595
+nc, 1: iters/second: 4.485935
+correction 1:
+using multiplier: 256
+1 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 256
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1598892.452165
+freeing things
+c, 1: correction time was 0.533168 (32.3%)
+1 threads:
+c, 1: total time: 1.650103
+c, 1: iters/second: 3.030114
+correction 0:
+using multiplier: 256
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 2048
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 0.000000
+freeing things
+nc, 8: correction time was 0.000000 (0.0%)
+8 threads:
+nc, 8: total time: 0.165653
+nc, 8: iters/second: 30.183578
+correction 1:
+using multiplier: 256
+8 thread(s):
+dividing into blocks
+dividing matrix into blocks of size 2048
+initialising variables
+updating beta 5 times
+final beta sum (to avoid optimising out updates) 1622508.526686
+freeing things
+c, 8: correction time was 2.603964 (93.7%)
+8 threads:
+c, 8: total time: 2.778228
+c, 8: iters/second: 1.799708
+OK
