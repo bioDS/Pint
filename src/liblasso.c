@@ -162,11 +162,13 @@ S8bWord to_s8b(int count, int *vals) {
 	while(group_size[t] >= count && t < 16)
 		t++;
 	word.selector = t-1;
+	unsigned long test = 0;
 	for (int i = 0; i < count; i++) {
-		word.values |= vals[count-i-1];
+		test |= vals[count-i-1];
 		if (i < count - 1)
-			word.values <<= item_width[word.selector];
+			test <<= item_width[word.selector];
 	}
+	word.values = test;
     return word;
 }
 
@@ -367,15 +369,16 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	int entry = -1;
 	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
 		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+		unsigned long values = word.values;
 		for (int j = 0; j < group_size[word.selector]; j++) {
-			int diff = word.values & masks[word.selector];
+			int diff = values & masks[word.selector];
 			if (diff != 0) {
 				entry += diff;
 				column_entries[col_entry_pos] = entry;
 				sumn += Y[entry] - intercept - rowsum[entry];
 				col_entry_pos++;
 			}
-			word.values >>= item_width[word.selector];
+			values >>= item_width[word.selector];
 		}
 	}
 
@@ -686,13 +689,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		int entry = -1;
 		for (int i = 0; i < X2.col_nwords[col]; i++) {
 			S8bWord word = X2.compressed_indices[col][i];
+			unsigned long values = word.values;
 			for (int j = 0; j < group_size[word.selector]; j++) {
-				int diff = word.values & masks[word.selector];
+				int diff = values & masks[word.selector];
 				if (diff != 0) {
 					entry += diff;
 					col_ysum[col] += Y[entry];
 				}
-				word.values >>= item_width[word.selector];
+				values >>= item_width[word.selector];
 			}
 		}
 	}
@@ -751,13 +755,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			int entry = -1;
 			for (int i = 0; i < X2.col_nwords[col]; i++) {
 				S8bWord word = X2.compressed_indices[col][i];
+				unsigned long values = word.values;
 				for (int j = 0; j < group_size[word.selector]; j++) {
-					int diff = word.values & masks[word.selector];
+					int diff = values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
 						rowsum[entry] += beta[col];
 					}
-					word.values >>= item_width[word.selector];
+					values >>= item_width[word.selector];
 				}
 			}
 		}
@@ -857,13 +862,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		int entry = -1;
 		for (int i = 0; i < X2.col_nwords[col]; i++) {
 			S8bWord word = X2.compressed_indices[col][i];
+			unsigned long values = word.values;
 			for (int j = 0; j < group_size[word.selector]; j++) {
-				int diff = word.values & masks[word.selector];
+				int diff = values & masks[word.selector];
 				if (diff != 0) {
 					entry += diff;
 					temp_rowsum[entry] += beta[col];
 				}
-				word.values >>= item_width[word.selector];
+				values >>= item_width[word.selector];
 			}
 		}
 	}
