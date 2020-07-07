@@ -4,7 +4,8 @@ project('lasso', 'c',
 add_project_arguments([
   '-I' + meson.build_root(),
   '-ffast-math',
-  '-Ofast'
+  '-Ofast',
+  '-fPIC',
 ], language: 'c')
 
 subdir('src')

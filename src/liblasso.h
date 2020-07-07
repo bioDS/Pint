@@ -49,9 +49,9 @@ typedef struct Column_Set {
 typedef struct XMatrix_sparse {
 	int *col_nz;
 	int *col_nwords;
-	unsigned short **col_nz_indices;
+	unsigned **col_nz_indices;
 	gsl_permutation *permutation;
-	S8bWord **compressed_indices;
+	unsigned char**compressed_indices;
 } XMatrix_sparse;
 
 typedef struct XMatrix_sparse_row {
