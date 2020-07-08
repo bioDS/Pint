@@ -441,12 +441,12 @@ void test_turbopfor() {
 	printf("n %d\n", n);
 	unsigned char *output_buffer[128];
 
-	size_t used_space = p4ndenc32(sequence, n, output_buffer);
+	size_t used_space = p4ENC(sequence, n, output_buffer);
 
 	printf("used %d bytes\n", used_space);
 
 	uint32_t buffer2[128];
-	p4nddec32(output_buffer, n, buffer2);
+	p4DEC(output_buffer, n, buffer2);
 
 	for (int i = 0; i < n + 1; i++) {
 		printf("buffer2[%d] = %d\n", i, buffer2[i]);

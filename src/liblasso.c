@@ -13,8 +13,6 @@
 	#include <R.h>
 #endif
 
-#define p4ENC p4ndenc32
-#define p4DEC p4nddec32
 
 static int NumCores = 1;
 
@@ -366,24 +364,17 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
-	int *column_entries = column_entry_cache;
+	uint32_t *column_entries = column_entry_cache;
+	// uint32_t *column_entries = malloc(n*sizeof(uint32_t));
 
 	int col_entry_pos = 0;
 	int entry = -1;
-	//for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
-	//	S8bWord word = xmatrix_sparse.compressed_indices[k][i];
-	//	unsigned long values = word.values;
-	//	for (int j = 0; j < group_size[word.selector]; j++) {
-	//		int diff = values & masks[word.selector];
-	//		if (diff != 0) {
-	//			entry += diff;
-	//			column_entries[col_entry_pos] = entry;
-	//			sumn += Y[entry] - intercept - rowsum[entry];
-	//			col_entry_pos++;
-	//		}
-	//		values >>= item_width[word.selector];
-	//	}
-	//}
+	uint32_t *col_buf = column_entries;
+	p4DEC(xmatrix_sparse.compressed_indices[k], xmatrix_sparse.col_nz[k], col_buf);
+	for (int i = 0; i < xmatrix_sparse.col_nz[k]; i++) {
+		entry = col_buf[i];
+		sumn += Y[entry] - intercept - rowsum[entry];
+	}
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -409,6 +400,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	Bk_diff *= Bk_diff;
 	if (Bk_diff > dBMax)
 		dBMax = Bk_diff;
+	// free(column_entries);
 	return dBMax;
 }
 
@@ -697,21 +689,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		p4DEC(X2.compressed_indices[col], X2.col_nz[col], col_buf);
 		for (int i = 0; i < X2.col_nz[col]; i++) {
 			entry = col_buf[i];
-			printf("entry: %d\n", entry);
 			col_ysum[col_buf[i]] += Y[col_buf[i]];
 		}
-		//for (int i = 0; i < X2.col_nwords[col]; i++) {
-		//	S8bWord word = X2.compressed_indices[col][i];
-		//	unsigned long values = word.values;
-		//	for (int j = 0; j < group_size[word.selector]; j++) {
-		//		int diff = values & masks[word.selector];
-		//		if (diff != 0) {
-		//			entry += diff;
-		//			col_ysum[col] += Y[entry];
-		//		}
-		//		values >>= item_width[word.selector];
-		//	}
-		//}
 	}
 
 	// find largest number of non-zeros in any column
@@ -751,9 +730,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int iter_count = 0;
 
 	int max_num_threads = omp_get_max_threads();
-	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
+	int **thread_column_caches = malloc(max_num_threads*sizeof(uint32_t*));
 	for (int i = 0; i <  max_num_threads; i++) {
-		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+		thread_column_caches[i] = malloc(2*largest_col*sizeof(uint32_t));
 	}
 
 	FILE *log_file;
@@ -766,18 +745,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// we need to recalculate the rowsums
 		for (int col = 0; col < p_int; col++) {
 			int entry = -1;
-			//for (int i = 0; i < X2.col_nwords[col]; i++) {
-			//	S8bWord word = X2.compressed_indices[col][i];
-			//	unsigned long values = word.values;
-			//	for (int j = 0; j < group_size[word.selector]; j++) {
-			//		int diff = values & masks[word.selector];
-			//		if (diff != 0) {
-			//			entry += diff;
-			//			rowsum[entry] += beta[col];
-			//		}
-			//		values >>= item_width[word.selector];
-			//	}
-			//}
+			p4DEC(X2.compressed_indices[col], X2.col_nz[col], col_buf);
+			for (int i = 0; i < X2.col_nz[col]; i++) {
+				entry = col_buf[i];
+				rowsum[entry] += beta[col];
+			}
 		}
 	} else {
 		Rprintf("no partial log for current job found\n");
@@ -873,19 +845,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	memset(temp_rowsum, 0, n*sizeof(double));
 	char *col_buffer = malloc(n*sizeof(uint32_t));
 	for (int col = 0; col < p_int; col++) {
-
-		//for (int i = 0; i < X2.col_nwords[col]; i++) {
-		//	S8bWord word = X2.compressed_indices[col][i];
-		//	unsigned long values = word.values;
-		//	for (int j = 0; j < group_size[word.selector]; j++) {
-		//		int diff = values & masks[word.selector];
-		//		if (diff != 0) {
-		//			entry += diff;
-		//			temp_rowsum[entry] += beta[col];
-		//		}
-		//		values >>= item_width[word.selector];
-		//	}
-		//}
+		p4DEC(X2.compressed_indices[col], X2.col_nz[col], col_buf);
+		for (int i = 0; i < X2.col_nz[col]; i++) {
+			int entry = col_buf[i];
+			temp_rowsum[entry] += beta[col];
+		}
 	}
 	double total_rowsum_diff = 0;
 	double frac_rowsum_diff = 0;
@@ -964,8 +928,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 			for (int row = 0; row < n; row++) {
 				val = X[i][row] * X[j][row];
 				if (val == 1) {
+					col_entries[total_nz_entries] = row;
 					total_nz_entries++;
-					col_entries[total_nz_entries] = 1;
 				}
 				else if (val != 0)
 					fprintf(stderr, "Attempted to convert a non-binary matrix, values will be missing!\n");
@@ -999,8 +963,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
 	r = gsl_rng_alloc(T);
-	if (shuffle == TRUE)
-		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
+	// if (shuffle == TRUE)
+		// gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
 	//TODO: remove
 	char **permuted_indices = malloc(actual_p_int * sizeof(char*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
