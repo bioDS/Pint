@@ -1,6 +1,25 @@
-libic = cc.find_library('ic', dirs: ['/home/kieran/work/lasso_testing'])
+cc = meson.get_compiler('c')
+
+vp4c = cc.find_library('vp4c', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+vp4d = cc.find_library('vp4d', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+bitpack = cc.find_library('bitpack', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+bitunpack = cc.find_library('bitunpack', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+bitutil = cc.find_library('bitutil', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+vint = cc.find_library('vint', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+bitunpack_sse = cc.find_library('bitunpack_sse', dirs: ['/home/kieran/work/lasso_testing/TurboPFor'])
+
+turbopfor_deps = [
+	vp4c,
+	vp4d,
+	bitpack,
+	bitunpack,
+	bitunpack_sse,
+	bitutil,
+	vint,
+]
+
 misc_tests = executable('misc-tests', 'misc-tests.c', dependencies: dependency('glib-2.0'), link_with: liblasso)
-func_tests = executable('func-tests', 'func-tests.c', dependencies: [dependency('glib-2.0'), dependency('gsl'), libic], link_with: liblasso)
+func_tests = executable('func-tests', 'func-tests.c', dependencies: [dependency('glib-2.0'), dependency('gsl'), turbopfor_deps], link_with: liblasso)
 
 test('misc tests', misc_tests, args: ['-p', '/misc'],)
 test('read_y', func_tests, args: ['-p', '/func/test-read-y-csv'],)

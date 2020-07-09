@@ -7,8 +7,7 @@
 #include <math.h>
 #include <gsl/gsl_permutation.h>
 
-#define p4ENC p4ndenc32
-#define p4DEC p4nddec32
+#include "compress.h"
 
 #define VECTOR_SIZE 3
 // are all ids the same size?

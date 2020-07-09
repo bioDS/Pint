@@ -967,8 +967,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
 	r = gsl_rng_alloc(T);
-	// if (shuffle == TRUE)
-		// gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
+	if (shuffle == TRUE)
+		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
 	//TODO: remove
 	char **permuted_indices = malloc(actual_p_int * sizeof(char*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
