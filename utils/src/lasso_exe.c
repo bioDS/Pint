@@ -106,6 +106,8 @@ int main(int argc, char** argv) {
 
 	printf("\n\n");
 
+	for (int i = 0; i < xmatrix.actual_cols; i++)
+		free(xmatrix.X[i]);
 	free(xmatrix.X);
 	free(Y);
 	printf("freeing X/Y\n");

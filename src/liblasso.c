@@ -864,6 +864,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("freeing stuff\n");
 	// free beta sets
 	// free X2
+	for (int i = 0; i < p_int; i++)
+		free(X2.compressed_indices[i]);
 	free(X2.compressed_indices);
 	free(X2.col_nz);
 
@@ -910,9 +912,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	long total_sum = 0;
 	//TODO: iter_done isn't exactly being updated safely
 	//#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
+	char *compressed_col_buffer = malloc(n*sizeof(uint32_t));
+	uint32_t *col_entries = malloc(n*sizeof(uint32_t));
 	for (int i = 0; i < p; i++) {
-		uint32_t *col_entries = malloc(n*sizeof(uint32_t));
-		char *compressed_col_buffer = malloc(n*sizeof(uint32_t));
 		for (int j = i; j < min(i+max_interaction_distance,p); j++) {
 			//GQueue *current_col = g_queue_new();
 			//GQueue *current_col_actual = g_queue_new();
@@ -948,6 +950,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 		}
 		iter_done++;
 	}
+	free(compressed_col_buffer);
+	free(col_entries);
 
 	long total_words = 0;
 	long total_entries = 0;
@@ -981,6 +985,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	global_permutation = permutation;
 	global_permutation_inverse = gsl_permutation_alloc(permutation->size);
 	gsl_permutation_inverse(global_permutation_inverse, permutation);
+
 
 	return X2;
 }
