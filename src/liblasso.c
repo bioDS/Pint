@@ -924,6 +924,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	int iter_done = 0;
 	int actual_p_int = 0;
 	int p_int = p*(p+1)/2;
+	long total_space = 0;
 	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
 	p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance < 0)
@@ -931,10 +932,14 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	X2.compressed_indices = malloc(p_int*sizeof(int *));
+	total_space += p_int*sizeof(int*);
 	X2.col_nz_indices = malloc(p_int*sizeof(int *));
+	total_space += p_int*sizeof(int*);
 	X2.col_nz = malloc(p_int*sizeof(int));
+	total_space += p_int*sizeof(int*);
 	memset(X2.col_nz, 0, p_int*sizeof(int));
 	X2.col_nwords = malloc(p_int*sizeof(int));
+	total_space += p_int*sizeof(int*);
 	memset(X2.col_nwords, 0, p_int*sizeof(int));
 	actual_p_int = p_int;
 
@@ -1004,6 +1009,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 
 			// push all our words to an array in X2
 			X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
+			total_space += length*sizeof(S8bWord);
 			X2.col_nz[colno] = total_nz_entries;
 			X2.col_nwords[colno] = length;
 			count = 0;
@@ -1061,6 +1067,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	global_permutation = permutation;
 	global_permutation_inverse = gsl_permutation_alloc(permutation->size);
 	gsl_permutation_inverse(global_permutation_inverse, permutation);
+
+	printf("total space used: %d bytes\n", total_space);
 
 	return X2;
 }
