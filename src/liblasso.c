@@ -625,6 +625,33 @@ double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, 
 	return error;
 }
 
+
+// check a particular pair of betas in the adaptive calibration scheme
+int adaptive_calibration_check(double c_bar, double lambda_1, double *beta_1, double lambda_2, double *beta_2, int num_beta) {
+	double max_diff = 0.0;
+	double adjusted_max_diff = 0.0;
+	double lambda_sum = 0.0;
+	if (adjusted_max_diff / lambda_sum <= c_bar) {
+		return 1;
+	}
+	return 0;
+}
+
+// checks whether the last element in the beta_sequence is the one we should stop at, according to
+// Chichignoud et als 'Adaptive Calibration Scheme'
+// returns TRUE if we are finished, FALSE if we should continue.
+int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
+	for (int i = 0; i < beta_sequence.count; i++) {
+		int this_result = adaptive_calibration_check(c_bar, beta_sequence.lambdas[0], beta_sequence.[0],
+															beta_sequence.lambdas[i], beta_sequence.betas[i],
+													beta_sequence.vec_length);
+		if (this_result == 0) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 /* Edgeworths's algorithm:
  * \mu is zero for the moment, since the intercept (where no effects occurred)
  * would have no effect on fitness, so 1x survived. log(1) = 0.
@@ -795,7 +822,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		for (int i = 0; i < p_int; i++) {
 			int k = iter_permutation->data[i];
 
-			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()], cv_lower, cv_upper);
 			total_updates++;
 			total_updates_entries += X2.col_nz[k];
 		}
