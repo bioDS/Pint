@@ -67,11 +67,14 @@ fx_main <- data.frame(gene_i = fit$main_effects$i,
   arrange(desc(TP)) %>%
   arrange(desc(lethal)) %>%
   tbl_df
+print("fx_main")
 fx_main
+
+print("interaction_effects")
+fit$interaction_effects
 
 fx_int <- data.frame(gene_i = fit$interaction_effects$i, gene_j = fit$interaction_effects$j,
                      effect = fit$interaction_effects$strength %>% unlist) %>%
-  filter(abs(effect) > 0.5) %>%
   arrange(gene_i) %>%
   left_join(., obs, by = c("gene_i", "gene_j")) %>%
   mutate(type = "interaction") %>%
