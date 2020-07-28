@@ -637,8 +637,6 @@ int adaptive_calibration_check_beta(double c_bar, double lambda_1, double *beta_
 			max_diff = diff;
 	}
 	adjusted_max_diff = max_diff / (lambda_1 + lambda_2);
-	printf("\nmax_diff = %f, lambdas: %f,%f\n", max_diff, lambda_1, lambda_2);
-	printf("adjusted_max_diff: %f\n", (adjusted_max_diff ));
 
 	if (adjusted_max_diff <= c_bar) {
 		return 1;
@@ -773,7 +771,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//TODO: having this >0 broke the logs. ==0 might break something else.
 	//TODO: hacky that doesn't work. figure out what this should be.
 	double final_lambda = lambda_min;
-	int max_lambda = 200; //TODO: figure out how many iterations we'll actually have.
+	int max_lambda_count = 200; //TODO: figure out how many iterations we'll actually have.
 	// final_lambda = (pow(0.9,max_lambda))*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
@@ -818,8 +816,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Beta_Sequence beta_sequence;
 	beta_sequence.count = 0;
 	beta_sequence.vec_length = p_int;
-	beta_sequence.betas = malloc(max_lambda*sizeof(double*));
-	beta_sequence.lambdas = malloc(max_lambda*sizeof(double));
+	beta_sequence.betas = malloc(max_lambda_count*sizeof(double*));
+	beta_sequence.lambdas = malloc(max_lambda_count*sizeof(double));
 
 	//int set_step_size
 	for (; lambda > final_lambda; iter++) {
