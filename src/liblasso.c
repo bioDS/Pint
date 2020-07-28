@@ -627,15 +627,26 @@ double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, 
 
 
 // check a particular pair of betas in the adaptive calibration scheme
-int adaptive_calibration_check_beta(double c_bar, double lambda_1, double *beta_1, double lambda_2, double *beta_2, int beta_length) {
+int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas beta_1, double lambda_2, Sparse_Betas beta_2, int beta_length) {
 	double max_diff = 0.0;
 	double adjusted_max_diff = 0.0;
 
-	for (int i = 0; i < beta_length; i++) {
-		double diff = fabs(beta_1[i] - beta_2[i]);
-		if (diff > max_diff)
-			max_diff = diff;
+	int b1_ind = 0;
+	int b2_ind = 0;
+
+	while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
+		while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind])
+			b1_ind++;
+		while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind])
+			b2_ind++;
+		if (beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
+			double diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
+			if (diff > max_diff)
+				max_diff = diff;
+			b1_ind++;
+		}
 	}
+
 	adjusted_max_diff = max_diff / (lambda_1 + lambda_2);
 
 	if (adjusted_max_diff <= c_bar) {
@@ -821,6 +832,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	beta_sequence.betas = malloc(max_lambda_count*sizeof(double*));
 	beta_sequence.lambdas = malloc(max_lambda_count*sizeof(double));
 
+	double *beta_cache = malloc(p_int*sizeof(beta));
+	int *index_cache = malloc(p_int*sizeof(int));
+
 	//int set_step_size
 	for (; lambda > final_lambda; iter++) {
 		// save current beta values to log each iteration
@@ -883,10 +897,24 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 
 			if (set_min_lambda == TRUE) {
-				double *beta_copy = malloc(p_int*sizeof(double));
-				memcpy(beta_copy, beta, p_int*sizeof(double));
+				Sparse_Betas sparse_betas;
+				int count = 0;
+				for (int b = 0; b < p_int; b++) {
+					if (beta[b] != 0) {
+						beta_cache[count] = beta[b];
+						index_cache[count] = b;
+						count++;
+					}
+				}
+				sparse_betas.betas = malloc(count*sizeof(double));
+				sparse_betas.indices = malloc(count*sizeof(int));
+				memcpy(sparse_betas.betas, beta_cache, count*sizeof(double));
+				memcpy(sparse_betas.indices, index_cache, count*sizeof(int));
+
+				sparse_betas.count = count;
+
 				beta_sequence.lambdas[beta_sequence.count] = lambda;
-				beta_sequence.betas[beta_sequence.count] = beta_copy;
+				beta_sequence.betas[beta_sequence.count] = sparse_betas;
 				beta_sequence.count++;
 
 				if (check_adaptive_calibration(0.75, beta_sequence)) {
@@ -945,10 +973,14 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	free(temp_rowsum);
 
 	for (int i = 0; i < beta_sequence.count; i++) {
-		free(beta_sequence.betas[i]);
+		free(beta_sequence.betas[i].betas);
+		free(beta_sequence.betas[i].indices);
 	}
 	free(beta_sequence.betas);
 	free(beta_sequence.lambdas);
+
+	free(beta_cache);
+	free(index_cache);
 
 	Rprintf("freeing stuff\n");
 	// free beta sets
