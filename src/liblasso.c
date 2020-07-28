@@ -627,11 +627,20 @@ double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, 
 
 
 // check a particular pair of betas in the adaptive calibration scheme
-int adaptive_calibration_check(double c_bar, double lambda_1, double *beta_1, double lambda_2, double *beta_2, int num_beta) {
+int adaptive_calibration_check_beta(double c_bar, double lambda_1, double *beta_1, double lambda_2, double *beta_2, int beta_length) {
 	double max_diff = 0.0;
 	double adjusted_max_diff = 0.0;
-	double lambda_sum = 0.0;
-	if (adjusted_max_diff / lambda_sum <= c_bar) {
+
+	for (int i = 0; i < beta_length; i++) {
+		double diff = fabs(beta_1[i] - beta_2[i]);
+		if (diff > max_diff)
+			max_diff = diff;
+	}
+	adjusted_max_diff = max_diff / (lambda_1 + lambda_2);
+	printf("\nmax_diff = %f, lambdas: %f,%f\n", max_diff, lambda_1, lambda_2);
+	printf("adjusted_max_diff: %f\n", (adjusted_max_diff ));
+
+	if (adjusted_max_diff <= c_bar) {
 		return 1;
 	}
 	return 0;
@@ -641,10 +650,12 @@ int adaptive_calibration_check(double c_bar, double lambda_1, double *beta_1, do
 // Chichignoud et als 'Adaptive Calibration Scheme'
 // returns TRUE if we are finished, FALSE if we should continue.
 int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
+	// printf("\nchecking %d betas\n", beta_sequence.count);
 	for (int i = 0; i < beta_sequence.count; i++) {
-		int this_result = adaptive_calibration_check(c_bar, beta_sequence.lambdas[0], beta_sequence.[0],
+		int this_result = adaptive_calibration_check_beta(c_bar, beta_sequence.lambdas[beta_sequence.count-1], beta_sequence.betas[beta_sequence.count-1],
 															beta_sequence.lambdas[i], beta_sequence.betas[i],
 													beta_sequence.vec_length);
+		// printf("result: %d\n", this_result);
 		if (this_result == 0) {
 			return TRUE;
 		}
@@ -761,8 +772,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//double final_lambda = lambda_min;
 	//TODO: having this >0 broke the logs. ==0 might break something else.
 	//TODO: hacky that doesn't work. figure out what this should be.
-	double final_lambda = 0;
-	final_lambda = (pow(0.9,50))*lambda;
+	double final_lambda = lambda_min;
+	int max_lambda = 200; //TODO: figure out how many iterations we'll actually have.
+	// final_lambda = (pow(0.9,max_lambda))*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
@@ -802,6 +814,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	if (log_level != NONE)
 		log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
+	// set-up beta_sequence struct
+	Beta_Sequence beta_sequence;
+	beta_sequence.count = 0;
+	beta_sequence.vec_length = p_int;
+	beta_sequence.betas = malloc(max_lambda*sizeof(double*));
+	beta_sequence.lambdas = malloc(max_lambda*sizeof(double));
+
 	//int set_step_size
 	for (; lambda > final_lambda; iter++) {
 		// save current beta values to log each iteration
@@ -820,9 +839,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
 		for (int i = 0; i < p_int; i++) {
+			// check adaptive calibration condition
+
+
+
 			int k = iter_permutation->data[i];
 
-			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()], cv_lower, cv_upper);
+			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 			total_updates++;
 			total_updates_entries += X2.col_nz[k];
 		}
@@ -846,23 +869,29 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 		// Be sure to clean up anything extra we allocate
 		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (prev_error/error < halt_beta_diff) {
-			Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
-			Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
-			Rprintf(" %d(%f)", lambda_count, lambda);
+		if (prev_error/error < halt_beta_diff || iter == max_iter) {
+			if (prev_error/error < halt_beta_diff) {
+				Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
+				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+				Rprintf(" %d(%f)", lambda_count, lambda);
+			} else {
+				Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
+			}
 
 			if (log_level == LAMBDA)
 				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
-			lambda_count++;
-			lambda *= 0.9;
-			iter_count += iter;
-			iter = 0;
-		} else if (iter == max_iter) {
-			Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
 
-			if (log_level == LAMBDA)
-				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
+			double *beta_copy = malloc(p_int*sizeof(double));
+			memcpy(beta_copy, beta, p_int*sizeof(double));
+			beta_sequence.lambdas[beta_sequence.count] = lambda;
+			beta_sequence.betas[beta_sequence.count] = beta_copy;
+			beta_sequence.count++;
+
+			if (check_adaptive_calibration(0.75, beta_sequence)) {
+				printf("Halting as reccommended by adaptive calibration\n");
+				final_lambda = lambda;
+			}
 
 			lambda_count++;
 			lambda *= 0.9;
@@ -912,6 +941,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	}
 	Rprintf("mean diff: %.2f (%.2f%%)\n", total_rowsum_diff/n, (frac_rowsum_diff*100));
 	free(temp_rowsum);
+
+	for (int i = 0; i < beta_sequence.count; i++) {
+		free(beta_sequence.betas[i]);
+	}
+	free(beta_sequence.betas);
+	free(beta_sequence.lambdas);
 
 	Rprintf("freeing stuff\n");
 	// free beta sets

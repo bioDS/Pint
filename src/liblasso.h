@@ -78,8 +78,7 @@ double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, int 
 		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
 double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
-						  double *beta, int k, double dBMax, double intercept, int_pair *precalc_get_num, int *column_cache,
-						  int cv_lower, int cv_upper);
+						  double *beta, int k, double dBMax, double intercept, int_pair *precalc_get_num, int *column_cache);
 double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept);
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);

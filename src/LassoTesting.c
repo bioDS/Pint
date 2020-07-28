@@ -39,9 +39,13 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	xmatrix.actual_cols = n;
 	xmatrix.X = X;
 
+	enum LOG_LEVEL log_level = NONE;
+
 	Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
 
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_), asReal(lambda_max_), "cyclic", 100, 1, 0, frac_overlap_allowed, halt_error_diff);
+	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_), 
+												   asReal(lambda_max_), "cyclic", 100, 0, frac_overlap_allowed, halt_error_diff,
+												   log_level, NULL, 0);
 	int main_count = 0, int_count = 0;
 	int total_main_count = 0, total_int_count = 0;
 
