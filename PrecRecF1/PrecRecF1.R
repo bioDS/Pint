@@ -8,12 +8,16 @@ setwd("..")
 
 args <- commandArgs(trailingOnly = TRUE)
 
-fits_path='./fits_testing/fits_testing'
 
-if (length(args) >= 3) {
-    append_str = args[3]
+if (length(args) >= 4) {
+    append_str = args[4]
 } else {
     append_str = ''
+}
+
+adcal = FALSE
+if (args[3] == 'y') {
+	adcal = TRUE
 }
 
 if (args[2] == 'l') {
@@ -35,7 +39,10 @@ if (args[2] == 'l') {
     graph_nbij <- c("5", "20", "50", "100")
     large_int <- FALSE
 }
-rds_file = sprintf("PrecRecF1/dat_precrecf1_lasso")
+
+fits_path=sprintf("./fits_testing_adcal%s", adcal)
+
+rds_file = sprintf("PrecRecF1/dat_precrecf1_lasso_adcal%s", adcal)
 
 if (args[1] == 'y') {
     # Precision, recall and F1 for interaction terms

@@ -50,7 +50,7 @@ gc()
 if (verbose) cat("Fitting model\n")
 if (verbose) cat("Fitting model\n")
 
-time <- system.time(fit <- overlap_lasso(X, Y))
+time <- system.time(fit <- overlap_lasso(X, Y, use_adaptive_calibration=FALSE))
 
 
 
