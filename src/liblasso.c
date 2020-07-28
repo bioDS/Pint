@@ -771,7 +771,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	//TODO: having this >0 broke the logs. ==0 might break something else.
 	//TODO: hacky that doesn't work. figure out what this should be.
 	double final_lambda = lambda_min;
-	int max_lambda_count = 200; //TODO: figure out how many iterations we'll actually have.
+	int max_lambda_count = 50;
+	// int max_lambda_count = (int)ceilf(log(final_lambda/lambda_max)/log(0.9));
+	// Rprintf("Running a max of %d lambdas, according to lambda min.\n", max_lambda_count);
 	// final_lambda = (pow(0.9,max_lambda))*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
@@ -880,15 +882,17 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
 
-			double *beta_copy = malloc(p_int*sizeof(double));
-			memcpy(beta_copy, beta, p_int*sizeof(double));
-			beta_sequence.lambdas[beta_sequence.count] = lambda;
-			beta_sequence.betas[beta_sequence.count] = beta_copy;
-			beta_sequence.count++;
+			if (set_min_lambda == TRUE) {
+				double *beta_copy = malloc(p_int*sizeof(double));
+				memcpy(beta_copy, beta, p_int*sizeof(double));
+				beta_sequence.lambdas[beta_sequence.count] = lambda;
+				beta_sequence.betas[beta_sequence.count] = beta_copy;
+				beta_sequence.count++;
 
-			if (check_adaptive_calibration(0.75, beta_sequence)) {
-				printf("Halting as reccommended by adaptive calibration\n");
-				final_lambda = lambda;
+				if (check_adaptive_calibration(0.75, beta_sequence)) {
+					printf("Halting as reccommended by adaptive calibration\n");
+					final_lambda = lambda;
+				}
 			}
 
 			lambda_count++;
