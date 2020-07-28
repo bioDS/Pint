@@ -829,7 +829,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Beta_Sequence beta_sequence;
 	beta_sequence.count = 0;
 	beta_sequence.vec_length = p_int;
-	beta_sequence.betas = malloc(max_lambda_count*sizeof(double*));
+	beta_sequence.betas = malloc(max_lambda_count*sizeof(Beta_Sequence));
 	beta_sequence.lambdas = malloc(max_lambda_count*sizeof(double));
 
 	double *beta_cache = malloc(p_int*sizeof(beta));
