@@ -63,10 +63,16 @@ typedef struct {
 	int i; int j;
 } int_pair;
 
+typedef struct {
+	double *betas;
+	int *indices;
+	int count;
+} Sparse_Betas;
+
 //TODO: maybe this should be sparse?
 typedef struct {
 	int count;
-	double **betas;
+	Sparse_Betas *betas;
 	double *lambdas;
 	int vec_length;
 } Beta_Sequence;
