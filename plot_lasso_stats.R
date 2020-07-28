@@ -6,9 +6,9 @@ gdat = readRDS('fits_glinternet/dat_precrecf1_xyzFALSE.rds') %>%
                 filter(test == "yes") %>%
                 mutate(function_used="glinternet")
 ldat_adcalfalse = readRDS('PrecRecF1/dat_precrecf1_lasso_adcalFALSE') %>% filter(test == "yes") %>%
-                  mutate(function_used="test_lasso_adcalfalse")
+                  mutate(function_used="Lasso w/o Adcal")
 ldat_adcaltrue = readRDS('PrecRecF1/dat_precrecf1_lasso_adcalTRUE') %>% #filter(test == "yes") %>%
-                 mutate(function_used="test_lasso_adcaltrue")
+                 mutate(function_used="Lasso w/ Adcal")
 
 vsglint_dat= bind_rows(ldat_adcalfalse, gdat)
 adcal_dat = bind_rows(ldat_adcalfalse, ldat_adcaltrue)
@@ -25,6 +25,6 @@ adcal_precision_plot = ggplot(adcal_dat, aes(x=function_used, y=precision)) + ge
 adcal_recall_plot = ggplot(adcal_dat, aes(x=function_used, y=recall)) + geom_boxplot() + theme_bw()
 adcal_time_taken_plot = ggplot(adcal_dat, aes(x=function_used, y=time_taken)) + scale_y_continuous(trans='log10') + geom_boxplot() + theme_bw()
 
-ggsave(adcal_precision_plot, file="plots/adcal_precision_plot.pdf")
-ggsave(adcal_recall_plot, file="plots/adcal_recall_plot.pdf")
-ggsave(adcal_time_taken_plot, file="plots/adcal_time_plot.pdf")
+ggsave(adcal_precision_plot, file="plots/adcal_precision_plot.pdf", width=3, height=4)
+ggsave(adcal_recall_plot, file="plots/adcal_recall_plot.pdf", width=3, height=4)
+ggsave(adcal_time_taken_plot, file="plots/adcal_time_plot.pdf", width=3, height=4)
