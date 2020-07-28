@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
 	//}
 	//printf("\n");
 
-	printf("indices significantly non-zero (|x| > 1):\n");
+	printf("indices non-zero (|x| != 1):\n");
 	int printed = 0;
 	int sig_beta_count = 0;
 	//TODO: remove hack to avoid printing too much for the terminal
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
 	switch(output_mode){
 		case terminal:
 			for (int i = 0; i < nbeta_int && printed < 100; i++) {
-				if (fabs(beta[i]) > 500) {
+				if (fabs(beta[i]) != 0) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
