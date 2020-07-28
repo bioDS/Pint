@@ -639,7 +639,8 @@ int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas 
 			b1_ind++;
 		while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind])
 			b2_ind++;
-		if (beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
+		if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
+			beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
 			double diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
 			if (diff > max_diff)
 				max_diff = diff;
@@ -681,9 +682,9 @@ int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
 double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, 
-		int max_interaction_distance, double lambda_min, double lambda_max, char *method, 
+		int max_interaction_distance, double lambda_min, double lambda_max, 
 		int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff, enum LOG_LEVEL log_level,
-		char **job_args, int job_args_num) {
+		char **job_args, int job_args_num, int use_adaptive_calibration) {
 	double lambda = lambda_max;
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
@@ -826,14 +827,18 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
 	// set-up beta_sequence struct
+	double *beta_cache = NULL;
+	int *index_cache = NULL;
 	Beta_Sequence beta_sequence;
-	beta_sequence.count = 0;
-	beta_sequence.vec_length = p_int;
-	beta_sequence.betas = malloc(max_lambda_count*sizeof(Beta_Sequence));
-	beta_sequence.lambdas = malloc(max_lambda_count*sizeof(double));
-
-	double *beta_cache = malloc(p_int*sizeof(beta));
-	int *index_cache = malloc(p_int*sizeof(int));
+	if (use_adaptive_calibration) {
+		Rprintf("Using Adaptive Calibration\n");
+		beta_sequence.count = 0;
+		beta_sequence.vec_length = p_int;
+		beta_sequence.betas = malloc(max_lambda_count*sizeof(Beta_Sequence));
+		beta_sequence.lambdas = malloc(max_lambda_count*sizeof(double));
+		beta_cache = malloc(p_int*sizeof(beta));
+		index_cache = malloc(p_int*sizeof(int));
+	}
 
 	//int set_step_size
 	for (; lambda > final_lambda; iter++) {
@@ -896,30 +901,32 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
 
-			if (set_min_lambda == TRUE) {
-				Sparse_Betas sparse_betas;
-				int count = 0;
-				for (int b = 0; b < p_int; b++) {
-					if (beta[b] != 0) {
-						beta_cache[count] = beta[b];
-						index_cache[count] = b;
-						count++;
+			if (use_adaptive_calibration) {
+				if (set_min_lambda == TRUE) {
+					Sparse_Betas sparse_betas;
+					int count = 0;
+					for (int b = 0; b < p_int; b++) {
+						if (beta[b] != 0) {
+							beta_cache[count] = beta[b];
+							index_cache[count] = b;
+							count++;
+						}
 					}
-				}
-				sparse_betas.betas = malloc(count*sizeof(double));
-				sparse_betas.indices = malloc(count*sizeof(int));
-				memcpy(sparse_betas.betas, beta_cache, count*sizeof(double));
-				memcpy(sparse_betas.indices, index_cache, count*sizeof(int));
+					sparse_betas.betas = malloc(count*sizeof(double));
+					sparse_betas.indices = malloc(count*sizeof(int));
+					memcpy(sparse_betas.betas, beta_cache, count*sizeof(double));
+					memcpy(sparse_betas.indices, index_cache, count*sizeof(int));
 
-				sparse_betas.count = count;
+					sparse_betas.count = count;
 
-				beta_sequence.lambdas[beta_sequence.count] = lambda;
-				beta_sequence.betas[beta_sequence.count] = sparse_betas;
-				beta_sequence.count++;
+					beta_sequence.lambdas[beta_sequence.count] = lambda;
+					beta_sequence.betas[beta_sequence.count] = sparse_betas;
+					beta_sequence.count++;
 
-				if (check_adaptive_calibration(0.75, beta_sequence)) {
-					printf("Halting as reccommended by adaptive calibration\n");
-					final_lambda = lambda;
+					if (check_adaptive_calibration(0.75, beta_sequence)) {
+						printf("Halting as reccommended by adaptive calibration\n");
+						final_lambda = lambda;
+					}
 				}
 			}
 
@@ -972,15 +979,17 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("mean diff: %.2f (%.2f%%)\n", total_rowsum_diff/n, (frac_rowsum_diff*100));
 	free(temp_rowsum);
 
-	for (int i = 0; i < beta_sequence.count; i++) {
-		free(beta_sequence.betas[i].betas);
-		free(beta_sequence.betas[i].indices);
-	}
-	free(beta_sequence.betas);
-	free(beta_sequence.lambdas);
+	if (use_adaptive_calibration) {
+		for (int i = 0; i < beta_sequence.count; i++) {
+			free(beta_sequence.betas[i].betas);
+			free(beta_sequence.betas[i].indices);
+		}
+		free(beta_sequence.betas);
+		free(beta_sequence.lambdas);
 
-	free(beta_cache);
-	free(index_cache);
+		free(beta_cache);
+		free(index_cache);
+	}
 
 	Rprintf("freeing stuff\n");
 	// free beta sets
