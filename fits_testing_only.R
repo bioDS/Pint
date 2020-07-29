@@ -18,6 +18,11 @@ args <- commandArgs(trailingOnly = TRUE)
 
 print(args)
 f <- args[1]
+
+adcal = FALSE
+if (args[3] == 'adcal') {
+	adcal = TRUE
+}
 #f <- "simulated_data/n1000_p100_SNR2_nbi0_nbij5_nlethals0_viol0_6493.rds"
 #L <- args[2] %>% as.numeric
 write_out <- args[2] == 'write'
@@ -50,7 +55,7 @@ gc()
 if (verbose) cat("Fitting model\n")
 if (verbose) cat("Fitting model\n")
 
-time <- system.time(fit <- overlap_lasso(X, Y, use_adaptive_calibration=FALSE))
+time <- system.time(fit <- overlap_lasso(X, Y, use_adaptive_calibration=adcal))
 
 
 
@@ -129,7 +134,7 @@ if (write_out) {
                  time = time,
                  ols_time = ols_time,
                  smry = smry),
-            file = sprintf("./fits_testing/n%d_p%d_SNR%d_nbi%d_nbij%d_nlethals%d_viol%d_%s.rds",
+            file = sprintf("./fits_testing_adcal%s/n%d_p%d_SNR%d_nbi%d_nbij%d_nlethals%d_viol%d_%s.rds", adcal,
                        n, p, SNR, num_bi, num_bij, num_lethals, perc_viol, ID))
 } else {
     cat("Not saving\n")
