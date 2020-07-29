@@ -99,7 +99,7 @@ for (i in 1:nrow(fx_int)) {
 Z <- as.matrix(Z)
 colnames(Z) <- rownames(Z) <- NULL
 Ynum <- as.numeric(Y)
-ols-time = system.time(fit_red <- lm(Ynum ~ Z))
+ols_time = system.time(fit_red <- lm(Ynum ~ Z))
 
 
 pvals <- data.frame(id = 1:ncol(Z), coef = coef(fit_red)[-1]) %>%
