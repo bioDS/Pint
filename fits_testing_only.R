@@ -99,7 +99,7 @@ for (i in 1:nrow(fx_int)) {
 Z <- as.matrix(Z)
 colnames(Z) <- rownames(Z) <- NULL
 Ynum <- as.numeric(Y)
-fit_red <- lm(Ynum ~ Z)
+ols-time = system.time(fit_red <- lm(Ynum ~ Z))
 
 
 pvals <- data.frame(id = 1:ncol(Z), coef = coef(fit_red)[-1]) %>%
@@ -127,6 +127,7 @@ if (write_out) {
                  fx_main = fx_main,
                  fit_red = fit_red,
                  time = time,
+                 ols_time = ols_time,
                  smry = smry),
             file = sprintf("./fits_testing/n%d_p%d_SNR%d_nbi%d_nbij%d_nlethals%d_viol%d_%s.rds",
                        n, p, SNR, num_bi, num_bij, num_lethals, perc_viol, ID))
