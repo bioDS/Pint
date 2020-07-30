@@ -8,7 +8,7 @@ else
 	threads=1
 fi
 
-adcal=''
+adcal='no'
 fit_dir='fits_testing_adcalFALSE'
 if [[ $2 == 'adcal' ]]; then
 	adcal='adcal'
