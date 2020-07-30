@@ -1,6 +1,5 @@
 #include "liblasso.h"
 #include <R.h>
-#include <glib.h>
 #include <Rinternals.h>
 
 struct effect {

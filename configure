@@ -15885,8 +15885,8 @@ _ACEOF
 fi
 
 
-PKG_CFLAGS=`"${PKG_CONFIG}" --cflags glib-2.0 ncurses libR gsl`
-PKG_LIBS=`"${PKG_CONFIG}" --libs glib-2.0 ncurses libR gsl`
+PKG_CFLAGS=`"${PKG_CONFIG}" --cflags ncurses libR gsl`
+PKG_LIBS=`"${PKG_CONFIG}" --libs ncurses libR gsl`
 
 
 

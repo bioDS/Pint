@@ -19,7 +19,6 @@ endif
 liblasso_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
-	#dependency('glib-2.0'),
 	dependency('ncurses'),
 	rt_dependency,
 ]
