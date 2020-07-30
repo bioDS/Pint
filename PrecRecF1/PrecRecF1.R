@@ -15,9 +15,14 @@ if (length(args) >= 4) {
     append_str = ''
 }
 
-adcal = FALSE
+expect_adcal = FALSE
 if (args[3] == 'y') {
-	adcal = TRUE
+    expect_adcal = TRUE
+}
+
+beta_limit=-1
+if (args[4] == 'limit') {
+    beta_limit = 2000
 }
 
 if (args[2] == 'l') {
@@ -40,9 +45,9 @@ if (args[2] == 'l') {
     large_int <- FALSE
 }
 
-fits_path=sprintf("./fits_testing_adcal%s", adcal)
+fits_path=sprintf("./fits_testing")
 
-rds_file = sprintf("PrecRecF1/dat_precrecf1_lasso_adcal%s", adcal)
+rds_file = sprintf("PrecRecF1/dat_precrecf1_lasso")
 
 if (args[1] == 'y') {
     # Precision, recall and F1 for interaction terms
@@ -56,9 +61,11 @@ if (args[1] == 'y') {
        nbij <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nbij)\\d+(?=_)", perl = TRUE)) %>% as.numeric
        nlethals <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nlethals)\\d+(?=_)", perl = TRUE)) %>% as.numeric
        perc_viol <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_viol)\\d+(?=_)", perl = TRUE)) %>% as.numeric
+       adcal <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_adcal)\\d+(?=_)", perl = TRUE)) %>% as.numeric
+       nbeta_limit <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nbetalimit)\\d+(?=_)", perl = TRUE)) %>% as.numeric
        ID <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_)\\d+(?=_|\\.rds)", perl = TRUE)) %>% as.numeric
        smry_int <- ans$smry %>% filter(type == "interaction")
-	   time_taken <- ans$time[3]
+       time_taken <- ans$time[3]
        notest <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken,
                             precision = sum(smry_int[["TP"]]) / nrow(smry_int),
                             recall = sum(smry_int[["TP"]]) / nbij) %>%
@@ -89,6 +96,8 @@ for (numrows in graph_numrows) { #400
   for (t in c("yes", "no")) {
     dat_precrecf1 <- readRDS(file = rds_file)
       dat_precrecf1 <- dat_precrecf1 %>%
+      filter(adcal == expect_adcal) %>%
+      filter(nbeta_limit == beta_limit) %>%
       filter(n == numrows) %>%
       filter(test == t) %>%
       filter(nbi %in% graph_nbi) %>%

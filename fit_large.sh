@@ -2,10 +2,15 @@
 
 trap "echo Exited!; exit;" SIGINT SIGTERM
 
-rm fits_testing
-rm simulated_data
+for link in simulated_data fits_testing; do
+	if [[ -f $link ]]; then
+		rm $link
+	fi
+done
 
+mkdir -p fits_testing
 ln -s ~/work/data/simulated_large_data simulated_data
-ln -s fits_testing_large fits_testing
 
-./fit_all.sh
+./fit_all.sh 1 adcal
+./fit_all.sh 1 limit_nbeta
+./fit_all.sh 1
