@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
 	printf("begginning coordinate descent\n");
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 
-			0.000004, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE);
+			0.000004, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1);
 	int nbeta_int = nbeta;
 	nbeta_int = nbeta*(nbeta+1)/2;
 	if (beta == NULL) {

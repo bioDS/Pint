@@ -7,7 +7,7 @@ struct effect {
 	double strength;
 };
 
-SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_overlap_allowed_, SEXP halt_error_diff_, SEXP max_interaction_distance_, SEXP use_adaptive_calibration_) {
+SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_overlap_allowed_, SEXP halt_error_diff_, SEXP max_interaction_distance_, SEXP use_adaptive_calibration_, SEXP max_nz_beta_) {
 	double *x = REAL(X_);
 	double *y = REAL(Y_);
 	SEXP dim = getAttrib(X_, R_DimSymbol);
@@ -16,6 +16,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
 	int p_int = p*(p+1)/2;
 	int max_interaction_distance = asInteger(max_interaction_distance_);
+	int max_nz_beta = asInteger(max_nz_beta_);
 	initialise_static_resources();
 
 	
@@ -47,7 +48,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_), 
 												   asReal(lambda_max_), 100, 0, frac_overlap_allowed, halt_error_diff,
-												   log_level, NULL, 0, use_adaptive_calibration);
+												   log_level, NULL, 0, use_adaptive_calibration, max_nz_beta);
 	int main_count = 0, int_count = 0;
 	int total_main_count = 0, total_int_count = 0;
 

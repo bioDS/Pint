@@ -89,7 +89,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->dBMax, fixture->intercept, fixture->precalc_get_num, fixture->column_cache);
+	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->intercept, fixture->precalc_get_num, fixture->column_cache);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
@@ -198,7 +198,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, dBMax, 0, fixture->precalc_get_num, fixture->column_cache);
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_cache);
 		}
 
 	int no_agreeing = 0;
@@ -229,7 +229,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture, gco
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 
-	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100, 0, 0.01, 1.0001, FALSE, 1, "test", FALSE);
+	beta = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100, 0, 0.01, 1.0001, FALSE, 1, "test", FALSE, -1);
 
 	double acceptable_diff = 10;
 	int no_agreeing = 0;

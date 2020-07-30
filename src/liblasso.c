@@ -8,8 +8,8 @@
 #include <time.h>
 #ifdef NOT_R
 	#define Rprintf(args...) printf (args);
-#else
-	#include <R.h>
+//#else
+//	#include <R.h>
 #endif
 
 static int NumCores = 1;
@@ -359,7 +359,7 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	return nums;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double dBMax, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
@@ -402,10 +402,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 	}
 
 
-	Bk_diff *= Bk_diff;
-	if (Bk_diff > dBMax)
-		dBMax = Bk_diff;
-	return dBMax;
+	return Bk_diff;
 }
 
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p) {
@@ -683,7 +680,8 @@ int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
 double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, 
 		int max_interaction_distance, double lambda_min, double lambda_max, 
 		int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff, enum LOG_LEVEL log_level,
-		char **job_args, int job_args_num, int use_adaptive_calibration) {
+		char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta) {
+	int num_nz_beta = 0;
 	double lambda = lambda_max;
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
@@ -863,7 +861,19 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 			int k = iter_permutation->data[i];
 
-			dBMax = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, dBMax, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			//TODO: in principle this is a problem if beta is ever set back to zero, but that rarely/never happens.
+			int was_zero = FALSE;
+			if (beta[k] == 0) {
+				int was_zero = TRUE;
+			}
+			double diff = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			if (was_zero && diff != 0) {
+				num_nz_beta++;
+			}
+			double diff2 = diff*diff;
+			if (diff2 > dBMax) {
+				dBMax = diff2;
+			}
 			total_updates++;
 			total_updates_entries += X2.col_nz[k];
 		}
@@ -900,6 +910,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
 
+			if (max_nz_beta > 0 && num_nz_beta >= max_nz_beta) {
+				final_lambda = lambda;
+			}
 			if (use_adaptive_calibration) {
 				if (set_min_lambda == TRUE) {
 					Sparse_Betas sparse_betas;
