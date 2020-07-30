@@ -3,13 +3,13 @@
 trap "echo Exited!; exit;" SIGINT SIGTERM
 
 for link in simulated_data fits_testing; do
-	if [[ -f $link ]]; then
+	if [[ -L $link ]]; then
 		rm $link
 	fi
 done
 
 mkdir -p fits_testing
-ln -s ~/work/data/simulated_large_data simulated_data
+ln -s ~/work/data/simulated_large_data_sample simulated_data
 
 ./fit_all.sh 1 adcal
 ./fit_all.sh 1 limit_nbeta

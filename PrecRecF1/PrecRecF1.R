@@ -9,8 +9,8 @@ setwd("..")
 args <- commandArgs(trailingOnly = TRUE)
 
 
-if (length(args) >= 4) {
-    append_str = args[4]
+if (length(args) >= 5) {
+    append_str = args[5]
 } else {
     append_str = ''
 }
@@ -61,19 +61,19 @@ if (args[1] == 'y') {
        nbij <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nbij)\\d+(?=_)", perl = TRUE)) %>% as.numeric
        nlethals <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nlethals)\\d+(?=_)", perl = TRUE)) %>% as.numeric
        perc_viol <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_viol)\\d+(?=_)", perl = TRUE)) %>% as.numeric
-       adcal <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_adcal)\\d+(?=_)", perl = TRUE)) %>% as.numeric
-       nbeta_limit <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nbetalimit)\\d+(?=_)", perl = TRUE)) %>% as.numeric
+       adcal <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_adcal)[TRUEFALSE]+(?=_)", perl = TRUE)) %>% as.logical
+       nbeta_limit <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_nbetalimit)[-\\d]+(?=_)", perl = TRUE)) %>% as.numeric
        ID <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_)\\d+(?=_|\\.rds)", perl = TRUE)) %>% as.numeric
        smry_int <- ans$smry %>% filter(type == "interaction")
        time_taken <- ans$time[3]
-       notest <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken,
+       notest <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit,
                             precision = sum(smry_int[["TP"]]) / nrow(smry_int),
                             recall = sum(smry_int[["TP"]]) / nbij) %>%
          mutate(F1 = 2 *  (precision * recall) / (precision + recall),
                 test = "no")
        smry_int <- mutate(smry_int, pval = p.adjust(pval, method = "BH")) %>%
          filter(pval < 0.05)
-       test <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken,
+       test <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit,
                           precision = sum(smry_int[["TP"]]) / nrow(smry_int),
                           recall = sum(smry_int[["TP"]]) / nbij) %>%
          mutate(F1 = 2 *  (precision * recall) / (precision + recall),
@@ -87,6 +87,8 @@ if (args[1] == 'y') {
               L = factor(L),
               nbi = factor(nbi),
               nbij = factor(nbij),
+              adcal = factor(adcal),
+              nbeta_limit = factor(nbeta_limit),
               nlethals = factor(nlethals))
      saveRDS(ans, file = rds_file)
 }
