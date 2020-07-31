@@ -27,7 +27,7 @@ counter=0
 
 (
 for f in `ls simulated_data`; do
-	fit_f=`expr "$f" : '\(.*_\)'`"_adcal${adcalstr}_nbetalimit${nbetastr}"`expr "$f" : '.*\(_.*\)'`
+	fit_f=`expr "$f" : '\(.*_\)'`"adcal${adcalstr}_nbetalimit${nbetastr}"`expr "$f" : '.*\(_.*\)'`
 	p=`expr "$f" : '.*p\([0-9]*\)_'`
 	l=$(bc<<<"scale=1; x=sqrt($p) + 0.5; scale=0; x/1")
 	if [[ -f $fit_dir/$fit_f ]]; then

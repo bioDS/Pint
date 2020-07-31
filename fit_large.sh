@@ -12,5 +12,5 @@ mkdir -p fits_testing
 ln -s ~/work/data/simulated_large_data_sample simulated_data
 
 ./fit_all.sh 1 adcal
-./fit_all.sh 1 limit_nbeta
+./fit_all.sh 1 no_adcal limit_nbeta
 ./fit_all.sh 1

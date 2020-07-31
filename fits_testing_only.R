@@ -82,44 +82,48 @@ fx_main
 print("interaction_effects")
 fit$interaction_effects
 
-fx_int <- data.frame(gene_i = fit$interaction_effects$i, gene_j = fit$interaction_effects$j,
-                     effect = fit$interaction_effects$strength %>% unlist) %>%
-  arrange(gene_i) %>%
-  left_join(., obs, by = c("gene_i", "gene_j")) %>%
-  mutate(type = "interaction") %>%
-  rowwise %>%
-  left_join(., merge(bij_ind, lethal_ind, all=T), by = c("gene_i", "gene_j")) %>%
-  ungroup %>%
-  mutate(TP = !is.na(coef)) %>%
-  mutate(lethal = (coef == lethal_coef)) %>%
-  arrange(desc(TP)) %>%
-  arrange(desc(lethal)) %>%
-  select(gene_i, gene_j, type, TP, lethal) %>%
-  distinct(gene_i, gene_j, .keep_all=TRUE) %>%
-  tbl_df
+if (length(fit$itneraction_effects$strength) > 0) {
+	fx_int <- data.frame(gene_i = fit$interaction_effects$i, gene_j = fit$interaction_effects$j,
+	                     effect = fit$interaction_effects$strength %>% unlist) %>%
+	  arrange(gene_i) %>%
+	  left_join(., obs, by = c("gene_i", "gene_j")) %>%
+	  mutate(type = "interaction") %>%
+	  rowwise %>%
+	  left_join(., merge(bij_ind, lethal_ind, all=T), by = c("gene_i", "gene_j")) %>%
+	  ungroup %>%
+	  mutate(TP = !is.na(coef)) %>%
+	  mutate(lethal = (coef == lethal_coef)) %>%
+	  arrange(desc(TP)) %>%
+	  arrange(desc(lethal)) %>%
+	  select(gene_i, gene_j, type, TP, lethal) %>%
+	  distinct(gene_i, gene_j, .keep_all=TRUE) %>%
+	  tbl_df
+} else {
+	fx_int = NA
+}
 
 fx_int %>% data.frame
 
 ## Statistical test if b_i and b_ij are sig. > 0
 Z <- cbind(X[,fx_main[["gene_i"]]])
-for (i in 1:nrow(fx_int)) {
-  Z <- cbind(Z, X[,fx_int[i,][["gene_i"]], drop = FALSE] * X[,fx_int[i,][["gene_j"]], drop = FALSE])
+if (length(fit$itneraction_effects$strength) > 0) {
+	for (i in 1:nrow(fx_int)) {
+	  Z <- cbind(Z, X[,fx_int[i,][["gene_i"]], drop = FALSE] * X[,fx_int[i,][["gene_j"]], drop = FALSE])
+	}
 }
 Z <- as.matrix(Z)
 colnames(Z) <- rownames(Z) <- NULL
 Ynum <- as.numeric(Y)
 ols_time = system.time(fit_red <- lm(Ynum ~ Z))
 
-
 pvals <- data.frame(id = 1:ncol(Z), coef = coef(fit_red)[-1]) %>%
   filter(!is.na(coef)) %>%
   data.frame(., pval = summary(fit_red)$coef[-1,4]) %>%
   tbl_df
-  
 smry <- left_join(rbind(fx_main, fx_int) %>% data.frame(id = 1:nrow(.), .), pvals, by = "id") %>%
   mutate(pval = ifelse(is.na(pval), 1, pval)) %>%
   rename(coef.est = coef) %>%
-  left_join(., obs, by = c("gene_i", "gene_j")) 
+  left_join(., obs, by = c("gene_i", "gene_j"))
 
 # Print time taken to actuall run xyz
 if (verbose)
