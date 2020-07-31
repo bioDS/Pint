@@ -8,8 +8,8 @@
 #include <time.h>
 #ifdef NOT_R
 	#define Rprintf(args...) printf (args);
-//#else
-//	#include <R.h>
+#else
+	#include <R.h>
 #endif
 
 static int NumCores = 1;
@@ -911,6 +911,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 
 			if (max_nz_beta > 0 && num_nz_beta >= max_nz_beta) {
+				Rprintf("Maximum non-zero beta count reached, stopping after this lambda");
 				final_lambda = lambda;
 			}
 			if (use_adaptive_calibration) {
