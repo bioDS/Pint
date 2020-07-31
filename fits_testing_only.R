@@ -82,7 +82,7 @@ fx_main
 print("interaction_effects")
 fit$interaction_effects
 
-if (length(fit$itneraction_effects$strength) > 0) {
+if (length(fit$interaction_effects$strength) > 0) {
 	fx_int <- data.frame(gene_i = fit$interaction_effects$i, gene_j = fit$interaction_effects$j,
 	                     effect = fit$interaction_effects$strength %>% unlist) %>%
 	  arrange(gene_i) %>%
