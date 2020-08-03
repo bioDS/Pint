@@ -884,7 +884,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				//final_lambda = (pow(0.9,50))*lambda;
 				Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
 			} else {
-				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
+				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.10f\n", lambda_count, iter + 1, dBMax, error);
 				Rprintf(" %d(%f)", lambda_count, lambda);
 				lambda_count++;
 				lambda *= 0.9;
