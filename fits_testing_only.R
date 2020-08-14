@@ -106,7 +106,7 @@ fx_int %>% data.frame
 
 ## Statistical test if b_i and b_ij are sig. > 0
 Z <- cbind(X[,fx_main[["gene_i"]]])
-if (length(fit$itneraction_effects$strength) > 0) {
+if (length(fit$interaction_effects$strength) > 0) {
 	for (i in 1:nrow(fx_int)) {
 	  Z <- cbind(Z, X[,fx_int[i,][["gene_i"]], drop = FALSE] * X[,fx_int[i,][["gene_j"]], drop = FALSE])
 	}

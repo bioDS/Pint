@@ -66,14 +66,15 @@ if (args[1] == 'y') {
        ID <- regmatches(x = f, m = regexpr(f, pattern = "(?<=_)\\d+(?=_|\\.rds)", perl = TRUE)) %>% as.numeric
        smry_int <- ans$smry %>% filter(type == "interaction")
        time_taken <- ans$time[3]
-       notest <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit,
+       ols_time <- ans$ols_time[3]
+       notest <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit, ols_time = ols_time,
                             precision = sum(smry_int[["TP"]]) / nrow(smry_int),
                             recall = sum(smry_int[["TP"]]) / nbij) %>%
          mutate(F1 = 2 *  (precision * recall) / (precision + recall),
                 test = "no")
        smry_int <- mutate(smry_int, pval = p.adjust(pval, method = "BH")) %>%
          filter(pval < 0.05)
-       test <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit,
+       test <- data.frame(n = n, p = p, SNR = SNR, L = L, nbi = nbi, nbij = nbij, nlethals = nlethals, time_taken = time_taken, adcal=adcal, nbeta_limit=nbeta_limit, ols_time = ols_time,
                           precision = sum(smry_int[["TP"]]) / nrow(smry_int),
                           recall = sum(smry_int[["TP"]]) / nbij) %>%
          mutate(F1 = 2 *  (precision * recall) / (precision + recall),
