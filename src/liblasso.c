@@ -136,9 +136,9 @@ void initialise_static_resources() {
 
 void free_static_resources() {
 	if (global_permutation != NULL)
-		free(global_permutation);
+		gsl_permutation_free(global_permutation);
 	if (global_permutation_inverse != NULL)
-		free(global_permutation_inverse);
+		gsl_permutation_free(global_permutation_inverse);
 	if (cached_nums != NULL)
 		free(cached_nums);
 }
@@ -1014,7 +1014,13 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	free(X2.compressed_indices);
 	free(X2.col_nz);
 	free(X2.col_nwords);
-
+	free(col_ysum);
+	gsl_permutation_free(iter_permutation);
+	gsl_rng_free(iter_rng);
+	for (int i = 0; i <  max_num_threads; i++) {
+		free(thread_column_caches[i]);
+	}
+	free(thread_column_caches);
 
 	return beta;
 }
@@ -1049,7 +1055,6 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	X2.compressed_indices = malloc(p_int*sizeof(int *));
-	X2.col_nz_indices = malloc(p_int*sizeof(int *));
 	X2.col_nz = malloc(p_int*sizeof(int));
 	memset(X2.col_nz, 0, p_int*sizeof(int));
 	X2.col_nwords = malloc(p_int*sizeof(int));

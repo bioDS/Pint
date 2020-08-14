@@ -94,6 +94,11 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	SET_VECTOR_ELT(all_effects, 3, int_j);
 	SET_VECTOR_ELT(all_effects, 4, int_strength);
 
+	for (int i = 0; i < p; i++)
+		free(X[i]);
+	free(X);
+	free(Y);
+	free(beta);
 	UNPROTECT(protected);
 	return all_effects;
 }
