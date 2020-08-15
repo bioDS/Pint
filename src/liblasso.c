@@ -631,9 +631,9 @@ int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas 
 	int b2_ind = 0;
 
 	while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
-		while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind])
+		while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind] && b1_ind < beta_1.count)
 			b1_ind++;
-		while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind])
+		while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind] && b2_ind < beta_2.count)
 			b2_ind++;
 		if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
 			beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
