@@ -1153,7 +1153,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 		total_words += X2.col_nwords[i];
 		total_entries += X2.col_nz[i];
 	}
-	printf("mean count: %f\n", (double)total_count/(double)total_words);
+	printf("mean nz entries: %f\n", (double)total_entries/(double)actual_p_int);
+	printf("mean words: %f\n", (double)total_count/(double)total_words);
 	printf("mean size: %f\n", (double)total_sum/(double)total_entries);
 
 	gsl_rng *r;
