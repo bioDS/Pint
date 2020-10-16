@@ -13,6 +13,9 @@
 #endif
 
 static int NumCores = 1;
+static int permutation_splits = 1;
+static int permutation_split_size;
+static int final_split_size;
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -125,9 +128,17 @@ void queue_free(Queue *q) {
 }
 
 static int N;
+static gsl_rng **thread_r;
 
 //TODO: the compiler should really do this
 void initialise_static_resources() {
+	const gsl_rng_type *T = gsl_rng_default;
+	NumCores = omp_get_num_procs();
+	printf("using %d cores\n", NumCores);
+	thread_r = malloc(NumCores*sizeof(gsl_rng*));
+	for (int i = 0; i < NumCores; i++)
+		thread_r[i] = gsl_rng_alloc(T);
+
 	for (int i = 0; i < 60; i++) {
 		max_size_given_entries[i] = 60/(i+1);
 	}
@@ -141,10 +152,27 @@ void free_static_resources() {
 		gsl_permutation_free(global_permutation_inverse);
 	if (cached_nums != NULL)
 		free(cached_nums);
+	for (int i = 0; i < NumCores; i++)
+		gsl_rng_free(thread_r[i]);
 }
 
-int get_p_int(int p, int max_interaction_distance) {
-	int p_int = 0;
+void parallel_shuffle(gsl_permutation* permutation, int split_size, int final_split_size, int splits) {
+	// #pragma omp parallel shared(permutation)
+	// {
+		// #pragma omp parallel for shared(permutation)
+		// for (int i = 0; i < splits; i++) {
+			// gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*split_size], split_size, sizeof(size_t));
+		// }
+		// if (final_split_size > 0) {
+			// gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[5050 - 1 - 28], 28, sizeof(size_t));
+		// }
+	// }
+	// printf("actual size: %d, shuffled size %d\n", permutation->size, splits*split_size + final_split_size);
+	gsl_ran_shuffle(thread_r[omp_get_thread_num()], permutation->data, permutation->size, sizeof(size_t));
+}
+
+long get_p_int(long p, long max_interaction_distance) {
+	long p_int = 0;
 	//if (max_interaction_distance <= 0 || max_interaction_distance >= p/2)
 		p_int = (p*(p+1))/2;
 	//else
@@ -688,7 +716,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	N = n;
 
-	NumCores = omp_get_num_procs();
 	Rprintf("using %d threads\n", NumCores);
 
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, TRUE);
@@ -710,6 +737,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int offset = 0;
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
+			i = gsl_permutation_get(global_permutation_inverse,offset);
+			j = gsl_permutation_get(global_permutation_inverse,offset);
+			printf("i,j: %d,%d\n", i, j);
 			precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].i = i;
 			precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].j = j;
 			offset++;
@@ -772,8 +802,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_permutation_init(iter_permutation);
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
-	iter_rng = gsl_rng_alloc(T);
-	gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
+	// iter_rng = gsl_rng_alloc(T);
+	// gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
+	parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 	clock_gettime(CLOCK_REALTIME, &start);
 	//TODO: make ratio an option
 	//double final_lambda = lambda_min;
@@ -851,14 +882,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		// update the predictor \Beta_k
 		//TODO: shuffling is single-threaded and significantly-ish (40s -> 60s? on the workstation) slows things down.
 		// it might be possible to do something better than this.
-		if (set_min_lambda == TRUE)
-			gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
+		if (set_min_lambda == TRUE) {
+			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
+		}
 		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
 		for (int i = 0; i < p_int; i++) {
-			// check adaptive calibration condition
-
-
-
 			int k = iter_permutation->data[i];
 
 			//TODO: in principle this is a problem if beta is ever set back to zero, but that rarely/never happens.
@@ -1008,8 +1036,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	// free beta sets
 	// free X2
 	for (int i = 0; i < p_int; i++) {
-		if (X2.col_nwords[i] > 0)
+		if (X2.col_nwords[i] > 0) {
 			free(X2.compressed_indices[i]);
+		}
 	}
 	free(X2.compressed_indices);
 	free(X2.col_nz);
@@ -1043,11 +1072,11 @@ int **X2_from_X(int **X, int n, int p) {
 // TODO: write a test comparing this to non-sparse X2
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_distance, int shuffle) {
 	XMatrix_sparse X2;
-	int colno, val, length;
+	long colno, val, length;
 	
 	int iter_done = 0;
-	int actual_p_int = 0;
-	int p_int = p*(p+1)/2;
+	long actual_p_int = 0;
+	long p_int = p*(p+1)/2;
 	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
 	p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance < 0)
@@ -1065,8 +1094,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	long total_sum = 0;
 	//TODO: iter_done isn't exactly being updated safely
 	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
-	for (int i = 0; i < p; i++) {
-		for (int j = i; j < min(i+max_interaction_distance,p); j++) {
+	for (long i = 0; i < p; i++) {
+		for (long j = i; j < min(i+max_interaction_distance,p); j++) {
 			//GQueue *current_col = g_queue_new();
 			//GQueue *current_col_actual = g_queue_new();
 			Queue *current_col = queue_new();
@@ -1126,6 +1155,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 			length = queue_get_length(current_col);
 
 			// push all our words to an array in X2
+			// printf("%d\n", colno);
 			X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
 			X2.col_nz[colno] = total_nz_entries;
 			X2.col_nwords[colno] = length;
@@ -1161,10 +1191,38 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
 	gsl_permutation_init(permutation);
 	gsl_rng_env_setup();
+	permutation_splits = NumCores;
+	permutation_split_size = actual_p_int/permutation_splits;
 	const gsl_rng_type *T = gsl_rng_default;
+	if (permutation_split_size > T->max) {
+		permutation_split_size = T->max;
+		permutation_splits = actual_p_int/permutation_split_size;
+		if (actual_p_int % permutation_split_size != 0) {
+			permutation_splits++;
+		}
+	}
+	final_split_size = actual_p_int % permutation_splits;
+	printf("%d (-1) splits of size %d\n", permutation_splits, permutation_split_size);
+	printf("final split size: %d\n", final_split_size);
 	r = gsl_rng_alloc(T);
-	if (shuffle == TRUE)
-		gsl_ran_shuffle(r, permutation->data, actual_p_int, sizeof(size_t));
+	gsl_rng *thread_r[NumCores];
+	for (int i = 0; i < NumCores; i++)
+		thread_r[i] = gsl_rng_alloc(T);
+
+	if (shuffle == TRUE) {
+		// #pragma omp parallel
+		// {
+		// 	#pragma omop for 
+		// 	for (int i = 0; i < permutation_splits; i++) {
+		// 		gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*permutation_split_size], permutation_split_size, sizeof(size_t));
+		// 	}
+		// 	#pragma omp nowait
+		// 	if (final_split_size > 0) {
+		// 		gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[permutation_split_size*permutation_splits], final_split_size, sizeof(size_t));
+		// 	}
+		// }
+		parallel_shuffle(permutation, permutation_split_size, final_split_size, permutation_splits);
+	}
 	//TODO: remove
 	S8bWord **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
@@ -1178,6 +1236,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	free(X2.col_nz);
 	free(X2.col_nwords);
 	free(r);
+	for (int i = 0; i < NumCores; i++)
+		free(thread_r[i]);
+	
 	X2.compressed_indices = permuted_indices;
 	X2.col_nz = permuted_nz;
 	X2.col_nwords = permuted_nwords;
