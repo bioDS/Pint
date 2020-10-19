@@ -160,17 +160,16 @@ void free_static_resources() {
 
 void parallel_shuffle(gsl_permutation* permutation, int split_size, int final_split_size, int splits) {
 	// #pragma omp parallel shared(permutation)
-	// {
-		// #pragma omp parallel for shared(permutation)
-		// for (int i = 0; i < splits; i++) {
-			// gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*split_size], split_size, sizeof(size_t));
-		// }
-		// if (final_split_size > 0) {
-			// gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[5050 - 1 - 28], 28, sizeof(size_t));
-		// }
-	// }
-	// printf("actual size: %d, shuffled size %d\n", permutation->size, splits*split_size + final_split_size);
-	// gsl_ran_shuffle(thread_r[omp_get_thread_num()], permutation->data, permutation->size, sizeof(size_t));
+	{
+		#pragma omp parallel for shared(permutation)
+		for (int i = 0; i < splits; i++) {
+			gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*split_size], split_size, sizeof(size_t));
+		}
+		if (final_split_size > 0) {
+			gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[5050 - 1 - final_split_size], final_split_size, sizeof(size_t));
+		}
+	}
+	printf("actual size: %d, shuffled size %d\n", permutation->size, splits*split_size + final_split_size);
 }
 
 long get_p_int(long p, long max_interaction_distance) {
