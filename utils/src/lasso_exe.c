@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
 	printf("begginning coordinate descent\n");
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 
-			0.000004, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, FALSE, -1);
+			0.04, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1);
 	int nbeta_int = nbeta;
 	nbeta_int = nbeta*(nbeta+1)/2;
 	if (beta == NULL) {
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
 	switch(output_mode){
 		case terminal:
 			for (int i = 0; i < nbeta_int && printed < 100; i++) {
-				if (fabs(beta[i]) != 0) {
+				if (fabs(beta[i]) > 100) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
@@ -145,6 +145,7 @@ int main(int argc, char** argv) {
 	if (output_mode == terminal) {
 	}
 	//endwin();
+	free(beta);
 	free_static_resources();
 	return 0;
 }

@@ -12,6 +12,8 @@
 	#include <R.h>
 #endif
 
+#define CLOCK_REALTIME			0
+
 static int NumCores = 1;
 static int permutation_splits = 1;
 static int permutation_split_size;
@@ -168,7 +170,7 @@ void parallel_shuffle(gsl_permutation* permutation, int split_size, int final_sp
 		// }
 	// }
 	// printf("actual size: %d, shuffled size %d\n", permutation->size, splits*split_size + final_split_size);
-	gsl_ran_shuffle(thread_r[omp_get_thread_num()], permutation->data, permutation->size, sizeof(size_t));
+	// gsl_ran_shuffle(thread_r[omp_get_thread_num()], permutation->data, permutation->size, sizeof(size_t));
 }
 
 long get_p_int(long p, long max_interaction_distance) {
@@ -370,11 +372,11 @@ int_pair get_num(int num, int p) {
 }
 
 int_pair *get_all_nums(int p, int max_interaction_distance) {
-	int p_int = get_p_int(p, max_interaction_distance);
+	long p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance == -1)
 		max_interaction_distance = p_int/2+1;
 	int_pair *nums = malloc(p_int*sizeof(int_pair));
-	int offset = 0;
+	long offset = 0;
 	for (int i = 0; i < p; i++) {
 		for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
 			int_pair ip;
@@ -739,7 +741,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
 			i = gsl_permutation_get(global_permutation_inverse,offset);
 			j = gsl_permutation_get(global_permutation_inverse,offset);
-			printf("i,j: %d,%d\n", i, j);
+			// printf("i,j: %d,%d\n", i, j);
 			precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].i = i;
 			precalc_get_num[gsl_permutation_get(global_permutation_inverse,offset)].j = j;
 			offset++;
@@ -1090,6 +1092,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	memset(X2.col_nwords, 0, p_int*sizeof(int));
 	actual_p_int = p_int;
 
+	int done_percent = 0;
 	long total_count = 0;
 	long total_sum = 0;
 	//TODO: iter_done isn't exactly being updated safely
@@ -1175,6 +1178,10 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 			current_col_actual = NULL;
 		}
 		iter_done++;
+		if (iter_done % (p/100) == 0) {
+			printf("create interaction matrix, %d\%\n", done_percent);
+			done_percent++;
+		}
 	}
 
 	long total_words = 0;
@@ -1227,6 +1234,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	S8bWord **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
+	#pragma omp parallel for shared(permuted_indices, permuted_nz, permuted_nwords)
 	for (int i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
