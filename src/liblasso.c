@@ -6,18 +6,17 @@
 #include <gsl/gsl_permutation.h>
 #include <errno.h>
 #include <time.h>
+#include <limits.h>
 #ifdef NOT_R
 	#define Rprintf(args...) printf (args);
 #else
 	#include <R.h>
 #endif
 
-#define CLOCK_REALTIME			0
-
 static int NumCores = 1;
-static int permutation_splits = 1;
-static int permutation_split_size;
-static int final_split_size;
+static long permutation_splits = 1;
+static long permutation_split_size;
+static long final_split_size;
 
 const static int NORMALISE_Y = 0;
 int skipped_updates = 0;
@@ -31,7 +30,6 @@ static int VERBOSE = 1;
 static int *colsum;
 static double *col_ysum;
 static int max_size_given_entries[61];
-//static double max_rowsum = 0;
 
 #define NUM_MAX_ROWSUMS 1
 static double max_rowsums[NUM_MAX_ROWSUMS];
@@ -158,18 +156,53 @@ void free_static_resources() {
 		gsl_rng_free(thread_r[i]);
 }
 
-void parallel_shuffle(gsl_permutation* permutation, int split_size, int final_split_size, int splits) {
-	// #pragma omp parallel shared(permutation)
-	{
-		#pragma omp parallel for shared(permutation)
-		for (int i = 0; i < splits; i++) {
-			gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*split_size], split_size, sizeof(size_t));
-		}
-		if (final_split_size > 0) {
-			gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[5050 - 1 - final_split_size], final_split_size, sizeof(size_t));
-		}
+// #define UINT_MAX  (__INT_MAX__  *2U +1U)
+/* generate two random ints to get a long (if necessary)
+ * Assumes rng is capable of 2^32-1 values, it should be one of gsl_rng_{taus,mt19937,ran1xd1}
+*/
+long rand_long(gsl_rng *thread_rng, long max) {
+	long r = -UINT_MAX;
+	long rng_max = gsl_rng_max(thread_rng);
+	if (rng_max != UINT_MAX) {
+		fprintf(stderr, "Chosen psrng cannot generale all ints. This is most likely a mistake.\n");
 	}
-	printf("actual size: %d, shuffled size %d\n", permutation->size, splits*split_size + final_split_size);
+	if (max > gsl_rng_max(thread_rng)) {
+		long lower = gsl_rng_uniform_int(thread_rng, max % rng_max);
+		long upper = gsl_rng_uniform_int(thread_rng, max / rng_max);
+		upper = upper << 32;
+		r = lower & upper;
+	} else {
+		r = gsl_rng_uniform_int(thread_rng, max);
+	}
+	if (r > max) {
+		fprintf(stderr, "%d > %d, something went wrong in rand_long\n", r, max);
+	}
+	return r;
+}
+
+/* fisher yates algorithm for randomly permuting an array.
+ * thread_rng should be local to the current thread.
+*/ 
+void fisher_yates(size_t *arr, long len, gsl_rng *thread_rng) {
+	for (long i = len - 1; i > 0; i--) {
+		long j = rand_long(thread_rng, i);
+		size_t tmp = arr[j];
+		arr[j] = arr[i];
+		arr[i] = tmp;
+	}
+}
+
+
+void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_split_size, long splits) {
+	#pragma omp parallel for
+	for (int i = 0; i < splits; i++) {
+		//printf("%p, %p, %d, %d\n", permutation->data, &permutation->data[i*split_size], i, split_size);
+		//printf("range %p-%p\n", &permutation->data[i*split_size], &permutation->data[i*split_size] + split_size);
+		fisher_yates(&permutation->data[i*split_size], split_size, thread_r[omp_get_thread_num()]);
+	}
+	if (final_split_size > 0) {
+		fisher_yates(&permutation->data[permutation->size - 1 - final_split_size], final_split_size, thread_r[omp_get_thread_num()]);
+	}
 }
 
 long get_p_int(long p, long max_interaction_distance) {
@@ -205,34 +238,6 @@ int max(int a, int b) {
 		return a;
 	return b;
 }
-
-//void update_max_rowsums(double new_value) {
-//       if (new_value < max_rowsums[NUM_MAX_ROWSUMS - 1])
-//               return;
-//
-//       #pragma omp critical
-//       {
-//               //TODO: reasonable search algorithm.
-//               int i = NUM_MAX_ROWSUMS - 1;
-//               for (; i > 0; i--) {
-//                       if (new_value < max_rowsums[i])
-//                               break;
-//               }
-//
-//               // i is the index of the smallest value greater than our new one.
-//               // shift everything else down
-//               for (int j = i; j > NUM_MAX_ROWSUMS; j++) {
-//                       max_rowsums[j+1] = max_rowsums[j];
-//               }
-//               max_rowsums[i] = new_value;
-//
-//               max_cumulative_rowsums[0] = max_rowsums[0];
-//               for (int i = 1; i < NUM_MAX_ROWSUMS; i++) {
-//                       max_cumulative_rowsums[i] = max_cumulative_rowsums[i-1] + max_rowsums[i];
-//               }
-//       }
-//}
-
 
 XMatrix read_x_csv(char *fn, int n, int p) {
 	char *buf = NULL;
@@ -388,13 +393,13 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	return nums;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, int k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
 
-	int col_entry_pos = 0;
-	int entry = -1;
+	long col_entry_pos = 0;
+	long entry = -1;
 	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
 		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
 		unsigned long values = word.values;
@@ -490,14 +495,6 @@ void save_log(int iter, double lambda_value, int lambda_count, double *beta, int
 	fprintf(log_file, " ");
 	fseek(log_file, line_end_pos, SEEK_SET);
 }
-
-//void save_log_full(int iter, double lambda, double *beta, int n_betas, FILE *log_file) {
-//	fprintf(log_file, "%d, %f\n", iter, lambda);
-//	for (int i = 0; i < n_betas; i++) {
-//		fprintf(log_file, "%f, ", beta[i]);
-//	}
-//	fprintf(log_file, "\n");
-//}
 
 void close_log(FILE *log_file) {
 	fseek(log_file, 0, SEEK_SET);
@@ -632,14 +629,6 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 	Rprintf("done restoring from log\n");
 	return log_file;
 }
-
-//TODO: think about +ve and -ve Y/rowsums here, this doesn't seem right
-//int worth_updating(double *col_ysum, XMatrix_sparse X2, int k, int n, int lambda) {
-//	if (fabs(col_ysum[k] - max_cumulative_rowsums[min(X2.col_nz[k], NUM_MAX_ROWSUMS - 1)]) > n*lambda/2) {
-//		return TRUE;
-//	}
-//	return FALSE;
-//}
 
 double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
 	double error = 0.0;
@@ -803,19 +792,10 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_permutation_init(iter_permutation);
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
-	// iter_rng = gsl_rng_alloc(T);
-	// gsl_ran_shuffle(iter_rng, iter_permutation->data, p_int, sizeof(size_t));
 	parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 	clock_gettime(CLOCK_REALTIME, &start);
-	//TODO: make ratio an option
-	//double final_lambda = lambda_min;
-	//TODO: having this >0 broke the logs. ==0 might break something else.
-	//TODO: hacky that doesn't work. figure out what this should be.
 	double final_lambda = lambda_min;
 	int max_lambda_count = 50;
-	// int max_lambda_count = (int)ceilf(log(final_lambda/lambda_max)/log(0.9));
-	// Rprintf("Running a max of %d lambdas, according to lambda min.\n", max_lambda_count);
-	// final_lambda = (pow(0.9,max_lambda))*lambda;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
 	int lambda_count = 1;
 	int iter_count = 0;
@@ -1036,8 +1016,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("freeing stuff\n");
 	// free beta sets
 	// free X2
-	for (int i = 0; i < p_int; i++) {
+	for (long i = 0; i < p_int; i++) {
 		if (X2.col_nwords[i] > 0) {
+			// printf("freeing column %d\n", i);
 			free(X2.compressed_indices[i]);
 		}
 	}
@@ -1197,36 +1178,27 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
 	gsl_permutation_init(permutation);
 	gsl_rng_env_setup();
+	// permutation_splits is the number of splits excluding the final (smaller) split
 	permutation_splits = NumCores;
 	permutation_split_size = actual_p_int/permutation_splits;
 	const gsl_rng_type *T = gsl_rng_default;
-	if (permutation_split_size > T->max) {
-		permutation_split_size = T->max;
-		permutation_splits = actual_p_int/permutation_split_size;
-		if (actual_p_int % permutation_split_size != 0) {
-			permutation_splits++;
-		}
-	}
+	//if (permutation_split_size > T->max) {
+	//	permutation_split_size = T->max;
+	//	permutation_splits = actual_p_int/permutation_split_size;
+	//	if (actual_p_int % permutation_split_size != 0) {
+	//		permutation_splits++;
+	//	}
+	//}
 	final_split_size = actual_p_int % permutation_splits;
-	printf("%d (-1) splits of size %d\n", permutation_splits, permutation_split_size);
+	printf("%d splits of size %d\n", permutation_splits, permutation_split_size);
 	printf("final split size: %d\n", final_split_size);
 	r = gsl_rng_alloc(T);
 	gsl_rng *thread_r[NumCores];
+	#pragma omp parallel for
 	for (int i = 0; i < NumCores; i++)
 		thread_r[i] = gsl_rng_alloc(T);
 
 	if (shuffle == TRUE) {
-		// #pragma omp parallel
-		// {
-		// 	#pragma omop for 
-		// 	for (int i = 0; i < permutation_splits; i++) {
-		// 		gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[i*permutation_split_size], permutation_split_size, sizeof(size_t));
-		// 	}
-		// 	#pragma omp nowait
-		// 	if (final_split_size > 0) {
-		// 		gsl_ran_shuffle(thread_r[omp_get_thread_num()], &permutation->data[permutation_split_size*permutation_splits], final_split_size, sizeof(size_t));
-		// 	}
-		// }
 		parallel_shuffle(permutation, permutation_split_size, final_split_size, permutation_splits);
 	}
 	//TODO: remove
@@ -1234,10 +1206,13 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_dista
 	int *permuted_nz = malloc(actual_p_int * sizeof(int));
 	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
 	#pragma omp parallel for shared(permuted_indices, permuted_nz, permuted_nwords)
-	for (int i = 0; i < actual_p_int; i++) {
+	for (long i = 0; i < actual_p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
 		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
+		if (permutation->data[i] < 0 || permutation->data[i] >= actual_p_int) {
+			fprintf(stderr, "invalid permutation entry %ld !(0 <= %ld < %ld)\n", i, permutation->data[i], actual_p_int);
+		}
 	}
 	free(X2.compressed_indices);
 	free(X2.col_nz);

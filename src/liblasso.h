@@ -84,13 +84,14 @@ double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, int 
 		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
 double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
-						  double *beta, int k, double intercept, int_pair *precalc_get_num, int *column_cache);
+						  double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_cache);
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(int num, int p);
 void free_static_resources();
 void initialise_static_resources();
+void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_split_size, long splits);
 
 #define TRUE 1
 #define FALSE 0
