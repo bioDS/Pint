@@ -4,6 +4,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_permutation.h>
 #include <glib-2.0/glib.h>
+#include <omp.h>
 
 /* int **X2_from_X(int **X, int n, int p); */
 /* double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p, double lambda, char *method); */
@@ -430,6 +431,58 @@ static void check_X2_encoding() {
 	printf("correct number of words\n");
 }
 
+static void check_permutation() {
+	int threads = omp_get_num_procs();
+	gsl_rng **thread_r = malloc(threads*sizeof(gsl_rng*));
+	for (int i = 0; i < threads; i++)
+		thread_r[i] = gsl_rng_alloc(gsl_rng_taus2);
+
+	long perm_size = 3235; //<< 12 + 67;
+	printf("perm_size %ld\n", perm_size);
+	gsl_permutation *perm = gsl_permutation_alloc(perm_size);
+	gsl_permutation_init(perm);
+
+	parallel_shuffle(perm, perm_size/threads, perm_size%threads, threads);
+
+	int *found = malloc(perm_size*sizeof(int));
+	memset(found, 0, perm_size*sizeof(int));
+	for (int i = 0; i < perm_size; i++) {
+		size_t val = perm->data[i];
+		found[val] = 1;
+		printf("found %d\n", val);
+	}
+	for (int i = 0; i < perm_size; i++) {
+		printf("checking %d is present\n", i);
+		printf("found[%d] = %d\n", i, found[i]);
+		printf("found[%d+1] = %d\n", i, found[i+1]);
+		g_assert_true(found[i] == 1);
+	}
+	free(found);
+	gsl_permutation_free(perm);
+
+	perm_size = 123123; //<< 12 + 67;
+	printf("perm_size %ld\n", perm_size);
+	perm = gsl_permutation_alloc(perm_size);
+	gsl_permutation_init(perm);
+
+	parallel_shuffle(perm, perm_size/threads, perm_size%threads, threads);
+
+	found = malloc(perm_size*sizeof(int));
+	memset(found, 0, perm_size);
+	for (long i = 0; i < perm_size; i++) {
+		long val = perm->data[i];
+		found[val] = 1;
+		printf("found %d\n", val);
+	}
+	for (long i = 0; i < perm_size; i++) {
+		printf("checking %d is present\n", i);
+		printf("found[%d] = %d\n", i, found[i]);
+		printf("found[%d+1] = %d\n", i, found[i+1]);
+		g_assert_true(found[i] == 1);
+	}
+	free(found);
+	gsl_permutation_free(perm);
+}
 
 int main (int argc, char *argv[]) {
 	initialise_static_resources();
@@ -446,6 +499,7 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
+	g_test_add_func("/func/test-permutation", check_permutation);
 
 	return g_test_run();
 }

@@ -1,2 +1,2 @@
-PKG_CFLAGS = -D_GNU_SOURCE -D_DEFAULT_SOURCE -I/usr/share/R/include -fopenmp -I../
+PKG_CFLAGS = -D_GNU_SOURCE -D_DEFAULT_SOURCE -I/usr/share/R/include -fopenmp -I../ 
 PKG_LIBS = -L/usr/lib/R/lib -lncurses -ltinfo -Wl,--export-dynamic -fopenmp -Wl,-Bsymbolic-functions -Wl,-z,relro -lR -lgsl -lgslcblas -lm -lgomp
