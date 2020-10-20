@@ -630,7 +630,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 	return log_file;
 }
 
-double calculate_error(int n, int p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
+double calculate_error(int n, long p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
 	double error = 0.0;
 	for (int row = 0; row < n; row++) {
 		double row_err = Y[row] - intercept - rowsum[row];
@@ -696,7 +696,7 @@ int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
  * TODO: haschanged can only have an effect if an entire iteration does nothing. This should never happen.
  */
 double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p, 
-		int max_interaction_distance, double lambda_min, double lambda_max, 
+		long max_interaction_distance, double lambda_min, double lambda_max, 
 		int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff, enum LOG_LEVEL log_level,
 		char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta) {
 	int num_nz_beta = 0;
@@ -715,7 +715,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		max_cumulative_rowsums[i] = 0;
 	}
 
-	int p_int = get_p_int(p, max_interaction_distance);
+	long p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance == -1) {
 		max_interaction_distance = p_int/2+1;
 	}
@@ -867,8 +867,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 		}
 		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
-		for (int i = 0; i < p_int; i++) {
-			int k = iter_permutation->data[i];
+		for (long i = 0; i < p_int; i++) {
+			long k = iter_permutation->data[i];
 
 			//TODO: in principle this is a problem if beta is ever set back to zero, but that rarely/never happens.
 			int was_zero = FALSE;
@@ -1052,7 +1052,7 @@ int **X2_from_X(int **X, int n, int p) {
 
 
 // TODO: write a test comparing this to non-sparse X2
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int max_interaction_distance, int shuffle) {
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
 	XMatrix_sparse X2;
 	long colno, val, length;
 	

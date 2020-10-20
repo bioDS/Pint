@@ -70,7 +70,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	SEXP int_strength = PROTECT(allocVector(REALSXP, total_int_count));
 	SEXP all_effects = PROTECT(allocVector(VECSXP, 5));
 	int protected = 6;
-	for (int i = 0; i < p_int; i++) {
+	for (long i = 0; i < p_int; i++) {
 		if (beta[i] != 0) {
 			int_pair ip = get_num(i, p);
 			if (ip.i == ip.j) {

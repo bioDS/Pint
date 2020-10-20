@@ -71,15 +71,15 @@ typedef struct {
 
 //TODO: maybe this should be sparse?
 typedef struct {
-	int count;
+	long count;
 	Sparse_Betas *betas;
 	double *lambdas;
-	int vec_length;
+	long vec_length;
 } Beta_Sequence;
 
 int **X2_from_X(int **X, int n, int p);
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, int permute, int max_interaction_distance);
-double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, int max_interaction_distance,
+XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle);
+double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, long max_interaction_distance,
 		double lambda_min, double lambda_max, int max_iter, int VERBOSE, double frac_overlap_allowed,
 		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
