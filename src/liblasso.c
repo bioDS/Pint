@@ -976,7 +976,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("checking how much rowsums have diverged:\n");
 	double *temp_rowsum = malloc(n*sizeof(double));
 	memset(temp_rowsum, 0, n*sizeof(double));
-	for (int col = 0; col < p_int; col++) {
+	for (long col = 0; col < p_int; col++) {
 		int entry = -1;
 		for (int i = 0; i < X2.col_nwords[col]; i++) {
 			S8bWord word = X2.compressed_indices[col][i];
