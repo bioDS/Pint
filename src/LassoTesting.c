@@ -14,8 +14,9 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_, SEXP frac_over
 	int n = INTEGER(dim)[0];
 	int p = INTEGER(dim)[1];
 	double frac_overlap_allowed = asReal(frac_overlap_allowed_);
-	int p_int = p*(p+1)/2;
+	// int p_int = p*(p+1)/2;
 	int max_interaction_distance = asInteger(max_interaction_distance_);
+	int p_int = get_p_int(p, max_interaction_distance);
 	int max_nz_beta = asInteger(max_nz_beta_);
 	initialise_static_resources();
 

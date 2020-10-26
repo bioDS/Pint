@@ -207,10 +207,11 @@ void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_
 
 long get_p_int(long p, long max_interaction_distance) {
 	long p_int = 0;
-	//if (max_interaction_distance <= 0 || max_interaction_distance >= p/2)
+	if (max_interaction_distance <= 0 || max_interaction_distance >= p/2)
 		p_int = (p*(p+1))/2;
-	//else
-	//	p_int = p*(2*max_interaction_distance+1);
+	else
+		p_int = (p-max_interaction_distance)*(2*max_interaction_distance+1)
+				+ max_interaction_distance*(max_interaction_distance-1);
 	return p_int;
 }
 
@@ -370,8 +371,8 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 }
 
 
-int_pair get_num(int num, int p) {
-	int num_post_permutation = gsl_permutation_get(global_permutation, num);
+int_pair get_num(long num, long p) {
+	size_t num_post_permutation = gsl_permutation_get(global_permutation, num);
 	return cached_nums[num_post_permutation];
 }
 
@@ -382,7 +383,7 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	int_pair *nums = malloc(p_int*sizeof(int_pair));
 	long offset = 0;
 	for (int i = 0; i < p; i++) {
-		for (int j = i; j < min(p, i+max_interaction_distance + 1); j++) {
+		for (int j = i; j < min(p, i+max_interaction_distance ); j++) {
 			int_pair ip;
 			ip.i = i;
 			ip.j = j;
@@ -708,7 +709,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	Rprintf("using %d threads\n", NumCores);
 
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, TRUE);
+	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
@@ -866,7 +867,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (set_min_lambda == TRUE) {
 			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 		}
-		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) //schedule(static, 1)
+		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) schedule(static)
 		for (long i = 0; i < p_int; i++) {
 			long k = iter_permutation->data[i];
 
@@ -1057,7 +1058,6 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	long colno, val, length;
 	
 	int iter_done = 0;
-	long actual_p_int = 0;
 	long p_int = p*(p+1)/2;
 	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
 	p_int = get_p_int(p, max_interaction_distance);
@@ -1070,13 +1070,16 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	memset(X2.col_nz, 0, p_int*sizeof(int));
 	X2.col_nwords = malloc(p_int*sizeof(int));
 	memset(X2.col_nwords, 0, p_int*sizeof(int));
-	actual_p_int = p_int;
 
 	int done_percent = 0;
 	long total_count = 0;
 	long total_sum = 0;
+	// size_t testcol = -INT_MAX;
+	colno = 0;
+	long d = max_interaction_distance;
+	long limit_instead = ((p-d)*p - (p-d)*(p-d-1)/2 - (p-d));
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum) schedule(static)
 	for (long i = 0; i < p; i++) {
 		for (long j = i; j < min(i+max_interaction_distance,p); j++) {
 			//GQueue *current_col = g_queue_new();
@@ -1084,8 +1087,19 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 			Queue *current_col = queue_new();
 			Queue *current_col_actual = queue_new();
 			// worked out by hand as being equivalent to the offset we would have reached.
-			//TODO: include max_interaction_distance
-			colno = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
+			long a = min(i,p-d); // number of iters limited by d.
+			long b = max(i-(p-d),0); // number of iters of i limited by p rather than d.
+			// long tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
+			long suma = a*(d-1);
+			long k = max(p-d+b,0);
+			// sumb is the amount we would have reached w/o the limit - the amount that was actually covered by the limit.
+			long sumb = (k*p - k*(k-1)/2 - k) - limit_instead;
+			colno = j + suma + sumb;
+			// if (tmp != colno) {
+				// segfault for debugger
+				// printf("%ld != %ld\ni,j a,b sa,sb = %ld,%ld %ld,%ld %ld,%ld", tmp, colno, i, j, a, b, suma, sumb);
+				// (*(int*)NULL)++;
+			// }
 
 			// Read through the the current column entries, and append them to X2 as an s8b-encoded list of offsets
 			int *col_entries = malloc(60*sizeof(int));
@@ -1166,21 +1180,21 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 
 	long total_words = 0;
 	long total_entries = 0;
-	for (int i = 0; i < actual_p_int; i++) {
+	for (int i = 0; i < p_int; i++) {
 		total_words += X2.col_nwords[i];
 		total_entries += X2.col_nz[i];
 	}
-	printf("mean nz entries: %f\n", (double)total_entries/(double)actual_p_int);
+	printf("mean nz entries: %f\n", (double)total_entries/(double)p_int);
 	printf("mean words: %f\n", (double)total_count/(double)total_words);
 	printf("mean size: %f\n", (double)total_sum/(double)total_entries);
 
 	gsl_rng *r;
-	gsl_permutation *permutation = gsl_permutation_alloc(actual_p_int);
+	gsl_permutation *permutation = gsl_permutation_alloc(p_int);
 	gsl_permutation_init(permutation);
 	gsl_rng_env_setup();
 	// permutation_splits is the number of splits excluding the final (smaller) split
 	permutation_splits = NumCores;
-	permutation_split_size = actual_p_int/permutation_splits;
+	permutation_split_size = p_int/permutation_splits;
 	const gsl_rng_type *T = gsl_rng_default;
 	//if (permutation_split_size > T->max) {
 	//	permutation_split_size = T->max;
@@ -1189,7 +1203,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	//		permutation_splits++;
 	//	}
 	//}
-	final_split_size = actual_p_int % permutation_splits;
+	final_split_size = p_int % permutation_splits;
 	printf("%d splits of size %d\n", permutation_splits, permutation_split_size);
 	printf("final split size: %d\n", final_split_size);
 	r = gsl_rng_alloc(T);
@@ -1202,16 +1216,16 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 		parallel_shuffle(permutation, permutation_split_size, final_split_size, permutation_splits);
 	}
 	//TODO: remove
-	S8bWord **permuted_indices = malloc(actual_p_int * sizeof(S8bWord*));
-	int *permuted_nz = malloc(actual_p_int * sizeof(int));
-	int *permuted_nwords = malloc(actual_p_int *sizeof(int));
-	#pragma omp parallel for shared(permuted_indices, permuted_nz, permuted_nwords)
-	for (long i = 0; i < actual_p_int; i++) {
+	S8bWord **permuted_indices = malloc(p_int * sizeof(S8bWord*));
+	int *permuted_nz = malloc(p_int * sizeof(int));
+	int *permuted_nwords = malloc(p_int *sizeof(int));
+	#pragma omp parallel for shared(permuted_indices, permuted_nz, permuted_nwords) schedule(static)
+	for (long i = 0; i < p_int; i++) {
 		permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
 		permuted_nz[i] = X2.col_nz[permutation->data[i]];
 		permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
-		if (permutation->data[i] < 0 || permutation->data[i] >= actual_p_int) {
-			fprintf(stderr, "invalid permutation entry %ld !(0 <= %ld < %ld)\n", i, permutation->data[i], actual_p_int);
+		if (permutation->data[i] < 0 || permutation->data[i] >= p_int) {
+			fprintf(stderr, "invalid permutation entry %ld !(0 <= %ld < %ld)\n", i, permutation->data[i], p_int);
 		}
 	}
 	free(X2.compressed_indices);

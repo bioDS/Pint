@@ -88,10 +88,11 @@ double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, d
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
-int_pair get_num(int num, int p);
+int_pair get_num(long num, long p);
 void free_static_resources();
 void initialise_static_resources();
 void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_split_size, long splits);
+long get_p_int(long p, long max_interaction_distance);
 
 #define TRUE 1
 #define FALSE 0

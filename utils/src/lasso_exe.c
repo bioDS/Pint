@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
 	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance, 
 			0.04, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1);
 	int nbeta_int = nbeta;
-	nbeta_int = nbeta*(nbeta+1)/2;
+	nbeta_int = get_p_int(nbeta, max_interaction_distance);
 	if (beta == NULL) {
 		fprintf(stderr, "failed to estimate beta values\n");
 		return 1;
