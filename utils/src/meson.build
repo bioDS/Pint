@@ -3,7 +3,6 @@ install_headers('../../src/liblasso.h')
 liblasso_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
-	dependency('ncurses'),
 ]
 
 libdir_abs = join_paths(get_option('prefix'), get_option('libdir'))
