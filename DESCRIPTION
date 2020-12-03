@@ -1,5 +1,5 @@
-Package: LassoTesting
-Title: Parallel Cyclic Interactions Lasso
+Package: Pint
+Title: Parallel Pairwise Interactions Lasso
 Version: 0.0.0.9000
 Author: Kieran Elmes <kelmes@cs.otago.ac.nz>
 Maintainer: Kieran Elmes <kelmes@cs.otago.ac.nz>
