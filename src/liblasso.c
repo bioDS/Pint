@@ -707,7 +707,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int **X = xmatrix.X;
 	N = n;
 
-	Rprintf("using %d threads\n", NumCores);
+	//Rprintf("using %d threads\n", NumCores);
 
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
 
@@ -967,11 +967,12 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	clock_gettime(CLOCK_REALTIME, &end);
 	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
 
-	Rprintf("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f%%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
-	Rprintf("cols: performed %d zero updates (%f%%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
-	Rprintf("skipped entries %ld out of %ld a.k.a (%f%%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
+	Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
+	//Rprintf("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a (%f%%)\n", cpu_time_used, skipped_updates, total_updates, (skipped_updates*100.0)/((long)total_updates));
+	//Rprintf("cols: performed %ld zero updates (%f%%)\n", zero_updates, ((float)zero_updates/(total_updates)) * 100);
+	//Rprintf("skipped entries %ld out of %ld a.k.a (%f%%)\n", skipped_updates_entries, total_updates_entries, (skipped_updates_entries*100.0)/((long)total_updates_entries));
 	free(precalc_get_num);
-	Rprintf("entries: performed %d zero updates (%f%%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
+	//Rprintf("entries: performed %d zero updates (%f%%)\n", zero_updates_entries, ((float)zero_updates_entries/(total_updates_entries)) * 100);
 
 	//TODO: this really should be 0. Fix things until it is.
 	Rprintf("checking how much rowsums have diverged:\n");
