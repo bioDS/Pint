@@ -894,69 +894,67 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 				//final_lambda = (pow(0.9,50))*lambda;
 				Rprintf("first change at lambda %f, stopping at lambda %f\n", lambda, final_lambda);
 			} else {
-				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.10f\n", lambda_count, iter + 1, dBMax, error);
-				Rprintf(" %d(%f)", lambda_count, lambda);
+				Rprintf("done lambda %d (%f) after %d iteration(s) (dbmax: %f), final error %.1f\n", lambda_count, lambda, iter + 1, dBMax, error);
 				lambda_count++;
 				lambda *= 0.9;
 				iter_count += iter;
-				iter = 0;
+				iter = -1;
 			}
-		}
-		error = calculate_error(n, p_int, X2, Y, X, beta, p, intercept, rowsum);
+		} else {
+			error = calculate_error(n, p_int, X2, Y, X, beta, p, intercept, rowsum);
 
 
-		// Be sure to clean up anything extra we allocate
-		// TODO: don't actually do this, see glmnet convergence conditions for a more detailed approach.
-		if (prev_error/error < halt_beta_diff || iter == max_iter) {
-			if (prev_error/error < halt_beta_diff) {
-				Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
-				Rprintf("done lambda %d after %d iterations (dbmax: %f), final error %.1f\n", lambda_count, iter + 1, dBMax, error);
-				Rprintf(" %d(%f)", lambda_count, lambda);
-			} else {
-				Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
-			}
+			// Be sure to clean up anything extra we allocate
+			if (prev_error/error < halt_beta_diff || iter == max_iter) {
+				if (prev_error/error < halt_beta_diff) {
+					Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
+					Rprintf("done lambda %d (%f) after %d iteration(s) (dbmax: %f), final error %.1f\n", lambda_count, lambda, iter + 1, dBMax, error);
+				} else {
+					Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
+				}
 
-			if (log_level == LAMBDA)
-				save_log(iter, lambda, lambda_count, beta, p_int, log_file);
+				if (log_level == LAMBDA)
+					save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
 
-			if (max_nz_beta > 0 && num_nz_beta >= max_nz_beta) {
-				Rprintf("Maximum non-zero beta count reached, stopping after this lambda");
-				final_lambda = lambda;
-			}
-			if (use_adaptive_calibration) {
-				if (set_min_lambda == TRUE) {
-					Sparse_Betas sparse_betas;
-					int count = 0;
-					for (int b = 0; b < p_int; b++) {
-						if (beta[b] != 0) {
-							beta_cache[count] = beta[b];
-							index_cache[count] = b;
-							count++;
+				if (max_nz_beta > 0 && num_nz_beta >= max_nz_beta) {
+					Rprintf("Maximum non-zero beta count reached, stopping after this lambda");
+					final_lambda = lambda;
+				}
+				if (use_adaptive_calibration) {
+					if (set_min_lambda == TRUE) {
+						Sparse_Betas sparse_betas;
+						int count = 0;
+						for (int b = 0; b < p_int; b++) {
+							if (beta[b] != 0) {
+								beta_cache[count] = beta[b];
+								index_cache[count] = b;
+								count++;
+							}
+						}
+						sparse_betas.betas = malloc(count*sizeof(double));
+						sparse_betas.indices = malloc(count*sizeof(int));
+						memcpy(sparse_betas.betas, beta_cache, count*sizeof(double));
+						memcpy(sparse_betas.indices, index_cache, count*sizeof(int));
+
+						sparse_betas.count = count;
+
+						beta_sequence.lambdas[beta_sequence.count] = lambda;
+						beta_sequence.betas[beta_sequence.count] = sparse_betas;
+						beta_sequence.count++;
+
+						if (check_adaptive_calibration(0.75, beta_sequence)) {
+							printf("Halting as reccommended by adaptive calibration\n");
+							final_lambda = lambda;
 						}
 					}
-					sparse_betas.betas = malloc(count*sizeof(double));
-					sparse_betas.indices = malloc(count*sizeof(int));
-					memcpy(sparse_betas.betas, beta_cache, count*sizeof(double));
-					memcpy(sparse_betas.indices, index_cache, count*sizeof(int));
-
-					sparse_betas.count = count;
-
-					beta_sequence.lambdas[beta_sequence.count] = lambda;
-					beta_sequence.betas[beta_sequence.count] = sparse_betas;
-					beta_sequence.count++;
-
-					if (check_adaptive_calibration(0.75, beta_sequence)) {
-						printf("Halting as reccommended by adaptive calibration\n");
-						final_lambda = lambda;
-					}
 				}
-			}
 
-			lambda_count++;
-			lambda *= 0.9;
-			iter_count += iter;
-			iter = 0;
+				lambda_count++;
+				lambda *= 0.9;
+				iter_count += iter;
+				iter = -1;
+			}
 		}
 	}
 	if (log_level != NONE)
