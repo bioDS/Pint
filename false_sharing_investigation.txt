@@ -1,0 +1,31 @@
+old version
+(16 thread)
+real    1m23.872s
+user    21m23.816s
+(32 thread)
+real    1m39.450s
+user    48m26.724s
+
+new version
+(16 thread)
+real    1m26.637s
+user    22m2.421s
+(32 thread)
+real    1m36.227s
+user    47m15.057s
+
+new new version
+(32 thread)
+real    1m21.561s
+user    37m38.055s
+
+new new new version
+(32 thread)
+real    1m21.887s
+user    38m20.159s
+(16 thread)
+real    1m16.190s
+user    19m10.312s
+
+
+long story short there are very marginal gains to be had by avoiding false sharing

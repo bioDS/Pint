@@ -13,6 +13,7 @@
 	#include <R.h>
 #endif
 
+
 static int NumCores = 1;
 static long permutation_splits = 1;
 static long permutation_split_size;
@@ -394,7 +395,7 @@ int_pair *get_all_nums(int p, int max_interaction_distance) {
 	return nums;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, co_double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
@@ -409,7 +410,7 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 			if (diff != 0) {
 				entry += diff;
 				column_entries[col_entry_pos] = entry;
-				sumn += Y[entry] - intercept - rowsum[entry];
+				sumn += Y[entry] - intercept - rowsum[entry].db;
 				col_entry_pos++;
 			}
 			values >>= item_width[word.selector];
@@ -429,11 +430,11 @@ double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double
 		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
 			int i = column_entries[e];
 			#pragma omp atomic
-			rowsum[i] += Bk_diff;
+			rowsum[i].db += Bk_diff;
 		}
 	} else {
-		zero_updates++;
-		zero_updates_entries += xmatrix_sparse.col_nz[k];
+		// zero_updates++;
+		// zero_updates_entries += xmatrix_sparse.col_nz[k];
 	}
 
 
@@ -631,10 +632,11 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 	return log_file;
 }
 
-double calculate_error(int n, long p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
+double calculate_error(int n, long p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, co_double *rowsum) {
 	double error = 0.0;
+	#pragma omp parallel for reduction(+:error)
 	for (int row = 0; row < n; row++) {
-		double row_err = Y[row] - intercept - rowsum[row];
+		double row_err = Y[row] - intercept - rowsum[row].db;
 		error += row_err*row_err;
 	}
 	return error;
@@ -708,6 +710,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	N = n;
 
 	Rprintf("using %d threads\n", NumCores);
+	printf("max int dist: %ld\n", max_interaction_distance);
 
 	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
 
@@ -719,6 +722,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	long p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance == -1) {
 		max_interaction_distance = p_int/2+1;
+		// max_interaction_distance = p;
 	}
 	double *beta;
 	beta = malloc(p_int*sizeof(double)); // probably too big in most cases.
@@ -746,8 +750,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double intercept = 0.0;
 
 	// initially every value will be 0, since all betas are 0.
-	double rowsum[n];
-	memset(rowsum, 0, n*sizeof(double));
+	// double rowsum[n];
+	co_double *rowsum = malloc(n*sizeof(co_double));
+	memset(rowsum, 0, n*sizeof(co_double));
 
 	colsum = malloc(p_int*sizeof(double));
 	memset(colsum, 0, p_int*sizeof(double));
@@ -804,7 +809,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	int max_num_threads = omp_get_max_threads();
 	int **thread_column_caches = malloc(max_num_threads*sizeof(int*));
 	for (int i = 0; i <  max_num_threads; i++) {
-		thread_column_caches[i] = malloc(largest_col*sizeof(int));
+		thread_column_caches[i] = malloc(CACHE_OFFSET + largest_col*sizeof(int) + CACHE_OFFSET);
 	}
 
 	FILE *log_file;
@@ -824,7 +829,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 					int diff = values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
-						rowsum[entry] += beta[col];
+						rowsum[entry].db += beta[col];
 					}
 					values >>= item_width[word.selector];
 				}
@@ -867,16 +872,49 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (set_min_lambda == TRUE) {
 			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 		}
+		if (max_interaction_distance < 0)
+			max_interaction_distance = p;
+		// printf("max_interaction_distance: %ld\n", max_interaction_distance);
+		long d = max_interaction_distance;
+		long limit_instead = ((p-d)*p - (p-d)*(p-d-1)/2 - (p-d));
 		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) schedule(static)
+		//for (long i = 0; i < p; i++)
+		//	for (long j = i; j < min(i+max_interaction_distance,p); j++) {
+		//		//GQueue *current_col = g_queue_new();
+		//		//GQueue *current_col_actual = g_queue_new();
+		//		// worked out by hand as being equivalent to the offset we would have reached.
+		//		// printf("%ld, %ld, %ld\n", i, p, d);
+		//		long a = min(i,p-d); // number of iters limited by d.
+		//		long b = max(i-(p-d),0); // number of iters of i limited by p rather than d.
+		//		// long tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
+		//		long suma = a*(d-1);
+		//		long k = max(p-d+b,0);
+		//		// sumb is the amount we would have reached w/o the limit - the amount that was actually covered by the limit.
+		//		long sumb = (k*p - k*(k-1)/2 - k) - limit_instead;
+		//		long colno = j + suma + sumb;
+				// printf("%ld = %ld + %ld + %ld\n", colno, j, suma, sumb);
+
+		// for (long q = 0; q < p; q++)
+			// for (long r = q; r < min(r+max_interaction_distance,p); r++) {
+				// long a = min(q,p-d); // number of qters lqmqted by d.
+				// long b = max(q-(p-d),0); // number of qters of q lqmqted by p rather than d.
+				// long tmp = r + b*(d) + a*p - a*(a-1)/2 - q;
+				// long suma = a*(d-1);
+				// long k = max(p-d+b,0);
+				// sumb qs the amount we would have reached w/o the lqmqt - the amount that was actually covered by the lqmqt.
+				// long sumb = (k*p - k*(k-1)/2 - k) - limit_instead;
+				// long i = r + suma + sumb;
 		for (long i = 0; i < p_int; i++) {
+			// printf("colno: %ld\n", colno);
 			long k = iter_permutation->data[i];
+			// printf("%d, %d\n", colno, k);
 
 			//TODO: in principle this is a problem if beta is ever set back to zero, but that rarely/never happens.
 			int was_zero = FALSE;
-			if (beta[k] == 0) {
-				int was_zero = TRUE;
-			}
-			double diff = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			// if (beta[k] == 0) {
+				// int was_zero = TRUE;
+			// }
+			double diff = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()] + CACHE_OFFSET);
 			if (was_zero && diff != 0) {
 				num_nz_beta++;
 			}
@@ -995,9 +1033,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double total_rowsum_diff = 0;
 	double frac_rowsum_diff = 0;
 	for (int i = 0; i < n; i++) {
-		total_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i]));
-		if (fabs(rowsum[i]) > 1)
-			frac_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i])/rowsum[i]);
+		total_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i].db));
+		if (fabs(rowsum[i].db) > 1)
+			frac_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i].db)/rowsum[i].db);
 	}
 	Rprintf("mean diff: %.2f (%.2f%%)\n", total_rowsum_diff/n, (frac_rowsum_diff*100));
 	free(temp_rowsum);
@@ -1055,7 +1093,7 @@ int **X2_from_X(int **X, int n, int p) {
 // TODO: write a test comparing this to non-sparse X2
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
 	XMatrix_sparse X2;
-	long colno, val, length;
+	long val, length;
 	
 	int iter_done = 0;
 	long p_int = p*(p+1)/2;
@@ -1075,11 +1113,11 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	long total_count = 0;
 	long total_sum = 0;
 	// size_t testcol = -INT_MAX;
-	colno = 0;
+	// colno = 0;
 	long d = max_interaction_distance;
 	long limit_instead = ((p-d)*p - (p-d)*(p-d-1)/2 - (p-d));
 	//TODO: iter_done isn't exactly being updated safely
-	#pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum) schedule(static)
+	#pragma omp parallel for shared(X2, X, iter_done) private(length, val) num_threads(NumCores) reduction(+:total_count, total_sum) schedule(static)
 	for (long i = 0; i < p; i++) {
 		for (long j = i; j < min(i+max_interaction_distance,p); j++) {
 			//GQueue *current_col = g_queue_new();
@@ -1094,7 +1132,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 			long k = max(p-d+b,0);
 			// sumb is the amount we would have reached w/o the limit - the amount that was actually covered by the limit.
 			long sumb = (k*p - k*(k-1)/2 - k) - limit_instead;
-			colno = j + suma + sumb;
+			long colno = j + suma + sumb;
 			// if (tmp != colno) {
 				// segfault for debugger
 				// printf("%ld != %ld\ni,j a,b sa,sb = %ld,%ld %ld,%ld %ld,%ld", tmp, colno, i, j, a, b, suma, sumb);
@@ -1153,7 +1191,8 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 
 			// push all our words to an array in X2
 			// printf("%d\n", colno);
-			X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
+			X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord) + CACHE_OFFSET);
+			// X2.compressed_indices[colno] = malloc(length*sizeof(S8bWord));
 			X2.col_nz[colno] = total_nz_entries;
 			X2.col_nwords[colno] = length;
 			count = 0;

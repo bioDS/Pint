@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
 	int P = atoi(argv[7]);
 	printf("using N = %d, P = %d\n", N, P);
 
-	int max_interaction_distance = atoi(argv[8]);
+	long max_interaction_distance = atoi(argv[8]);
 	printf("using max interaction distance: %d\n", max_interaction_distance);
 
 	double overlap = atof(argv[9]);

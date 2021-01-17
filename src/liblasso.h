@@ -77,13 +77,21 @@ typedef struct {
 	long vec_length;
 } Beta_Sequence;
 
+// offset an entire cache line out of laziness
+#define CACHE_OFFSET 64
+
+typedef struct cache_offset_double {
+	double db;
+	char offset[CACHE_OFFSET - sizeof(double)];
+} co_double;
+
 int **X2_from_X(int **X, int n, int p);
 XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle);
 double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, long max_interaction_distance,
 		double lambda_min, double lambda_max, int max_iter, int VERBOSE, double frac_overlap_allowed,
 		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta);
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
-double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
+double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, co_double *rowsum, int n, int p, double lambda,
 						  double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_cache);
 double soft_threshold(double z, double gamma);
 double *read_y_csv(char *fn, int n);
