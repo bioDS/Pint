@@ -1,17 +1,17 @@
-# Current state:
+# R package
 
-As of [15/04](https://github.com/bioDS/lasso_testing/commit/6c1bbdc4a80c7079a5cc8cafee96223b1b94843) running with \lambda = 20 finds 3/5 lethal interactions correctly, and one wrong result (counting strengths <-500 as lethal).
-- 31/07 update: descending lambda values finds 4/5.
+This repo is an installable R package, you can install a locally cloned copy with `R CMD INSTALL ./cloned-location`.
 
-to make an installable R package:
-./autogen.sh
+This library provides a single function that performs lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
 
-
-# Some implementation notes:
-- Using X[i][j]?beta[j]:0.0 rather than multiplication actually slows down computation.
-- removing the j \neq k requirement definitely breaks things
+```
+pairwise_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = 0.05, halt_error_diff=1.0001, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1)
+```
+A list of non-zero pairwise/interaction and main effects is returned.
 
 # Utils
+There is an executable version (primarily for testing) that can be run on X/Y as .csv files.
+
 ### Build Utils
 ```
 meson --buildtype release build
@@ -20,13 +20,19 @@ ninja -C build
 
 ### Usage
 ```
-./build/utils/src/lasso-testing X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [frac overlap allowed] [q/t/filename]
-```
+./build/utils/src/lasso_exe X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]
 
-main/int:		Find only main effects, or interactions. Main effects only is probably broken at the moment.
-verbose:		Strongly not recommended
-max lambda:		In general = P seems to be a good choice.
+```
+X.csv			Path to X matrix in .csv format (see testX.csv for an example)
+Y.csv			Path to Y matrix in .csv format (see testY.csv for an example)
+main/int:		Find only main effects, or interactions. Main effects only intended for testing and may be broken.
+verbose:		For debugging purposes.
+max lambda:		Initial lambda value for regression, must be > 0.
 N:				Number of rows of X/Y  (e.g. no. fitness scores)
 P:				Number of columns of X (e.g. no. genes)
-frac overlap:	fraction of columns being updated at the same time that is allowed to overlap. 0 will give the same results as running on a single thread. ~0.05 appears to make good use of multiple threads without a significant impact to accuracy. (N.B. this is something of a work in progress)
+max interaction distance:	Only columns within this distance in X will be considered. -1 to use all pairs.
+frac overlap:	fraction of columns being updated at the same time that is allowed to overlap. No longer used.
 q/t/filename: output mode. [q]uit immediately without printing output, [t]erminal: prints first 10 values < -500 to terminal, [filename]: prints all non-zero effects to the given file.
+log_level:		Whether and how to log partial results. iter -> every iteration, lambda -> every new lambda, none -> do not log.
+
+All arguments must be supplied.
