@@ -873,8 +873,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 			//TODO: in principle this is a problem if beta is ever set back to zero, but that rarely/never happens.
 			int was_zero = FALSE;
-			if (beta[k] == 0) {
-				int was_zero = TRUE;
+			if (beta[k] == 0.0) {
+				was_zero = TRUE;
 			}
 			double diff = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 			if (was_zero && diff != 0) {
