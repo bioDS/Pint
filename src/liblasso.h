@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <gsl/gsl_vector.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
