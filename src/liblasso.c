@@ -746,7 +746,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	double intercept = 0.0;
 
 	// initially every value will be 0, since all betas are 0.
-	double rowsum[n];
+	double *rowsum = malloc(n*sizeof(double));
 	memset(rowsum, 0, n*sizeof(double));
 
 	colsum = malloc(p_int*sizeof(double));
@@ -867,7 +867,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (set_min_lambda == TRUE) {
 			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 		}
-		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error) reduction(max: dBMax) schedule(static)
+		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error, num_nz_beta) reduction(max: dBMax) schedule(static)
 		for (long i = 0; i < p_int; i++) {
 			long k = iter_permutation->data[i];
 
@@ -910,7 +910,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 					Rprintf("largest change (%f) was less than %f, halting after %d iterations\n", prev_error/error, halt_beta_diff, iter + 1);
 					Rprintf("done lambda %d (%f) after %d iteration(s) (dbmax: %f), final error %.1f\n", lambda_count, lambda, iter + 1, dBMax, error);
 				} else {
-					Rprintf("stopping after iter (%d) = max_iter (%d) iterations\n", iter + 1, max_iter);
+					Rprintf("stopping after iter (%d) >= max_iter (%d) iterations\n", iter + 1, max_iter);
 				}
 
 				if (log_level == LAMBDA)
@@ -1018,7 +1018,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	// free X2
 	for (long i = 0; i < p_int; i++) {
 		if (X2.col_nwords[i] > 0) {
-			// printf("freeing column %d\n", i);
 			free(X2.compressed_indices[i]);
 		}
 	}
@@ -1032,6 +1031,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		free(thread_column_caches[i]);
 	}
 	free(thread_column_caches);
+	free(rowsum);
 
 	return beta;
 }
