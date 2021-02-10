@@ -6,7 +6,7 @@
 #' @export
 #' @examples
 #' pairwise_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05)
-#' @useDynLib LassoTesting
+#' @useDynLib Pint
 
 pairwise_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = 0.05, halt_error_diff=1.0001, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1) {
     Ym = as.matrix(Y)

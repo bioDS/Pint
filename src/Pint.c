@@ -109,7 +109,7 @@ static const R_CallMethodDef CallEntries[] ={
 	{NULL, NULL, 0}
 };
 
-void R_init_LassoTesting(DllInfo *info) {
+void R_init_Pint(DllInfo *info) {
 	//R_RegisterCCallable("LassoTesting", "lasso_", (DL_FUNC) &lasso_);
 	R_registerRoutines(info, NULL, CallEntries, NULL, NULL);
 	R_useDynamicSymbols(info, FALSE);

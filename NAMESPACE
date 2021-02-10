@@ -1,2 +1,2 @@
-useDynLib("LassoTesting", .registration=TRUE)
+useDynLib("Pint", .registration=TRUE)
 export(pairwise_lasso)
