@@ -700,7 +700,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		long max_interaction_distance, double lambda_min, double lambda_max, 
 		int max_iter, int verbose, double frac_overlap_allowed, double halt_beta_diff, enum LOG_LEVEL log_level,
 		char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta) {
-	int num_nz_beta = 0;
+	long num_nz_beta = 0;
+	long became_zero = 0;
 	double lambda = lambda_max;
 	VERBOSE = verbose;
 	int_pair *precalc_get_num;
@@ -867,7 +868,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		if (set_min_lambda == TRUE) {
 			parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
 		}
-		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error, num_nz_beta) reduction(max: dBMax) schedule(static)
+		#pragma omp parallel for num_threads(NumCores) private(max_rowsums, max_cumulative_rowsums) shared(col_ysum, xmatrix, X2, Y, rowsum, beta, precalc_get_num) reduction(+:total_updates, skipped_updates, skipped_updates_entries, total_updates_entries, error, num_nz_beta) reduction(max: dBMax) schedule(static) reduction(-:became_zero)
 		for (long i = 0; i < p_int; i++) {
 			long k = iter_permutation->data[i];
 
@@ -879,6 +880,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			double diff = update_beta_cyclic(xmatrix, X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
 			if (was_zero && diff != 0) {
 				num_nz_beta++;
+			}
+			if (!was_zero && beta[k] == 0) {
+				became_zero++;
 			}
 			double diff2 = diff*diff;
 			if (diff2 > dBMax) {
@@ -917,7 +921,8 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 					save_log(iter, lambda, lambda_count, beta, p_int, log_file);
 
 
-				if (max_nz_beta > 0 && num_nz_beta >= max_nz_beta) {
+				Rprintf("%d nz beta\n", num_nz_beta);
+				if (max_nz_beta > 0 && num_nz_beta - became_zero >= max_nz_beta) {
 					Rprintf("Maximum non-zero beta count reached, stopping after this lambda");
 					final_lambda = lambda;
 				}
@@ -1013,7 +1018,6 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		free(index_cache);
 	}
 
-	Rprintf("freeing stuff\n");
 	// free beta sets
 	// free X2
 	for (long i = 0; i < p_int; i++) {
