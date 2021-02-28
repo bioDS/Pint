@@ -9,11 +9,11 @@ total_tests=$(echo $ok + $fail | bc -l)
 
 total_coverage=$(grep "TOTAL" build/meson-logs/coverage.txt | grep -o "[0-9]*\%" | tr -d '%')
 
-echo "coverage: $total%"
+echo "coverage: $total_coverage%"
 
-if (( $(echo "$total <= 50" | bc -l) )) ; then
+if (( $(echo "$total_coverage <= 50" | bc -l) )) ; then
 	COLOR=red
-elif (( $(echo "$total > 80" | bc -l) )); then
+elif (( $(echo "$total_coverage > 80" | bc -l) )); then
 	COLOR=green
 else
 	COLOR=orange
@@ -22,7 +22,7 @@ fi
 # coverage badge
 badgename="coverage-$total_coverage-$COLOR.svg"
 
-if [ ! -f badgename ]; then
+if [ ! -f badges/$badgename ]; then
 	curl "https://img.shields.io/badge/coverage-$total_coverage%25-$COLOR" > badges/$badgename
 fi
 
@@ -41,7 +41,7 @@ fi
 
 badgename="results-$ok-$fail.svg"
 
-if [ ! -f badgename ]; then
+if [ ! -f badges/$badgename ]; then
   curl "https://img.shields.io/badge/Tests-$ok%20out%20of%20$total_tests-$COLOR.svg" > badges/$badgename
 fi
 

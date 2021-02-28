@@ -1,3 +1,5 @@
+![tests](test-badge.svg)
+![cod cov](coverage-badge.svg)
 # R package
 
 This repo is an installable R package, you can install a locally cloned copy with `R CMD INSTALL ./cloned-location`.
