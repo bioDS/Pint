@@ -30,7 +30,8 @@ enum LOG_LEVEL {
 #include "queue.h"
 #include "regression.h"
 #include "log.h"
-#include  "csv.h"
+#include "csv.h"
+#include "pruning.h"
 
 int **X2_from_X(int **X, int n, int p);
 double *read_y_csv(char *fn, int n);

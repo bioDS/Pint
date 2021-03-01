@@ -575,6 +575,12 @@ static void check_permutation() {
 // run branch_prune check, then full regression step without pruning.
 // the beta values that would have been pruned should be 0.
 static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data) {
+	printf("starting branch pruning test\n");
+	int n = fixture->n;
+	int p = fixture->p;
+	double *rowsum = fixture->rowsum;
+	// double lambda = fixture->lambda;
+	double lambda = 1;
 	double acceptable_diff = 0.1;
 	int shuffle = FALSE;
 	double *glmnet_beta = read_y_csv("/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
@@ -587,31 +593,55 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 	double *beta = fixture->beta;
 	printf("test\n");
 
+	XMatrixSparse Xc = sparse_X2_from_X(fixture->X, n, p, 0, FALSE);
+
+	int will_update[p];
+	for (int i = 0; i < p; i++)
+		will_update[i] = 0;
+
+	double *last_rowsum = malloc(sizeof *last_rowsum *n);
+	for (int i = 0; i < n; i++)
+		last_rowsum[i] = 0;
+
+	double last_max = 0.0;
+
+	for (int i = 0; i < p; i++) {
+		will_update[i] = will_update_effect(Xc, lambda, i, last_max, last_rowsum, rowsum);
+	}
+
+	for (int i = 0; i < p; i++) {
+		if (will_update[i]) {
+			printf("%d should update\n", i);
+		}
+	}
+
 	double dBMax;
-	for (int j = 0; j < 10; j++)
+	for (int j = 0; j < 10; j++) {
 		for (int i = 0; i < p_int; i++) {
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
 		}
+	}
 
-	int no_agreeing = 0;
-	// for (int i = 0; i < p_int; i++) {
-	// 	int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-	// 	//int k = i;
-	// 	printf("testing beta[%d] (%f) ~ %f [", i, beta[i], small_X2_correct_beta[k]);
-
-	// 	if (	(beta[i] < small_X2_correct_beta[k] + acceptable_diff)
-	// 		&& 	(beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
-	// 			no_agreeing++;
-	// 			printf("x]\n");
-	// 		} else {
-	// 			printf(" ]\n");
-	// 		}
-	// }
-	// printf("frac agreement: %f\n", (double)no_agreeing/p_int);
-	// g_assert_true(no_agreeing == p_int);
+	int no_disagreeing = 0;
+	for (int i = 0; i < p_int; i++) {
+		// int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+		// int k = i;
+			int k = fixture->xmatrix_sparse.permutation->data[i];
+		printf("testing beta[%d] (%f)\n", k, beta[k]);
+		int_pair ip = get_num(k, p);
+		//TODO: we should only check against later items not in the working set, this needs to be udpated
+		// if (will_update[ip.i] == FALSE || will_update[ip.j] == FALSE) {
+			if (beta[k] != 0.0) {
+				printf("beta %d should be zero according to will_update_effect(), but is in fact %f!\n", k, beta[k]);
+				no_disagreeing++;
+			}
+		// }
+	}
+	printf("frac disagreement: %f\n", (double)no_disagreeing/p);
+	g_assert_true(no_disagreeing == 0);
 }
 
 int main (int argc, char *argv[]) {
