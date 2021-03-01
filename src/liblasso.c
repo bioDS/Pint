@@ -215,24 +215,6 @@ long get_p_int(long p, long max_interaction_distance) {
 	return p_int;
 }
 
-S8bWord to_s8b(int count, int *vals) {
-    S8bWord word;
-	word.values = 0;
-    word.selector = 0;
-	int t = 0;
-	//TODO: improve on this
-	while(group_size[t] >= count && t < 16)
-		t++;
-	word.selector = t-1;
-	unsigned long test = 0;
-	for (int i = 0; i < count; i++) {
-		test |= vals[count-i-1];
-		if (i < count - 1)
-			test <<= item_width[word.selector];
-	}
-	word.values = test;
-    return word;
-}
 
 int max(int a, int b) {
 	if (a > b)
@@ -542,7 +524,7 @@ int check_can_restore_from_log(char *filename, int n, int p, int num_betas, char
 // returns the opened log for future use.
 FILE *restore_from_log(char *filename, int n, int p, int num_betas, char **job_args, int job_args_num,
 		int *actual_iter, int *actual_lambda_count, double *actual_lambda_value, double *actual_beta) {
-    
+
 	FILE *log_file = fopen(filename, "r+");
 	int buf_size = num_betas*16 + 500;
 	char *buffer = malloc(buf_size);
@@ -1036,6 +1018,16 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	}
 	free(thread_column_caches);
 	free(rowsum);
+
+	printf("checking nz beta count\n");
+	int nonzero = 0;
+	for (int i = 0; i < p_int; i++) {
+		if (beta[i] != 0) {
+			nonzero++;
+		}
+	}
+	printf("%d found\n", nonzero);
+	printf("nz = %d, became_zero = %d\n", num_nz_beta, became_zero);
 
 	return beta;
 }
