@@ -17,7 +17,7 @@ aclocal.m4
 autoscan.log
 *.o
 *.so
-*test*
+./test*
 *.pdf
 *.Po
 *.svg

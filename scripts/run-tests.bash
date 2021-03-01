@@ -5,8 +5,8 @@ git stash push --keep-index
 ninja -C build test > test_output && cat test_output
 ninja -C build coverage > coverage_output
 
-ok=$(grep Ok test_output | grep [0-9] -o)
-fail=$(grep "^Fail" test_output | grep [0-9] -o)
+ok=$(grep Ok test_output | grep [0-9]* -o)
+fail=$(grep "^Fail" test_output | grep [0-9]* -o)
 total_tests=$(echo $ok + $fail | bc -l)
 
 total_coverage=$(grep "TOTAL" build/meson-logs/coverage.txt | grep -o "[0-9]*\%" | tr -d '%')
@@ -32,6 +32,9 @@ cp badges/$badgename coverage-badge.svg
 git add coverage-badge.svg -f
 
 # test results badge
+
+echo "$ok passed"
+echo "$fail failed"
 
 if (( $(echo "$fail > $ok" | bc -l) )) ; then
 	COLOR=red

@@ -131,17 +131,10 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconst
 	fixture->n = 1000;
 	fixture->p = 35;
 	printf("reading X\n");
-<<<<<<< Updated upstream
-	fixture->xmatrix = read_x_csv("testXSmall.csv", fixture->n, fixture->p);
-	fixture->X = fixture->xmatrix.X;
-	printf("reading Y\n");
-	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
-=======
 	fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	printf("reading Y\n");
 	fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
->>>>>>> Stashed changes
 	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 20;
 	int p_int = fixture->p*(fixture->p+1)/2;
