@@ -29,6 +29,7 @@ liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
     'regression.h', 'regression.c',
     'log.h', 'log.c',
     'csv.h', 'csv.c',
+    'pruning.h', 'pruning.c',
 	include_directories: configuration_inc,
 	dependencies: liblasso_deps,
 	install: true

@@ -30,9 +30,9 @@ typedef struct {
 	int k;
 	double dBMax;
 	double intercept;
-	XMatrix_sparse xmatrix_sparse;
+	XMatrixSparse xmatrix_sparse;
 	int_pair *precalc_get_num;
-	int *column_cache;
+	int **column_caches;
 } UpdateFixture;
 
 const static double small_X2_correct_beta[630] = {-83.112248,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-39.419762,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-431.597831,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-56.125867,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-54.818886,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-144.076649,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-64.023489,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-33.646329,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-62.705188,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-334.676519,0.000000,0.000000,-215.196793,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-165.866118,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-112.678381,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-1.284220,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-58.031513,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,3.916624,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-73.009253,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,6.958046,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000,-120.529141,0.000000,0.000000,0.000000,0.000000,-80.263024};
@@ -48,9 +48,9 @@ static void test_update_intercept_cyclic() {
 static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer user_data) {
 	fixture->n = 1000;
 	fixture->p = 35;
-	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
-	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
+	fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
 	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 6.46;
 	fixture->beta = malloc(fixture->p*sizeof(double));
@@ -71,9 +71,11 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture, gconstpointer use
 	}
 	fixture->precalc_get_num = precalc_get_num;
 
-	for (int i = 0; i < fixture->n; i++)
-		fixture->rowsum[i] = 0;
-	fixture->column_cache = malloc(fixture->n*sizeof(int));
+	int **thread_column_caches = malloc(NumCores*sizeof(int*));
+	for (int i = 0; i <  NumCores; i++) {
+		thread_column_caches[i] = malloc(fixture->n*sizeof(int));
+	}
+	fixture->column_caches=thread_column_caches;
 }
 
 static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
@@ -84,13 +86,16 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 	free(fixture->rowsum);
 	free(fixture->beta);
 	free(fixture->precalc_get_num);
-	free(fixture->column_cache);
+	for (int i = 0; i < NumCores; i++) {
+		free(fixture->column_caches[i]);
+	}
+	free(fixture->column_caches);
 }
 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->intercept, fixture->precalc_get_num, fixture->column_cache);
+	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->intercept, fixture->precalc_get_num, fixture->column_caches);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
@@ -105,7 +110,7 @@ static void test_soft_threshold() {
 static void test_read_x_csv() {
 	int n = 1000;
 	int p = 100;
-	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testX.csv", n, p);
+	XMatrix xmatrix = read_x_csv("../testX.csv", n, p);
 	g_assert_true(xmatrix.actual_cols == 100);
 	g_assert_true(xmatrix.X[0][0] == 0);
 	g_assert_true(xmatrix.X[99][999] == 0);
@@ -125,9 +130,18 @@ static void test_X2_from_X() {
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconstpointer user_data) {
 	fixture->n = 1000;
 	fixture->p = 35;
-	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	printf("reading X\n");
+<<<<<<< Updated upstream
+	fixture->xmatrix = read_x_csv("testXSmall.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
+	printf("reading Y\n");
 	fixture->Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", fixture->n);
+=======
+	fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
+	fixture->X = fixture->xmatrix.X;
+	printf("reading Y\n");
+	fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
+>>>>>>> Stashed changes
 	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 20;
 	int p_int = fixture->p*(fixture->p+1)/2;
@@ -149,6 +163,13 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconst
 
 	for (int i = 0; i < fixture->n; i++)
 		fixture->rowsum[i] = 0;
+
+	int **thread_column_caches = malloc(NumCores*sizeof(int*));
+	for (int i = 0; i <  NumCores; i++) {
+		thread_column_caches[i] = malloc(fixture->n*sizeof(int));
+	}
+	fixture->column_caches=thread_column_caches;
+	printf("done test init\n");
 }
 
 static void test_simple_coordinate_descent_tear_down(UpdateFixture *fixture, gconstpointer user_data) {
@@ -199,7 +220,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_cache);
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
 		}
 
 	int no_agreeing = 0;
@@ -280,7 +301,7 @@ static void check_X2_encoding() {
 	int p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
-	XMatrix_sparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, 1, -1);
+	XMatrixSparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE);
 
 	// mean entry size
 	long total = 0;
@@ -484,7 +505,46 @@ static void check_permutation() {
 	gsl_permutation_free(perm);
 }
 
-static void check_branch_pruning() {
+// run branch_prune check, then full regression step without pruning.
+// the beta values that would have been pruned should be 0.
+static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data) {
+	double acceptable_diff = 0.1;
+	int shuffle = FALSE;
+	double *glmnet_beta = read_y_csv("/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
+	printf("starting interaction test\n");
+	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
+	fixture->X = fixture->xmatrix.X;
+	printf("creating X2\n");
+	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
+	int p_int = fixture->p*(fixture->p+1)/2;
+	double *beta = fixture->beta;
+	printf("test\n");
+
+	double dBMax;
+	for (int j = 0; j < 10; j++)
+		for (int i = 0; i < p_int; i++) {
+			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+			int k = fixture->xmatrix_sparse.permutation->data[i];
+			//int k = i;
+			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
+		}
+
+	int no_agreeing = 0;
+	// for (int i = 0; i < p_int; i++) {
+	// 	int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+	// 	//int k = i;
+	// 	printf("testing beta[%d] (%f) ~ %f [", i, beta[i], small_X2_correct_beta[k]);
+
+	// 	if (	(beta[i] < small_X2_correct_beta[k] + acceptable_diff)
+	// 		&& 	(beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
+	// 			no_agreeing++;
+	// 			printf("x]\n");
+	// 		} else {
+	// 			printf(" ]\n");
+	// 		}
+	// }
+	// printf("frac agreement: %f\n", (double)no_agreeing/p_int);
+	// g_assert_true(no_agreeing == p_int);
 }
 
 int main (int argc, char *argv[]) {
@@ -503,7 +563,9 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-permutation", check_permutation);
-	g_test_add_func("/func/test-branch-pruning", check_branch_pruning);
+	g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE, test_simple_coordinate_descent_set_up, check_branch_pruning, test_simple_coordinate_descent_tear_down);
+	//g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
+	// g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
 
 	return g_test_run();
 }

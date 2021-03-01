@@ -1,7 +1,7 @@
 #include "liblasso.h"
 
 Queue *queue_new() {
-	Queue *new_queue = malloc(sizeof(Queue));
+	Queue *new_queue = malloc(sizeof *new_queue);
 	new_queue->length = 0;
 	new_queue->first_item = NULL;
 	new_queue->last_item = NULL;

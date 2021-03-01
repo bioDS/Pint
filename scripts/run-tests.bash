@@ -1,5 +1,7 @@
 #!/bin/bash
 
+git stash push --keep-index
+
 ninja -C build test > test_output && cat test_output
 ninja -C build coverage > coverage_output
 
@@ -42,8 +44,10 @@ fi
 badgename="results-$ok-$fail.svg"
 
 if [ ! -f badges/$badgename ]; then
-  curl "https://img.shields.io/badge/Tests-$ok%20out%20of%20$total_tests-$COLOR.svg" > badges/$badgename
+  curl "https://img.shields.io/badge/Tests-$ok%20out%20of%20$total_tests%20passed-$COLOR.svg" > badges/$badgename
 fi
 
 cp badges/$badgename test-badge.svg
 git add test-badge.svg -f
+
+git stash pop

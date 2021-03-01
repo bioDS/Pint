@@ -1,8 +1,8 @@
 #include "liblasso.h"
 
 // TODO: write a test comparing this to non-sparse X2
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
-	XMatrix_sparse X2;
+XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
+	XMatrixSparse X2;
 	long colno, val, length;
 	
 	int iter_done = 0;
@@ -11,6 +11,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance < 0)
 		max_interaction_distance = p;
+	printf("p_int: %d\n", p_int);
 
 	//TODO: granted all these pointers are the same size, but it's messy
 	X2.compressed_indices = malloc(p_int*sizeof(int *));
@@ -120,7 +121,7 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 			current_col_actual = NULL;
 		}
 		iter_done++;
-		if (iter_done % (p/100) == 0) {
+		if (p >= 100 && iter_done % (p/100) == 0) {
 			printf("create interaction matrix, %d\%\n", done_percent);
 			done_percent++;
 		}
@@ -190,6 +191,9 @@ XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dist
 	global_permutation = permutation;
 	global_permutation_inverse = gsl_permutation_alloc(permutation->size);
 	gsl_permutation_inverse(global_permutation_inverse, permutation);
+
+	X2.n = n;
+	X2.p = p_int;
 
 	return X2;
 }

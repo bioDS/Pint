@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <time.h>
 
-double calculate_error(int n, long p_int, XMatrix_sparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
+double calculate_error(int n, long p_int, XMatrixSparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
 	double error = 0.0;
 	for (int row = 0; row < n; row++) {
 		double row_err = Y[row] - intercept - rowsum[row];
@@ -24,7 +24,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	//Rprintf("using %d threads\n", NumCores);
 
-	XMatrix_sparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
+	XMatrixSparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance, FALSE);
 
 	for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
 		max_rowsums[i] = 0;
@@ -364,7 +364,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	return beta;
 }
 
-double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+double update_beta_cyclic(XMatrix xmatrix, XMatrixSparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;

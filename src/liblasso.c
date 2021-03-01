@@ -38,8 +38,6 @@ int min(int a, int b) {
 	return b;
 }
 
-
-
 static gsl_rng **thread_r;
 
 //TODO: the compiler should really do this
