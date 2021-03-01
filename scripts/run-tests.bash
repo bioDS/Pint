@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ninja -C build test > test_output && cat test_output
-ninja -C build coverage
+ninja -C build coverage > coverage_output
 
 ok=$(grep Ok test_output | grep [0-9] -o)
 fail=$(grep "^Fail" test_output | grep [0-9] -o)
