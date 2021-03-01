@@ -363,3 +363,113 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 
 	return beta;
 }
+
+double update_beta_cyclic(XMatrix xmatrix, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda, double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
+	double sumk = xmatrix_sparse.col_nz[k];
+	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
+	int *column_entries = column_entry_cache;
+
+	long col_entry_pos = 0;
+	long entry = -1;
+	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
+		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+		unsigned long values = word.values;
+		for (int j = 0; j < group_size[word.selector]; j++) {
+			int diff = values & masks[word.selector];
+			if (diff != 0) {
+				entry += diff;
+				column_entries[col_entry_pos] = entry;
+				sumn += Y[entry] - intercept - rowsum[entry];
+				col_entry_pos++;
+			}
+			values >>= item_width[word.selector];
+		}
+	}
+
+	// TODO: This is probably slower than necessary.
+	double Bk_diff = beta[k];
+	if (sumk == 0.0) {
+		beta[k] = 0.0;
+	} else {
+		beta[k] = soft_threshold(sumn, lambda*n/2)/sumk;
+	}
+	Bk_diff = beta[k] - Bk_diff;
+	// update every rowsum[i] w/ effects of beta change.
+	if (Bk_diff != 0) {
+		for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+			int i = column_entries[e];
+			#pragma omp atomic
+			rowsum[i] += Bk_diff;
+		}
+	} else {
+		zero_updates++;
+		zero_updates_entries += xmatrix_sparse.col_nz[k];
+	}
+
+
+	return Bk_diff;
+}
+
+double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p) {
+	double new_intercept = 0.0;
+	double sumn = 0.0, sumx = 0.0;
+
+	for (int i = 0; i < n; i++) {
+		sumx = 0.0;
+		for (int j = 0; j < p; j++) {
+			sumx += X[i][j] * beta[j];
+		}
+		sumn += Y[i] - sumx;
+	}
+	new_intercept = sumn / n;
+	return new_intercept;
+}
+
+
+
+// check a particular pair of betas in the adaptive calibration scheme
+int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas beta_1, double lambda_2, Sparse_Betas beta_2, int beta_length) {
+	double max_diff = 0.0;
+	double adjusted_max_diff = 0.0;
+
+	int b1_ind = 0;
+	int b2_ind = 0;
+
+	while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
+		while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind] && b1_ind < beta_1.count)
+			b1_ind++;
+		while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind] && b2_ind < beta_2.count)
+			b2_ind++;
+		if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
+			beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
+			double diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
+			if (diff > max_diff)
+				max_diff = diff;
+			b1_ind++;
+		}
+	}
+
+	adjusted_max_diff = max_diff / (lambda_1 + lambda_2);
+
+	if (adjusted_max_diff <= c_bar) {
+		return 1;
+	}
+	return 0;
+}
+
+// checks whether the last element in the beta_sequence is the one we should stop at, according to
+// Chichignoud et als 'Adaptive Calibration Scheme'
+// returns TRUE if we are finished, FALSE if we should continue.
+int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
+	// printf("\nchecking %d betas\n", beta_sequence.count);
+	for (int i = 0; i < beta_sequence.count; i++) {
+		int this_result = adaptive_calibration_check_beta(c_bar, beta_sequence.lambdas[beta_sequence.count-1], beta_sequence.betas[beta_sequence.count-1],
+															beta_sequence.lambdas[i], beta_sequence.betas[i],
+													beta_sequence.vec_length);
+		// printf("result: %d\n", this_result);
+		if (this_result == 0) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
