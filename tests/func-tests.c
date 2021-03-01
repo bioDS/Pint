@@ -484,6 +484,9 @@ static void check_permutation() {
 	gsl_permutation_free(perm);
 }
 
+static void check_branch_pruning() {
+}
+
 int main (int argc, char *argv[]) {
 	initialise_static_resources();
 	setlocale (LC_ALL, "");
@@ -500,6 +503,7 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
 	g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
 	g_test_add_func("/func/test-permutation", check_permutation);
+	g_test_add_func("/func/test-branch-pruning", check_branch_pruning);
 
 	return g_test_run();
 }

@@ -24,6 +24,9 @@ liblasso_deps = [
 
 liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
     's8b.h', 's8b.c',
+    'queue.h', 'queue.c',
+    'sparse_matrix.h', 'sparse_matrix.c',
+    'regression.h', 'regression.c',
 	include_directories: configuration_inc,
 	dependencies: liblasso_deps,
 	install: true

@@ -1,4 +1,3 @@
-
 typedef struct S8bWord {
 	unsigned int selector : 4;
 	unsigned long values: 60;
