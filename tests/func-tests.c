@@ -130,6 +130,9 @@ static void test_compressed_main_X() {
 	
 	XMatrixSparse Xs = sparsify_X(xm.X, n, p);
 
+	g_assert_true(Xs.n == n);
+	g_assert_true(Xs.p == p);
+
 	int *column_entries[n];
 
 	long agreed_on = 0;
@@ -183,6 +186,9 @@ static void test_X2_from_X() {
 	XMatrix xm2 = read_x_csv("../testX2.csv", n, p_int);
 	
 	XMatrixSparse X2s = sparse_X2_from_X(xm.X, n, p, -1, FALSE);
+
+	g_assert_true(X2s.n == n);
+	g_assert_true(X2s.p == p_int);
 
  	// print X2s
  	//printf("X2s:\n");
