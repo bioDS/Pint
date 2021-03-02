@@ -4,7 +4,10 @@ XMatrixSparse sparsify_X(int **X, int n, int p) {
 	return sparse_X2_from_X(X, n, p, 1, FALSE);
 }
 
-// TODO: write a test comparing this to non-sparse X2
+/**
+ * max_interaction_distance: interactions will be up to, but not including, this distance from each other.
+ * 							 set to 1 for no interactions.
+ */
 XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
 	XMatrixSparse X2;
 	long colno, val, length;

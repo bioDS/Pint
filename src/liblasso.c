@@ -115,13 +115,18 @@ void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_
 	}
 }
 
-long get_p_int(long p, long max_interaction_distance) {
+long get_p_int(long p, long dist) {
 	long p_int = 0;
-	if (max_interaction_distance <= 0 || max_interaction_distance >= p/2)
+	if (dist <= 0 || dist >= p/2)
 		p_int = (p*(p+1))/2;
-	else
-		p_int = (p-max_interaction_distance)*(2*max_interaction_distance+1)
-				+ max_interaction_distance*(max_interaction_distance-1);
+	else {
+		// everything short of p-dist will interact with dist items to the right
+		p_int = (p-dist)*(dist)
+		// the rightmost items will all interact
+				+ dist*(dist+1)/2;
+	}
+
+	printf("p: %d, dist: %d, interactions = %d\n", p, dist, p_int);
 	return p_int;
 }
 
