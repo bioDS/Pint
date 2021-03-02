@@ -41,6 +41,7 @@ void free_static_resources();
 void initialise_static_resources();
 void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_split_size, long splits);
 long get_p_int(long p, long max_interaction_distance);
+int_pair *get_all_nums(int p, int max_interaction_distance);
 
 #define TRUE 1
 #define FALSE 0

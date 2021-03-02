@@ -5,7 +5,7 @@
 double calculate_error(int n, long p_int, XMatrixSparse X2, double *Y, int **X, double *beta, double p, double intercept, double *rowsum) {
 	double error = 0.0;
 	for (int row = 0; row < n; row++) {
-		double row_err = Y[row] - intercept - rowsum[row];
+		double row_err = intercept - rowsum[row];
 		error += row_err*row_err;
 	}
 	return error;
@@ -60,9 +60,9 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	}
 	double intercept = 0.0;
 
-	// initially every value will be 0, since all betas are 0.
 	double *rowsum = malloc(n*sizeof(double));
-	memset(rowsum, 0, n*sizeof(double));
+	for (int i = 0; i < n; i++)
+		rowsum[i] = -Y[i];
 
 	colsum = malloc(p_int*sizeof(double));
 	memset(colsum, 0, p_int*sizeof(double));
@@ -379,7 +379,7 @@ double update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsu
 			if (diff != 0) {
 				entry += diff;
 				column_entries[col_entry_pos] = entry;
-				sumn += Y[entry] - intercept - rowsum[entry];
+				sumn += intercept - rowsum[entry];
 				col_entry_pos++;
 			}
 			values >>= item_width[word.selector];

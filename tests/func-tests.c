@@ -287,7 +287,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconst
 	fixture->precalc_get_num = precalc_get_num;
 
 	for (int i = 0; i < fixture->n; i++)
-		fixture->rowsum[i] = 0;
+		fixture->rowsum[i] = -fixture->Y[i];
 
 	int **thread_column_caches = malloc(NumCores*sizeof(int*));
 	for (int i = 0; i <  NumCores; i++) {

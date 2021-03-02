@@ -30,7 +30,6 @@ double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 gsl_permutation *global_permutation;
 gsl_permutation *global_permutation_inverse;
-int_pair *cached_nums;
 
 int min(int a, int b) {
 	if (a < b)
@@ -39,6 +38,7 @@ int min(int a, int b) {
 }
 
 static gsl_rng **thread_r;
+int_pair *cached_nums = NULL;
 
 //TODO: the compiler should really do this
 void initialise_static_resources() {
@@ -157,6 +157,7 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 
 
 int_pair get_num(long num, long p) {
+	printf("num: %d, p: %d\n", num, p);
 	size_t num_post_permutation = gsl_permutation_get(global_permutation, num);
 	return cached_nums[num_post_permutation];
 }

@@ -7,8 +7,8 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
     double pos_max = 0.0, neg_max = 0.0;
     for (int ind = 0; ind < colsize; ind++) {
         int i = column_cache[ind];
-        // printf("i: %d\n", i);
         double diff_i = rowsum[i] - alpha*last_rowsum[i];
+        printf("i: %d, diff_i: %f\n", i, diff_i);
         if (diff_i > 0) {
             pos_max += (diff_i);
         } else if (diff_i < 0) {
