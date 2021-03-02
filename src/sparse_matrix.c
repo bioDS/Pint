@@ -12,6 +12,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dista
 	int iter_done = 0;
 	long p_int = p*(p+1)/2;
 	//TODO: for the moment we use the maximum possible p_int for allocation, because things assume it.
+	//TODO: this is wrong for dist == 1! (i.e. the main only case). Or at least, so we hope.
 	p_int = get_p_int(p, max_interaction_distance);
 	if (max_interaction_distance < 0)
 		max_interaction_distance = p;
@@ -125,10 +126,10 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dista
 			current_col_actual = NULL;
 		}
 		iter_done++;
-		if (p >= 100 && iter_done % (p/100) == 0) {
-			printf("create interaction matrix, %d\%\n", done_percent);
-			done_percent++;
-		}
+		//if (p >= 100 && iter_done % (p/100) == 0) {
+		//	printf("create interaction matrix, %d\%\n", done_percent);
+		//	done_percent++;
+		//}
 	}
 
 	long total_words = 0;

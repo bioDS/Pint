@@ -95,7 +95,7 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture, gconstpointer 
 static void test_update_beta_cyclic(UpdateFixture *fixture, gconstpointer user_data) {
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-	update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->intercept, fixture->precalc_get_num, fixture->column_caches);
+	update_beta_cyclic(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, fixture->beta, fixture->k, fixture->intercept, fixture->precalc_get_num, fixture->column_caches);
 	printf("beta[27]: %f\n", fixture->beta[27]);
 	g_assert_true(fixture->beta[27] != 0.0);
 	g_assert_true(fixture->beta[27] < -263.94);
@@ -345,7 +345,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture, gconstpoi
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
+			dBMax = update_beta_cyclic(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
 		}
 
 	int no_agreeing = 0;
@@ -641,21 +641,19 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 	double lambda = 1;
 	double acceptable_diff = 0.1;
 	int shuffle = FALSE;
-	double *glmnet_beta = read_y_csv("/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
 	printf("starting interaction test\n");
-	fixture->xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
-	fixture->X = fixture->xmatrix.X;
+	//fixture->xmatrix = read_x_csv("/ho/testXSmall.csv", fixture->n, fixture->p);
 	printf("creating X2\n");
-	fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
 	int p_int = fixture->p*(fixture->p+1)/2;
 	double *beta = fixture->beta;
 	printf("test\n");
 
-	XMatrixSparse Xc = sparse_X2_from_X(fixture->X, n, p, 0, FALSE);
+	XMatrixSparse Xc = sparsify_X(fixture->X, n, p);
+	int column_cache[n];
 
-	int will_update[p];
+	int wont_update[p];
 	for (int i = 0; i < p; i++)
-		will_update[i] = 0;
+		wont_update[i] = 0;
 
 	double *last_rowsum = malloc(sizeof *last_rowsum *n);
 	for (int i = 0; i < n; i++)
@@ -664,12 +662,12 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 	double last_max = 0.0;
 
 	for (int i = 0; i < p; i++) {
-		will_update[i] = will_update_effect(Xc, lambda, i, last_max, last_rowsum, rowsum);
+		wont_update[i] = wont_update_effect(Xc, lambda, i, last_max, last_rowsum, rowsum, column_cache);
 	}
 
 	for (int i = 0; i < p; i++) {
-		if (will_update[i]) {
-			printf("%d should update\n", i);
+		if (wont_update[i]) {
+			printf("%d will supposedly wont update\n", i);
 		}
 	}
 
@@ -679,7 +677,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
 			int k = fixture->xmatrix_sparse.permutation->data[i];
 			//int k = i;
-			dBMax = update_beta_cyclic(fixture->xmatrix, fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n, fixture->p, lambda, beta, k, 0, fixture->precalc_get_num, fixture->column_caches[0]);
+			dBMax = update_beta_cyclic(Xc, fixture->Y, rowsum, n, p, lambda, beta, k, 0, fixture->precalc_get_num, column_cache);
 		}
 	}
 
@@ -691,7 +689,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 		printf("testing beta[%d] (%f)\n", k, beta[k]);
 		int_pair ip = get_num(k, p);
 		//TODO: we should only check against later items not in the working set, this needs to be udpated
-		// if (will_update[ip.i] == FALSE || will_update[ip.j] == FALSE) {
+		// if (wont_update[ip.i] == FALSE || wont_update[ip.j] == FALSE) {
 			if (beta[k] != 0.0) {
 				printf("beta %d should be zero according to will_update_effect(), but is in fact %f!\n", k, beta[k]);
 				no_disagreeing++;
