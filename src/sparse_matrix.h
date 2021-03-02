@@ -29,3 +29,4 @@ typedef struct XMatrix_sparse_row {
 } XMatrix_sparse_row;
 
 XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle);
+XMatrixSparse sparsify_X(int **X, int n, int p);

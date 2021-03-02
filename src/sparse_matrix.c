@@ -1,5 +1,9 @@
 #include "liblasso.h"
 
+XMatrixSparse sparsify_X(int **X, int n, int p) {
+	return sparse_X2_from_X(X, n, p, 1, FALSE);
+}
+
 // TODO: write a test comparing this to non-sparse X2
 XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle) {
 	XMatrixSparse X2;

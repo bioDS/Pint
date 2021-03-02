@@ -128,7 +128,7 @@ static void test_compressed_main_X() {
 	int p = 100;
 	XMatrix xm = read_x_csv("../testX.csv", n, p);
 	
-	XMatrixSparse Xs = sparse_X2_from_X(xm.X, n, p, 1, FALSE);
+	XMatrixSparse Xs = sparsify_X(xm.X, n, p);
 
 	int *column_entries[n];
 
