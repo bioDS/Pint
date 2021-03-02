@@ -123,6 +123,58 @@ static void test_read_x_csv() {
 	g_assert_true(sum == 8);
 }
 
+static void test_compressed_main_X() {
+	int n = 1000;
+	int p = 100;
+	XMatrix xm = read_x_csv("../testX.csv", n, p);
+	
+	XMatrixSparse Xs = sparse_X2_from_X(xm.X, n, p, 1, FALSE);
+
+	int *column_entries[n];
+
+	long agreed_on = 0;
+ 	for (int k = 0; k < p; k++) {
+  	  	long col_entry_pos = 0;
+  	  	long entry = -1;
+  	  	memset(column_entries, 0, sizeof *column_entries *n);
+  	  	for (int i = 0; i < Xs.col_nwords[k]; i++) {
+  	  	  	S8bWord word = Xs.compressed_indices[k][i];
+  	  	  	unsigned long values = word.values;
+  	  	  	for (int j = 0; j < group_size[word.selector]; j++) {
+  	  	  	  	int diff = values & masks[word.selector];
+  	  	  	  	if (diff != 0) {
+  	  	  	  	  	entry += diff;
+  	  	  	  	  	column_entries[col_entry_pos] = entry;
+  	  	  	  	  	col_entry_pos++;
+  	  	  	  	}
+  	  	  	  	values >>= item_width[word.selector];
+  	  	  	}
+  	  	}
+  	  	// check the read column agrees with k of testX2.csv
+  	  	// n.b. XMatrix.X is column-major
+  	  	col_entry_pos = 0;
+	  	for (int i = 0; i < n; i++) {
+  	    	//printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
+  	    	if (col_entry_pos > Xs.col_nz[k] || column_entries[col_entry_pos] < i) {
+  	    	  	if (xm.X[k][i] != 0) {
+  	    	  		printf("\n[%d][%d] is not in the index but should be", k, i);
+					g_assert_true(FALSE);
+  	   			}
+  	    	} else if (Xs.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
+  	    		if (xm.X[k][i] != 1) {
+  	    	   		printf("\n[%d][%d] missing from \n", k, i);
+  	    	    	g_assert_true(FALSE);
+  	    	  	} else {
+					agreed_on++;
+				}
+  	    	  	col_entry_pos++;
+  	    	}
+  	  	}
+  	  //printf("\nfinished column %d", k);
+  	}
+	printf("agreed on %d\n", agreed_on);
+}
+
 static void test_X2_from_X() {
 	int n = 1000;
 	int p = 100;
@@ -655,6 +707,7 @@ int main (int argc, char *argv[]) {
 	g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL, update_beta_fixture_set_up, test_update_beta_cyclic, update_beta_fixture_tear_down);
 	g_test_add_func("/func/test-update-intercept-cyclic", test_update_intercept_cyclic);
 	g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
+	g_test_add_func("/func/test-compressed-main-X", test_compressed_main_X);
 	g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, FALSE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int, test_simple_coordinate_descent_tear_down);
 	g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture, TRUE, test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_vs_glmnet, test_simple_coordinate_descent_tear_down);
