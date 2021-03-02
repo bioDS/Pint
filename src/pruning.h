@@ -1,0 +1,1 @@
+int will_update_effect(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum);
