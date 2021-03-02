@@ -124,81 +124,81 @@ static void test_read_x_csv() {
 }
 
 static void test_X2_from_X() {
-  int n = 1000;
-  int p = 100;
-  int p_int = p*(p+1)/2;
-  XMatrix xm = read_x_csv("../testX.csv", n, p);
-  XMatrix xm2 = read_x_csv("../testX2.csv", n, p_int);
+	int n = 1000;
+	int p = 100;
+	int p_int = p*(p+1)/2;
+	XMatrix xm = read_x_csv("../testX.csv", n, p);
+	XMatrix xm2 = read_x_csv("../testX2.csv", n, p_int);
+	
+	XMatrixSparse X2s = sparse_X2_from_X(xm.X, n, p, -1, FALSE);
 
-  XMatrixSparse X2s = sparse_X2_from_X(xm.X, n, p, -1, FALSE);
+ 	// print X2s
+ 	//printf("X2s:\n");
+ 	//for (int k = 0; k < p_int; k++) {
+ 	//  long entry = -1;
+ 	//  printf("%d: ", k);
+ 	//  for (int i = 0; i < X2s.col_nwords[k]; i++) {
+ 	//    S8bWord word = X2s.compressed_indices[k][i];
+ 	//    unsigned long values = word.values;
+ 	//    for (int j = 0; j < group_size[word.selector]; j++) {
+ 	//      int diff = values & masks[word.selector];
+ 	//      if (diff != 0) {
+ 	//        entry += diff;
+ 	//        printf(" %d", entry);
+ 	//      }
+ 	//      values >>= item_width[word.selector];
+ 	//    }
+ 	//  }
+ 	//  printf("\n");
+ 	//}
 
-  // print X2s
-  //printf("X2s:\n");
-  //for (int k = 0; k < p_int; k++) {
-  //  long entry = -1;
-  //  printf("%d: ", k);
-  //  for (int i = 0; i < X2s.col_nwords[k]; i++) {
-  //    S8bWord word = X2s.compressed_indices[k][i];
-  //    unsigned long values = word.values;
-  //    for (int j = 0; j < group_size[word.selector]; j++) {
-  //      int diff = values & masks[word.selector];
-  //      if (diff != 0) {
-  //        entry += diff;
-  //        printf(" %d", entry);
-  //      }
-  //      values >>= item_width[word.selector];
-  //    }
-  //  }
-  //  printf("\n");
-  //}
-
-  //printf("X2 (printed rows are file columns)\n");
-  //for (int j = 0; j < p_int; j++) {
-  //  for (int i = 0; i < n; i++) {
-  //    printf(" %d", xm2.X[j][i]);
-  //  }
-  //  printf("\n");
-  //}
+ 	//printf("X2 (printed rows are file columns)\n");
+ 	//for (int j = 0; j < p_int; j++) {
+ 	//  for (int i = 0; i < n; i++) {
+ 	//    printf(" %d", xm2.X[j][i]);
+ 	//  }
+ 	//  printf("\n");
+ 	//}
 
 	int *column_entries[n];
 
-  for (int k = 0; k < p_int; k++) {
-    long col_entry_pos = 0;
-    long entry = -1;
-    memset(column_entries, 0, sizeof *column_entries *n);
-    for (int i = 0; i < X2s.col_nwords[k]; i++) {
-      S8bWord word = X2s.compressed_indices[k][i];
-      unsigned long values = word.values;
-      for (int j = 0; j < group_size[word.selector]; j++) {
-        int diff = values & masks[word.selector];
-        if (diff != 0) {
-          entry += diff;
-          column_entries[col_entry_pos] = entry;
-          col_entry_pos++;
-        }
-        values >>= item_width[word.selector];
-      }
-    }
-    // check the read column agrees with k of testX2.csv
-    // n.b. XMatrix.X is column-major
-    col_entry_pos = 0;
-    for (int i = 0; i < n; i++) {
-      //printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
-      if (col_entry_pos > X2s.col_nz[k] || column_entries[col_entry_pos] < i) {
-        if (xm2.X[k][i] != 0) {
-          printf("\n[%d][%d] is not in the index but should be", k, i);
-          g_assert_true(FALSE);
-        }
-      } else if (X2s.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
-        if (xm2.X[k][i] != 1) {
-          printf("\n[%d][%d] missing from \n", k, i);
-          g_assert_true(FALSE);
-        }
-        col_entry_pos++;
-      }
-    }
-    //printf("\nfinished column %d", k);
-  }
+ 	for (int k = 0; k < p_int; k++) {
+  	  	long col_entry_pos = 0;
+  	  	long entry = -1;
+  	  	memset(column_entries, 0, sizeof *column_entries *n);
+  	  	for (int i = 0; i < X2s.col_nwords[k]; i++) {
+  	  	  	S8bWord word = X2s.compressed_indices[k][i];
+  	  	  	unsigned long values = word.values;
+  	  	  	for (int j = 0; j < group_size[word.selector]; j++) {
+  	  	  	  	int diff = values & masks[word.selector];
+  	  	  	  	if (diff != 0) {
+  	  	  	  	  	entry += diff;
+  	  	  	  	  	column_entries[col_entry_pos] = entry;
+  	  	  	  	  	col_entry_pos++;
+  	  	  	  	}
+  	  	  	  	values >>= item_width[word.selector];
+  	  	  	}
+  	  	}
+  	  // check the read column agrees with k of testX2.csv
+  	  // n.b. XMatrix.X is column-major
+  	  col_entry_pos = 0;
+  	  for (int i = 0; i < n; i++) {
+  	    //printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
+  	    if (col_entry_pos > X2s.col_nz[k] || column_entries[col_entry_pos] < i) {
+  	      if (xm2.X[k][i] != 0) {
+  	        printf("\n[%d][%d] is not in the index but should be", k, i);
+  	        g_assert_true(FALSE);
+  	   	}
+  	    } else if (X2s.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
+  	    	if (xm2.X[k][i] != 1) {
+  	       		printf("\n[%d][%d] missing from \n", k, i);
+  	        	g_assert_true(FALSE);
+  	      	}
+  	      	col_entry_pos++;
+  	    }
+  	  }
+  	  //printf("\nfinished column %d", k);
+  	}
 }
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconstpointer user_data) {
