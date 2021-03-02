@@ -1,6 +1,13 @@
 #!/bin/bash
 
-git stash push --keep-index
+isdiff=0
+if [ $(git diff | wc -l) -gt 0 ]; then
+	isdiff=1
+fi
+
+if [ $isdiff -eq 1 ]; then
+	git stash push --keep-index
+fi
 
 ninja -C build test > test_output && cat test_output
 ninja -C build coverage > coverage_output
@@ -53,4 +60,6 @@ fi
 cp badges/$badgename test-badge.svg
 git add test-badge.svg -f
 
-git stash pop
+if [ $isdiff -eq 1 ]; then
+	git stash pop
+fi
