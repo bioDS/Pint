@@ -74,7 +74,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		for (int i = 0; i < X2.col_nwords[col]; i++) {
 			S8bWord word = X2.compressed_indices[col][i];
 			unsigned long values = word.values;
-			for (int j = 0; j < group_size[word.selector]; j++) {
+			for (int j = 0; j <= group_size[word.selector]; j++) {
 				int diff = values & masks[word.selector];
 				if (diff != 0) {
 					entry += diff;
@@ -135,7 +135,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			for (int i = 0; i < X2.col_nwords[col]; i++) {
 				S8bWord word = X2.compressed_indices[col][i];
 				unsigned long values = word.values;
-				for (int j = 0; j < group_size[word.selector]; j++) {
+				for (int j = 0; j <= group_size[word.selector]; j++) {
 					int diff = values & masks[word.selector];
 					if (diff != 0) {
 						entry += diff;
@@ -300,7 +300,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 		for (int i = 0; i < X2.col_nwords[col]; i++) {
 			S8bWord word = X2.compressed_indices[col][i];
 			unsigned long values = word.values;
-			for (int j = 0; j < group_size[word.selector]; j++) {
+			for (int j = 0; j <= group_size[word.selector]; j++) {
 				int diff = values & masks[word.selector];
 				if (diff != 0) {
 					entry += diff;
@@ -375,7 +375,7 @@ double update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsu
 	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
 		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
 		unsigned long values = word.values;
-		for (int j = 0; j < group_size[word.selector]; j++) {
+		for (int j = 0; j <= group_size[word.selector]; j++) {
 			int diff = values & masks[word.selector];
 			if (diff != 0) {
 				entry += diff;

@@ -34,22 +34,27 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
     double real_squared = 0.0;
     int entry = 0;
     int col_entry_pos = 0;
-    // printf("X col %d contains %d entries\n", k, X.col_nz[k]);
+    if (k == 35) {
+        printf("X col %d contains %d entries\n", k, X.col_nz[k]);
+        printf("last_rowsum: %lx\n", last_rowsum);
+    }
 	for (int i = 0; i < X.col_nwords[k]; i++) {
 		S8bWord word = X.compressed_indices[k][i];
 		unsigned long values = word.values;
-		for (int j = 0; j < group_size[word.selector]; j++) {
+		for (int j = 0; j <= group_size[word.selector]; j++) {
 			int diff = values & masks[word.selector];
 			if (diff != 0) {
 				entry += diff;
-                if (k == 35)
-                printf("entry %d\n", entry);
 				column_cache[col_entry_pos] = entry;
 				col_entry_pos++;
 
                 // do whatever we need here with the index below:
-                if (k == 35)
-                printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
+                if (k == 35) {
+                    // printf("entry: %d\n", entry);
+                }
+                if (k == 35 && (entry == 0 || entry == 999)) {
+                    printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
+                }
                 estimate_squared += rowsum[entry]*last_rowsum[entry];
                 real_squared     += last_rowsum[entry]*last_rowsum[entry];
 			}

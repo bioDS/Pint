@@ -13,6 +13,6 @@ test('compressed_main_X', func_tests, args: ['-p', '/func/test-compressed-main-X
 #test('cyclic coordinate descent - shuffled interactions', func_tests, args: ['-p', '/func/test-simple-coordinate-descent-int-shuffle'], should_fail: true)
 test('compare_n', func_tests, args: ['-p', '/func/test-check-n'],)
 test('merge_n', func_tests, args: ['-p', '/func/test-merge-n'],)
-#test('X2 encoding', func_tests, args: ['-p', '/func/test-X2-encoding'], should_fail: true)
+test('X2 encoding', func_tests, args: ['-p', '/func/test-X2-encoding'],)
 test('permutation', func_tests, args: ['-p', '/func/test-permutation'],)
 test('pruning', func_tests, args: ['-p', '/func/test-branch-pruning'],)

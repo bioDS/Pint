@@ -143,7 +143,7 @@ static void test_compressed_main_X() {
   	  	for (int i = 0; i < Xs.col_nwords[k]; i++) {
   	  	  	S8bWord word = Xs.compressed_indices[k][i];
   	  	  	unsigned long values = word.values;
-  	  	  	for (int j = 0; j < group_size[word.selector]; j++) {
+  	  	  	for (int j = 0; j <= group_size[word.selector]; j++) {
   	  	  	  	int diff = values & masks[word.selector];
   	  	  	  	if (diff != 0) {
   	  	  	  	  	entry += diff;
@@ -198,7 +198,7 @@ static void test_X2_from_X() {
  	//  for (int i = 0; i < X2s.col_nwords[k]; i++) {
  	//    S8bWord word = X2s.compressed_indices[k][i];
  	//    unsigned long values = word.values;
- 	//    for (int j = 0; j < group_size[word.selector]; j++) {
+ 	//    for (int j = 0; j <= group_size[word.selector]; j++) {
  	//      int diff = values & masks[word.selector];
  	//      if (diff != 0) {
  	//        entry += diff;
@@ -221,13 +221,16 @@ static void test_X2_from_X() {
 	int *column_entries[n];
 
  	for (int k = 0; k < p_int; k++) {
+		if (k == 2905) {
+			printf("xm2.X[%d][0] == %d\n", k, xm2.X[k][0]);
+		}
   	  	long col_entry_pos = 0;
   	  	long entry = -1;
   	  	memset(column_entries, 0, sizeof *column_entries *n);
   	  	for (int i = 0; i < X2s.col_nwords[k]; i++) {
   	  	  	S8bWord word = X2s.compressed_indices[k][i];
   	  	  	unsigned long values = word.values;
-  	  	  	for (int j = 0; j < group_size[word.selector]; j++) {
+  	  	  	for (int j = 0; j <= group_size[word.selector]; j++) {
   	  	  	  	int diff = values & masks[word.selector];
   	  	  	  	if (diff != 0) {
   	  	  	  	  	entry += diff;
@@ -243,10 +246,10 @@ static void test_X2_from_X() {
   	  for (int i = 0; i < n; i++) {
   	    //printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
   	    if (col_entry_pos > X2s.col_nz[k] || column_entries[col_entry_pos] < i) {
-  	      if (xm2.X[k][i] != 0) {
-  	        printf("\n[%d][%d] is not in the index but should be", k, i);
-  	        g_assert_true(FALSE);
-  	   	}
+  	    	if (xm2.X[k][i] != 0) {
+				printf("\n[%d][%d] is not in the index but should be", k, i);
+  	        	g_assert_true(FALSE);
+  	   		}
   	    } else if (X2s.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
   	    	if (xm2.X[k][i] != 1) {
   	       		printf("\n[%d][%d] missing from \n", k, i);
@@ -417,7 +420,54 @@ static void check_X2_encoding() {
 	int p = 35;
 	int p_int = p*(p+1)/2;
 	XMatrix xmatrix = read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
+	XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
 	XMatrixSparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE);
+
+	int_pair *nums = get_all_nums(p, -1);
+	// create uncompressed sparse version of X2.
+	int **col_nz_indices = malloc(sizeof *col_nz_indices * p_int);
+	for (int j = 0; j < p_int; j++) {
+	}
+	int *col_sizes = malloc(sizeof *col_sizes *p_int);
+	for (int j = 0; j < p_int; j++) {
+		Queue *col_q = queue_new();
+		for (int i = 0; i < n; i++) {
+			if (X2.X[j][i] != 0) {
+				queue_push_tail(col_q, i);
+			}
+		}
+		col_sizes[j] = queue_get_length(col_q);
+		col_nz_indices[j] = malloc(sizeof *col_nz_indices[j] * col_sizes[j]);
+		printf(" real col size: %d, \tcompressed col contains %d entries \n", col_sizes[j], xmatrix_sparse.col_nz[j]);
+		g_assert_true(col_sizes[j] == xmatrix_sparse.col_nz[j]);
+		int pos = 0;
+		while (!queue_is_empty(col_q)) {
+			col_nz_indices[j][pos] = queue_pop_head(col_q);
+			pos++;
+			g_assert_true(pos <= col_sizes[j]);
+		}
+		g_assert_true(pos == col_sizes[j]);
+		queue_free(col_q);
+	}
+
+
+	//for (int k = 0; k < p_int; k++) {
+	//	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
+	//		int entry = 0;
+	//		int col_entry_pos = 0;
+	//		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+	//		unsigned long values = word.values;
+	//		for (int j = 0; j <= group_size[word.selector]; j++) {
+	//			int diff = values & masks[word.selector];
+	//			if (diff != 0) {
+	//				entry += diff;
+	//				col_nz_indices[k][col_entry_pos] = entry;
+	//				col_entry_pos++;
+	//			}
+	//			values >>= item_width[word.selector];
+	//		}
+	//	}
+	//}
 
 	// mean entry size
 	long total = 0;
@@ -425,7 +475,7 @@ static void check_X2_encoding() {
 	for (int i = 0; i < p_int; i++) {
 		no_entries += xmatrix_sparse.col_nz[i];
 		for (int j = 0; j < xmatrix_sparse.col_nz[i]; j++) {
-			total += xmatrix_sparse.col_nz_indices[i][j];
+			total += col_nz_indices[i][j];
 		}
 	}
 	printf("\nmean entry size: %f\n", (double)total/(double)no_entries);
@@ -436,8 +486,8 @@ static void check_X2_encoding() {
 	for (int i = 0; i < p_int; i++) {
 		prev_entry = 0;
 		for (int j = 0; j < xmatrix_sparse.col_nz[i]; j++) {
-			total += xmatrix_sparse.col_nz_indices[i][j] - prev_entry;
-			prev_entry = xmatrix_sparse.col_nz_indices[i][j];
+			total += col_nz_indices[i][j] - prev_entry;
+			prev_entry = col_nz_indices[i][j];
 		}
 	}
 	printf("mean diff size: %f\n", (double)total/(double)no_entries);
@@ -480,11 +530,11 @@ static void check_X2_encoding() {
 	// work out s8b compressed equivalent of col 0
 	int largest_entry = 0;
 	int max_bits = max_size_given_entries[0];
-	int diff = xmatrix_sparse.col_nz_indices[0][0] + 1;
+	int diff = col_nz_indices[0][0] + 1;
 	for (int i = 0; i < xmatrix_sparse.col_nz[0]; i++) {
 		if (i != 0)
-			diff = xmatrix_sparse.col_nz_indices[0][i] - xmatrix_sparse.col_nz_indices[0][i-1];
-		printf("current no. %d, diff %d. available bits %d\n", xmatrix_sparse.col_nz_indices[0][i], diff, max_bits);
+			diff = col_nz_indices[0][i] - col_nz_indices[0][i-1];
+		// printf("current no. %d, diff %d. available bits %d\n", col_nz_indices[0][i], diff, max_bits);
 		// update max bits.
 		int used = 0;
 		int tdiff = diff;
@@ -495,14 +545,14 @@ static void check_X2_encoding() {
 		max_bits = max_size_given_entries[count+1];
 		// if the current diff won't fit in the s8b word, push the word and start a new one
 		if (diff > 1<<max_bits || largest_entry > max_size_given_entries[count+1]) {
-			if (diff > 1<<max_bits)
-				printf(" b ");
-			if (largest_entry > max_size_given_entries[count+1])
-				printf(" c ");
-			printf("pushing word with %d entries: ", count);
-			for (int j = 0; j < count; j++)
-				printf("%d ", col_entries[j]);
-			printf("\n");
+			//if (diff > 1<<max_bits)
+			//	printf(" b ");
+			//if (largest_entry > max_size_given_entries[count+1])
+			//	printf(" c ");
+			// printf("pushing word with %d entries: ", count);
+			//for (int j = 0; j < count; j++)
+			//	printf("%d ", col_entries[j]);
+			//printf("\n");
 			S8bWord *word = malloc(sizeof(S8bWord));
 			S8bWord tempword = to_s8b(count, col_entries);
 			memcpy(word, &tempword, sizeof(S8bWord));
@@ -533,24 +583,29 @@ static void check_X2_encoding() {
 		count++;
 	}
 
-	printf("checking [s8b] == [short]\n");
-	int col_entry_pos = 0;
-	int entry = -1;
-	for (int i = 0; i < length; i++) {
-		S8bWord word = actual_col[i];
-		for (int j = 0; j < group_size[word.selector]; j++) {
-			int diff = word.values & masks[word.selector];
-			entry += diff;
-			//printf("b: ");
-			//printBits(8, &word);
-			//printf("\n");
-			if (diff != 0) {
-				printf("%d == %d\n", entry, xmatrix_sparse.col_nz_indices[0][col_entry_pos]);
-				g_assert_true(entry == xmatrix_sparse.col_nz_indices[0][col_entry_pos]);
-				col_entry_pos++;
+	printf("checking [s8b] == [int]\n");
+	for (int k = 0; k < p_int; k++) {
+		printf("col %d (interaction %d,%d)\n", k, nums[k].i, nums[k].j);
+		int checked = 0;
+		int col_entry_pos = 0;
+		int entry = -1;
+		for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
+			S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+			unsigned long values = word.values;
+			for (int j = 0; j <= group_size[word.selector]; j++) {
+				int diff = values & masks[word.selector];
+				if (diff != 0) {
+					entry += diff;
+					printf("pos %d, %d == %d\n", col_entry_pos, entry, col_nz_indices[k][col_entry_pos]);
+					g_assert_true(entry == col_nz_indices[k][col_entry_pos]);
+					col_entry_pos++;
+					checked++;
+				}
+				values >>= item_width[word.selector];
 			}
-			word.values >>= item_width[word.selector];
 		}
+		printf("col %d, checked %d out of %d present\n", k, checked, col_sizes[k]);
+		g_assert_true(checked == xmatrix_sparse.col_nz[k]);
 	}
 
 	int bytes = length*sizeof(S8bWord);
@@ -566,6 +621,14 @@ static void check_X2_encoding() {
 	}
 	g_assert_true(xmatrix_sparse.col_nwords[0] == length);
 	printf("correct number of words\n");
+
+	
+	for (int j = 0; j < p_int; j++) {
+		free(col_nz_indices[j]);
+	}
+	free(col_nz_indices);
+	free(nums);
+	free(col_sizes);
 }
 
 static void check_permutation() {
@@ -645,15 +708,33 @@ int check_didnt_update(int p, int p_int, int *wont_update, double *beta) {
 	return no_disagreeing;
 }
 
-int get_wont_update(int *wont_update, int p, XMatrixSparse Xc, double lambda, double *last_max, double **last_rowsum, double *rowsum, int *column_cache) {
+int get_wont_update(int *wont_update, int p, XMatrixSparse Xc, double lambda, double *last_max, double **last_rowsum, double *rowsum, int *column_cache, int n) {
 	int ruled_out = 0;
 	for (int j = 0; j < p; j++) {
+		printf("%d ", j);
 		double sum = 0.0;
-		for (int i = 0; i < 1000; i++) {
-			sum += fabs(last_rowsum[j][i]);
+		if (j==35) {
+			printf("\t\tlast_rowsum[35][0] = %d\n", last_rowsum[35][0]);
+			printf("\t\t&last_rowsum[35][0] = %lx\n", &last_rowsum[35][0]);
 		}
-		if (sum != 0.0)
-			printf("last_rowsum isn't zero for %d\n", j);
+		//for (int i = 0; i < n; i++) {
+		//	sum += fabs(last_rowsum[j][i]);
+		//	if (j == 35 && last_rowsum[j][i] != 0.0) {
+		//		printf("entry %d is not zero\n", i);
+		//		printf("last_rowsum[%d][%d] = %f\n", j, i, last_rowsum[j][i]);
+		//	}
+		//}
+		//if (sum != 0.0 && j == 35)
+		//	printf("last_rowsum isn't zero for %d, its %f\n", j, sum);
+		//if (sum != 0.0 && j == 35) {
+		//	printf("last_rowsum[%d]: %lx\n", j, last_rowsum[j]);
+		//	printf("last_rowsum[%d][0]: %d\n", j, last_rowsum[j][0]);
+		//	printf("last_rowsum[%d][999]: %d\n", j, last_rowsum[j][999]);
+		//}
+		if (j==35) {
+			printf("\t\tlast_rowsum[35][0] = %d\n", last_rowsum[35][0]);
+			printf("\t\t&last_rowsum[35][0] = %lx\n", &last_rowsum[35][0]);
+		}
 		wont_update[j] = wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache);
 		if (wont_update[j])
 			ruled_out++;
@@ -707,7 +788,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 
 	// start running tests with decreasing lambda
 	//double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
-	double lambda_sequence[] = {10000,500, 400};
+	double lambda_sequence[] = {10000,500, 400, 350};
 	int seq_length = sizeof(lambda_sequence)/sizeof(*lambda_sequence);
 	double lambda = lambda_sequence[0];
 	int ruled_out = 0;
@@ -724,7 +805,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 		memcpy(old_rowsum, rowsum, sizeof(rowsum));
 		lambda = lambda_sequence[lambda_ind];
 		printf("\nrunning lambda %f, current error: %f\n", lambda, error);
-		ruled_out += get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache);
+		ruled_out += get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache, n);
 		double dBMax;
 		//TODO: implement working set and update test
 		int last_iter_count = 0;
@@ -741,7 +822,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 					dBMax = update_beta_cyclic(X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0, fixture->precalc_get_num, column_cache);
 					double new = beta[k];
 					if (old == 0.0 && new != 0.0) {
-						printf("set beta %d (interaction %d,%d) to non-zero\n", k, main_effect, interaction);
+						printf("** set beta %d (interaction %d,%d) to non-zero\n", k, main_effect, interaction);
 						printf("beta[%d] is now %f\n", k, beta[k]);
 					}
 					if (fabs(dBMax) > fabs(max_int_delta[main_effect])) {
@@ -772,7 +853,7 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 		for (int i = 0; i < p; i++) {
 			// we did check these anyway, but since we ordinarily wouldn't they don't get updated.
 			if (!wont_update[i]) {
-				printf("updating last_rowsum for %d\n", i);
+				// printf("updating last_rowsum for %d\n", i);
 				memcpy(last_rowsum[i], old_rowsum, sizeof *old_rowsum * n);
 			}
 		}
