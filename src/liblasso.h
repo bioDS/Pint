@@ -8,7 +8,7 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_permutation.h>
 
-#include "config.h"
+#include <config.h>
 #ifdef NOT_R
 	#define Rprintf(args...) printf (args);
 #else
