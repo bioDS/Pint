@@ -6,7 +6,9 @@ if [ $(git diff | wc -l) -gt 0 ]; then
 fi
 
 if [ $isdiff -eq 1 ]; then
-	git stash push --keep-index
+	git commit --quiet --no-verify -m "temp for stash-working" && \
+	git stash push "$@" && \
+	git reset --quiet --soft HEAD~1
 fi
 
 ninja -C build test > test_output && cat test_output
