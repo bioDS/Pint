@@ -261,12 +261,12 @@ static void test_X2_from_X() {
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconstpointer user_data) {
 	fixture->n = 1000;
-	fixture->p = 35;
+	fixture->p = 100;
 	printf("reading X\n");
-	fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
+	fixture->xmatrix = read_x_csv("../testX.csv", fixture->n, fixture->p);
 	fixture->X = fixture->xmatrix.X;
 	printf("reading Y\n");
-	fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
+	fixture->Y = read_y_csv("../testY.csv", fixture->n);
 	fixture->rowsum = malloc(fixture->n*sizeof(double));
 	fixture->lambda = 20;
 	int p_int = fixture->p*(fixture->p+1)/2;
@@ -285,6 +285,8 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture, gconst
 		}
 	}
 	fixture->precalc_get_num = precalc_get_num;
+
+	cached_nums = get_all_nums(fixture->p, p_int);
 
 	for (int i = 0; i < fixture->n; i++)
 		fixture->rowsum[i] = -fixture->Y[i];
@@ -306,17 +308,6 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture *fixture, gco
 	free(fixture->rowsum);
 	free(fixture->beta);
 	free(fixture->precalc_get_num);
-	for (int i = 0; i < fixture->p*(fixture->p+1)/2; i++) {
-		#ifdef DENSE_X2
-		#ifndef LIMIT_OVERLAP
-			free(fixture->xmatrix_sparse.col_nz_indices[i]);
-		#endif
-		#endif
-		free(fixture->xmatrix_sparse.compressed_indices[i]);
-	}
-	#ifdef DENSE_X2
-	free(fixture->xmatrix_sparse.col_nz_indices);
-	#endif
 	free(fixture->xmatrix_sparse.compressed_indices);
 	free(fixture->xmatrix_sparse.col_nz);
 	free(fixture->xmatrix_sparse.col_nwords);
@@ -630,6 +621,52 @@ static void check_permutation() {
 	gsl_permutation_free(perm);
 }
 
+int check_didnt_update(int p, int p_int, int *wont_update, double *beta) {
+	int no_disagreeing = 0;
+	for (int i = 0; i < p_int; i++) {
+		// int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+		int k = i;
+		// int k = fixture->xmatrix_sparse.permutation->data[i];
+		// printf("testing beta[%d] (%f)\n", k, beta[k]);
+		int_pair ip = get_num(k, p_int);
+		//TODO: we should only check against later items not in the working set, this needs to be udpated
+		if (wont_update[ip.i] || wont_update[ip.j]) {
+			// printf("checking interaction %d,%d is zero\n", ip.i, ip.j);
+			if (beta[k] != 0.0) {
+				printf("beta %d (interaction %d,%d) should be zero according to will_update_effect(), but is in fact %f\n", k, ip.i, ip.j, beta[k]);
+				no_disagreeing++;
+			}
+		}
+	}
+	// printf("frac disagreement: %f\n", (double)no_disagreeing/p);
+	if (no_disagreeing == 0) {
+		printf("no disagreements\n");
+	}
+	return no_disagreeing;
+}
+
+int get_wont_update(int *wont_update, int p, XMatrixSparse Xc, double lambda, double *last_max, double **last_rowsum, double *rowsum, int *column_cache) {
+	int ruled_out = 0;
+	for (int j = 0; j < p; j++) {
+		double sum = 0.0;
+		for (int i = 0; i < 1000; i++) {
+			sum += fabs(last_rowsum[j][i]);
+		}
+		if (sum != 0.0)
+			printf("last_rowsum isn't zero for %d\n", j);
+		wont_update[j] = wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache);
+		if (wont_update[j])
+			ruled_out++;
+	}
+
+	for (int i = 0; i < p; i++) {
+		if (wont_update[i]) {
+			printf("%d supposedly wont update\n", i);
+		}
+	}
+	printf("ruled out %d branch(es)\n", ruled_out);
+	return ruled_out;
+}
 // run branch_prune check, then full regression step without pruning.
 // the beta values that would have been pruned should be 0.
 static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data) {
@@ -638,7 +675,6 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 	int p = fixture->p;
 	double *rowsum = fixture->rowsum;
 	// double lambda = fixture->lambda;
-	double lambda = 1;
 	double acceptable_diff = 0.1;
 	int shuffle = FALSE;
 	printf("starting interaction test\n");
@@ -649,55 +685,102 @@ static void check_branch_pruning(UpdateFixture *fixture, gconstpointer user_data
 	printf("test\n");
 
 	XMatrixSparse Xc = sparsify_X(fixture->X, n, p);
+	XMatrixSparse X2c = sparse_X2_from_X(fixture->X, n, p, -1, FALSE);
 	int column_cache[n];
 
 	int wont_update[p];
-	for (int i = 0; i < p; i++)
-		wont_update[i] = 0;
+	for (int j = 0; j < p; j++)
+		wont_update[j] = 0;
 
-	double *last_rowsum = malloc(sizeof *last_rowsum *n);
-	for (int i = 0; i < n; i++)
-		last_rowsum[i] = 0;
-
-	double last_max = 0.0;
-
+	double **last_rowsum = malloc(sizeof *last_rowsum * p);
 	for (int i = 0; i < p; i++) {
-		wont_update[i] = wont_update_effect(Xc, lambda, i, last_max, last_rowsum, rowsum, column_cache);
+		last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n);
+		memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
 	}
 
-	for (int i = 0; i < p; i++) {
-		if (wont_update[i]) {
-			printf("%d will supposedly wont update\n", i);
-		}
-	}
+	for (int j = 0; j < p; j++)
+		for (int i = 0; i < n; i++)
+			g_assert_true(last_rowsum[j][i] == 0.0);
 
-	double dBMax;
-	for (int j = 0; j < 10; j++) {
-		for (int i = 0; i < p_int; i++) {
-			//int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-			int k = fixture->xmatrix_sparse.permutation->data[i];
-			//int k = i;
-			dBMax = update_beta_cyclic(Xc, fixture->Y, rowsum, n, p, lambda, beta, k, 0, fixture->precalc_get_num, column_cache);
-		}
-	}
+	double last_max[n];
+	memset(last_max, 0, sizeof(last_max));
 
-	int no_disagreeing = 0;
-	for (int i = 0; i < p_int; i++) {
-		// int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-		// int k = i;
-			int k = fixture->xmatrix_sparse.permutation->data[i];
-		printf("testing beta[%d] (%f)\n", k, beta[k]);
-		int_pair ip = get_num(k, p);
-		//TODO: we should only check against later items not in the working set, this needs to be udpated
-		// if (wont_update[ip.i] == FALSE || wont_update[ip.j] == FALSE) {
-			if (beta[k] != 0.0) {
-				printf("beta %d should be zero according to will_update_effect(), but is in fact %f!\n", k, beta[k]);
-				no_disagreeing++;
+	// start running tests with decreasing lambda
+	//double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
+	double lambda_sequence[] = {10000,500, 400};
+	int seq_length = sizeof(lambda_sequence)/sizeof(*lambda_sequence);
+	double lambda = lambda_sequence[0];
+	int ruled_out = 0;
+	double old_rowsum[n];
+
+	double error = 0.0;
+	for (int i = 0; i < n; i++) {
+		error += rowsum[i]*rowsum[i];
+	}
+	error = sqrt(error);
+	printf("initial error: %f\n", error);
+
+	for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
+		memcpy(old_rowsum, rowsum, sizeof(rowsum));
+		lambda = lambda_sequence[lambda_ind];
+		printf("\nrunning lambda %f, current error: %f\n", lambda, error);
+		ruled_out += get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache);
+		double dBMax;
+		//TODO: implement working set and update test
+		int last_iter_count = 0;
+		double max_int_delta[p];
+		memset(max_int_delta, 0, sizeof *max_int_delta * p);
+		for (int iter = 0; iter < 50; iter++) {
+			last_iter_count = iter;
+			double prev_error = error;
+
+			int k = 0;
+			for (int main_effect = 0; main_effect < p; main_effect++) {
+				for (int interaction = main_effect; interaction < p; interaction++) {
+					double old = beta[k];
+					dBMax = update_beta_cyclic(X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0, fixture->precalc_get_num, column_cache);
+					double new = beta[k];
+					if (old == 0.0 && new != 0.0) {
+						printf("set beta %d (interaction %d,%d) to non-zero\n", k, main_effect, interaction);
+						printf("beta[%d] is now %f\n", k, beta[k]);
+					}
+					if (fabs(dBMax) > fabs(max_int_delta[main_effect])) {
+						max_int_delta[main_effect] = dBMax;
+					}
+					k++;
+				}
 			}
-		// }
+
+			for (int i = 0; i < p; i++) {
+				if (!wont_update[i]) {
+					if (last_max[i] != max_int_delta[i]) {
+						printf("main effect %d new last_max is %f\n", i, max_int_delta[i]);
+					}
+					last_max[i] = max_int_delta[i];
+				}
+			}
+			error = 0.0;
+			for (int i = 0; i < n; i++) {
+				error += rowsum[i]*rowsum[i];
+			}
+			error = sqrt(error);
+			if (prev_error/error < 1.01) {
+				break;
+			}
+		}
+		printf("done lambda %f in %d iters\n", lambda, last_iter_count+1);
+		for (int i = 0; i < p; i++) {
+			// we did check these anyway, but since we ordinarily wouldn't they don't get updated.
+			if (!wont_update[i]) {
+				printf("updating last_rowsum for %d\n", i);
+				memcpy(last_rowsum[i], old_rowsum, sizeof *old_rowsum * n);
+			}
+		}
+		printf("new error: %f\n", error);
+
+		int no_disagreeing = check_didnt_update(p, p_int, wont_update, beta);
+		g_assert_true(no_disagreeing == 0);
 	}
-	printf("frac disagreement: %f\n", (double)no_disagreeing/p);
-	g_assert_true(no_disagreeing == 0);
 }
 
 int main (int argc, char *argv[]) {

@@ -8,7 +8,7 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
     for (int ind = 0; ind < colsize; ind++) {
         int i = column_cache[ind];
         double diff_i = rowsum[i] - alpha*last_rowsum[i];
-        printf("i: %d, diff_i: %f\n", i, diff_i);
+        // printf("i: %d, diff_i: %f\n", i, diff_i);
         if (diff_i > 0) {
             pos_max += (diff_i);
         } else if (diff_i < 0) {
@@ -16,7 +16,7 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
         }
     }
     double estimate = fmaxf(pos_max, neg_max);
-    printf("pressimistic remainder estimate: %f\n", estimate);
+    // printf("pressimistic remainder estimate: %f\n", estimate);
     return estimate;
 }
 
@@ -24,8 +24,10 @@ double exact_multiple() {
 }
 
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
+//TODO: exclude interactions already in the working set
 double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum,
     int *column_cache) {
+    // printf("column contains %d entries \t", X.col_nz[k]);
     double alpha = 0.0;
     // read through the compressed column
     double estimate_squared = 0.0;
@@ -40,11 +42,14 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
 			int diff = values & masks[word.selector];
 			if (diff != 0) {
 				entry += diff;
-                // printf("entry %d\n", entry);
-				column_cache[col_entry_pos] = entry; //TODO: do we need this here
+                if (k == 35)
+                printf("entry %d\n", entry);
+				column_cache[col_entry_pos] = entry;
 				col_entry_pos++;
 
                 // do whatever we need here with the index below:
+                if (k == 35)
+                printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
                 estimate_squared += rowsum[entry]*last_rowsum[entry];
                 real_squared     += last_rowsum[entry]*last_rowsum[entry];
 			}
@@ -56,13 +61,14 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
         alpha = fabs(estimate_squared/real_squared);
     else
         alpha = 0.0;
-    //TODO: remove this
-    // printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
+    if (k==35)
+        printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
 
     double remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, X, k, column_cache);
 
     double total_estimate = last_max*alpha + remainder;
-    // printf("total estimate: %f = %f*%f + %f\n", total_estimate, last_max, alpha, remainder);
+    if (k==35)
+        printf("total estimate: %f = %f*%f + %f\n", total_estimate, last_max, alpha, remainder);
     return total_estimate;
 }
 

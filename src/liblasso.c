@@ -162,7 +162,6 @@ double get_sump(int p, int k, int i, double *beta, int **X) {
 
 
 int_pair get_num(long num, long p) {
-	printf("num: %d, p: %d\n", num, p);
 	size_t num_post_permutation = gsl_permutation_get(global_permutation, num);
 	return cached_nums[num_post_permutation];
 }
