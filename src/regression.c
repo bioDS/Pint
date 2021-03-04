@@ -262,7 +262,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 						beta_sequence.betas[beta_sequence.count] = sparse_betas;
 						beta_sequence.count++;
 
-						if (check_adaptive_calibration(0.75, beta_sequence)) {
+						if (check_adaptive_calibration(0.75, beta_sequence, n)) {
 							printf("Halting as reccommended by adaptive calibration\n");
 							final_lambda = lambda;
 						}
@@ -429,7 +429,7 @@ double update_intercept_cyclic(double intercept, int **X, double *Y, double *bet
 
 
 // check a particular pair of betas in the adaptive calibration scheme
-int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas beta_1, double lambda_2, Sparse_Betas beta_2, int beta_length) {
+int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas beta_1, double lambda_2, Sparse_Betas beta_2, int beta_length, int n) {
 	double max_diff = 0.0;
 	double adjusted_max_diff = 0.0;
 
@@ -450,7 +450,7 @@ int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas 
 		}
 	}
 
-	adjusted_max_diff = max_diff / (lambda_1 + lambda_2);
+	adjusted_max_diff = max_diff / ((lambda_1 + lambda_2)*(n/2));
 
 	if (adjusted_max_diff <= c_bar) {
 		return 1;
@@ -461,12 +461,12 @@ int adaptive_calibration_check_beta(double c_bar, double lambda_1, Sparse_Betas 
 // checks whether the last element in the beta_sequence is the one we should stop at, according to
 // Chichignoud et als 'Adaptive Calibration Scheme'
 // returns TRUE if we are finished, FALSE if we should continue.
-int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence) {
+int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence, int n) {
 	// printf("\nchecking %d betas\n", beta_sequence.count);
 	for (int i = 0; i < beta_sequence.count; i++) {
 		int this_result = adaptive_calibration_check_beta(c_bar, beta_sequence.lambdas[beta_sequence.count-1], beta_sequence.betas[beta_sequence.count-1],
 															beta_sequence.lambdas[i], beta_sequence.betas[i],
-													beta_sequence.vec_length);
+													beta_sequence.vec_length, n);
 		// printf("result: %d\n", this_result);
 		if (this_result == 0) {
 			return TRUE;
