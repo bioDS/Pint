@@ -191,7 +191,11 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 			if (beta[k] == 0.0) {
 				was_zero = TRUE;
 			}
-			double diff = update_beta_cyclic(X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			Changes changes = update_beta_cyclic(X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+			double diff = changes.actual_diff;
+			//TODO: kills performance
+			//if (fabs(diff) < lambda)
+			//	diff=0.0;
 			if (was_zero && diff != 0) {
 				num_nz_beta++;
 			}
@@ -364,12 +368,15 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	return beta;
 }
 
-double update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
+Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
 							double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_entry_cache) {
 	double sumk = xmatrix_sparse.col_nz[k];
 	double sumn = xmatrix_sparse.col_nz[k]*beta[k];
 	int *column_entries = column_entry_cache;
 
+	//if (k==2905) {
+	//	printf("sumn: %f\n", sumn);
+	//}
 	long col_entry_pos = 0;
 	long entry = -1;
 	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
@@ -381,11 +388,19 @@ double update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsu
 				entry += diff;
 				column_entries[col_entry_pos] = entry;
 				sumn += intercept - rowsum[entry];
+				//if (k==4147) {
+				//	printf("sumn += rowsum[%d] =  %f\n", entry, rowsum[entry]);
+				//}
 				col_entry_pos++;
 			}
 			values >>= item_width[word.selector];
 		}
 	}
+
+	//if (k==4147) {
+	//	printf("sumn: %f\n", sumn);
+	//	printf("sumn -bk: %f\n", sumn - sumk*beta[k]);
+	//}
 
 	// TODO: This is probably slower than necessary.
 	double Bk_diff = beta[k];
@@ -407,8 +422,11 @@ double update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y, double *rowsu
 		zero_updates_entries += xmatrix_sparse.col_nz[k];
 	}
 
+	Changes changes;
+	changes.actual_diff = Bk_diff;
+	changes.pre_lambda_diff = sumn;
 
-	return Bk_diff;
+	return changes;
 }
 
 double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p) {

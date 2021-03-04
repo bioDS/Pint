@@ -1,3 +1,4 @@
+#define interesting_col 58
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

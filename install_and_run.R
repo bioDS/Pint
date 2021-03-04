@@ -7,12 +7,12 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args >= 2)) {
 	f <- (args[2])
 } else {
-  f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
+  #f <- "../simulated_data/simulated_data_small_repeat/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231.rds"
   #f <- "../xyz-simulation/simulated_lethal_data/n1000_p100_SNR5_nbi10_nbij50_nlethals10_viol0_78568.rds"
   #f <- "../xyz-simulation/simulated_data/n1000_p100_SNR5_nbi10_nbij50_nlethals5_viol0_23649.rds"
   #f <- "../xyz-simulation/simulated_data/n10000_p1000_SNR10_nbi0_nbij1000_nlethals0_viol0_11504.rds"
   #f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_28462.rds"
-  #f <- "../data/simulated_large_data_sample/n10000_p1000_SNR5_nbi500_nbij500_nlethals0_viol0_50884.rds"
+  f <- "../data/simulated_large_data/n10000_p1000_SNR5_nbi500_nbij500_nlethals0_viol0_50884.rds"
 }
 
 if (length(args) >= 1) {
@@ -30,7 +30,7 @@ d <- readRDS(f)
 X <- d$X
 Y <- d$Y
 
-result <- pairwise_lasso(X, Y, lambda_min = 0.04, max_interaction_distance=-1, use_adaptive_calibration=FALSE)
+result <- pairwise_lasso(X, Y, lambda_min = 0.04, max_interaction_distance=-1, use_adaptive_calibration=TRUE, max_nz_beta=100)
 
 obs <- d$obs
 bij_ind <- d$bij_ind

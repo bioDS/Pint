@@ -5,18 +5,27 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
     int n = X.n;
     int colsize = X.col_nz[k];
     double pos_max = 0.0, neg_max = 0.0;
+    int count = 0;
     for (int ind = 0; ind < colsize; ind++) {
         int i = column_cache[ind];
         double diff_i = rowsum[i] - alpha*last_rowsum[i];
-        // printf("i: %d, diff_i: %f\n", i, diff_i);
+        if (k==interesting_col) {
+            printf("rowsum[%d] = %f\n", i, rowsum[i]);
+            printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i], alpha*last_rowsum[i]);
+        }
         if (diff_i > 0) {
             pos_max += (diff_i);
-        } else if (diff_i < 0) {
-            neg_max += fabs(diff_i);
+        } else {
+            neg_max += diff_i;
         }
+        count++;
     }
-    double estimate = fmaxf(pos_max, neg_max);
-    // printf("pressimistic remainder estimate: %f\n", estimate);
+    double estimate = fmaxf(pos_max, fabs(neg_max));
+    if (k==interesting_col) {
+        printf("added %d entries\n", count);
+        printf("pos_max: %f, neg_max: %f\n", pos_max, neg_max);
+        printf("pressimistic remainder estimate: %f\n", estimate);
+    }
     return estimate;
 }
 
@@ -27,16 +36,15 @@ double exact_multiple() {
 //TODO: exclude interactions already in the working set
 double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum,
     int *column_cache) {
-    // printf("column contains %d entries \t", X.col_nz[k]);
     double alpha = 0.0;
     // read through the compressed column
     double estimate_squared = 0.0;
     double real_squared = 0.0;
-    int entry = 0;
+    int entry = -1;
     int col_entry_pos = 0;
-    if (k == 35) {
-        printf("X col %d contains %d entries\n", k, X.col_nz[k]);
-        printf("last_rowsum: %lx\n", last_rowsum);
+    if (k == interesting_col) {
+        printf("X col %d contains %d entries\t", k, X.col_nz[k]);
+        printf("last_rowsum: %d\n", last_rowsum);
     }
 	for (int i = 0; i < X.col_nwords[k]; i++) {
 		S8bWord word = X.compressed_indices[k][i];
@@ -49,11 +57,11 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
 				col_entry_pos++;
 
                 // do whatever we need here with the index below:
-                if (k == 35) {
+                if (k == interesting_col) {
                     // printf("entry: %d\n", entry);
                 }
-                if (k == 35 && (entry == 0 || entry == 999)) {
-                    printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
+                if (k == interesting_col && (entry == 0 || entry == 999)) {
+                    // printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
                 }
                 estimate_squared += rowsum[entry]*last_rowsum[entry];
                 real_squared     += last_rowsum[entry]*last_rowsum[entry];
@@ -66,14 +74,18 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
         alpha = fabs(estimate_squared/real_squared);
     else
         alpha = 0.0;
-    if (k==35)
+    if (k==interesting_col)
         printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
+
+    //if (alpha == 1.0) {
+    //    alpha = 0.99;
+    //}
 
     double remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, X, k, column_cache);
 
-    double total_estimate = last_max*alpha + remainder;
-    if (k==35)
-        printf("total estimate: %f = %f*%f + %f\n", total_estimate, last_max, alpha, remainder);
+    double total_estimate = fabs(last_max*alpha) + remainder;
+    if (k==interesting_col)
+        printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate, last_max, alpha, remainder);
     return total_estimate;
 }
 
@@ -86,8 +98,12 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
  * rowsums is R^n, the current rowsums
  * column_cache should be a reusable allocated array of size >= X.col_nz[k], somewhere convenient for this thread.
  */
-int wont_update_effect(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum, int *column_cache) {
+//TODO: should beta[k] be in here?
+int wont_update_effect(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum, int *column_cache, double *beta) {
     double upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, column_cache);
-    //printf("upper bound: %f < lambda: %f?\n", upper_bound, lambda);
-    return  upper_bound <= lambda;
+    if (k==interesting_col) {
+        printf("beta[%d] = %f\n", k, beta[k]);
+        printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound, lambda*(X.n/2));
+    }
+    return  upper_bound <= lambda*(X.n/2);
 }
