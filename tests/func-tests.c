@@ -452,24 +452,6 @@ static void check_X2_encoding() {
 	}
 
 
-	//for (int k = 0; k < p_int; k++) {
-	//	for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
-	//		int entry = 0;
-	//		int col_entry_pos = 0;
-	//		S8bWord word = xmatrix_sparse.compressed_indices[k][i];
-	//		unsigned long values = word.values;
-	//		for (int j = 0; j <= group_size[word.selector]; j++) {
-	//			int diff = values & masks[word.selector];
-	//			if (diff != 0) {
-	//				entry += diff;
-	//				col_nz_indices[k][col_entry_pos] = entry;
-	//				col_entry_pos++;
-	//			}
-	//			values >>= item_width[word.selector];
-	//		}
-	//	}
-	//}
-
 	// mean entry size
 	long total = 0;
 	int no_entries = 0;
@@ -494,12 +476,6 @@ static void check_X2_encoding() {
 	printf("mean diff size: %f\n", (double)total/(double)no_entries);
 
 	printf("size of s8bword struct: %d (int is %ld)\n", sizeof(S8bWord), sizeof(int));
-
-	int item_width[15] = {0,   0,   1,  2,  3,  4,  5,  6,  7, 8, 10, 12, 15, 20, 30, 60};
-	int group_size[15] = {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6,  5,  4,  3,  2,  1};
-	int masks[16];
-	for (int i = 0; i < 16; i++)
-		masks[i] = (1<<item_width[i]) - 1;
 
 	S8bWord test_word;
 	test_word.selector = 7;
@@ -623,7 +599,6 @@ static void check_X2_encoding() {
 	g_assert_true(xmatrix_sparse.col_nwords[0] == length);
 	printf("correct number of words\n");
 
-	
 	for (int j = 0; j < p_int; j++) {
 		free(col_nz_indices[j]);
 	}
