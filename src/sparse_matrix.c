@@ -4,6 +4,16 @@ XMatrixSparse sparsify_X(int **X, int n, int p) {
 	return sparse_X2_from_X(X, n, p, 1, FALSE);
 }
 
+void free_sparse_matrix(XMatrixSparse X) {
+	for (int i = 0; i < X.p; i++) {
+		free(X.compressed_indices[i]);
+	}
+	free(X.compressed_indices);
+	gsl_permutation_free(X.permutation);
+	free(X.col_nz);
+	free(X.col_nwords);
+}
+
 /**
  * max_interaction_distance: interactions will be up to, but not including, this distance from each other.
  * 							 set to 1 for no interactions.

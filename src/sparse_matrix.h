@@ -16,13 +16,15 @@ typedef struct Column_Set {
 typedef struct XMatrixSparse {
 	int *col_nz;
 	int *col_nwords;
-	unsigned short **col_nz_indices;
+	//unsigned short **col_nz_indices;
 	gsl_permutation *permutation;
 	S8bWord **compressed_indices;
 	long n;
 	long p;
 } XMatrixSparse;
 
+
+void free_sparse_matrix(XMatrixSparse X);
 typedef struct XMatrix_sparse_row {
 	unsigned short **row_nz_indices;
 	int *row_nz;
