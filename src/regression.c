@@ -109,7 +109,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	gsl_rng_env_setup();
 	const gsl_rng_type *T = gsl_rng_default;
 	parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
-	clock_gettime(CLOCK_REALTIME, &start);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 	double final_lambda = lambda_min;
 	int max_lambda_count = 50;
 	Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
@@ -285,7 +285,7 @@ double *simple_coordinate_descent_lasso(XMatrix xmatrix, double *Y, int n, int p
 	Rprintf("\nfinished at lambda = %f\n", lambda);
 	Rprintf("after %d total iters\n", iter_count);
 
-	clock_gettime(CLOCK_REALTIME, &end);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 	cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
 
 	Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
