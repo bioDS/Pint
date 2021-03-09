@@ -1,5 +1,8 @@
 #!/bin/bash
 
+if [ ! $(git diff --staged | wc -l) -gt 0 ]; then
+	exit
+fi
 isdiff=0
 if [ $(git diff | wc -l) -gt 0 ]; then
 	isdiff=1
