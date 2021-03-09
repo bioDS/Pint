@@ -1092,6 +1092,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
     printf("getting time for pruned version\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     double *p_rowsum = malloc(sizeof *p_rowsum * n);
+    for (int i = 0; i < n; i++) {
+        p_rowsum[i] = -Y[i];
+    }
     for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
         // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
         lambda = lambda_sequence[lambda_ind];

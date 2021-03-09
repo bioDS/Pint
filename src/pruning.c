@@ -1,5 +1,6 @@
 #include "liblasso.h"
 #define verbose FALSE
+// #define verbose TRUE
 
 // max of either positive or negative contributions to rowsum sum.
 double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, XMatrixSparse X, int k, int *column_cache) {
