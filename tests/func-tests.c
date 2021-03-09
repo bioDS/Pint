@@ -893,7 +893,7 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
             error += rowsum[i]*rowsum[i];
         }
         error = sqrt(error);
-        printf("prev_error: %f \t error: %f\n", prev_error, error);
+        // printf("prev_error: %f \t error: %f\n", prev_error, error);
         if (prev_error/error < 1.0001) {
             printf("done after %d iters\n", iter+1);
             break;
@@ -1012,8 +1012,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
     memset(last_max, 0, sizeof(last_max));
 
     // start running tests with decreasing lambda
-    // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
-    double lambda_sequence[] = {10000,500, 400, 300};
+    double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
+    // double lambda_sequence[] = {10000,500, 400, 300};
     int seq_length = sizeof(lambda_sequence)/sizeof(*lambda_sequence);
     double lambda = lambda_sequence[0];
     int ruled_out = 0;
