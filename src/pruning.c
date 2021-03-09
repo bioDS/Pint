@@ -1,4 +1,5 @@
 #include "liblasso.h"
+#define verbose FALSE
 
 // max of either positive or negative contributions to rowsum sum.
 double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, XMatrixSparse X, int k, int *column_cache) {
@@ -9,10 +10,10 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
     for (int ind = 0; ind < colsize; ind++) {
         int i = column_cache[ind];
         double diff_i = rowsum[i] - alpha*last_rowsum[i];
-        //if (k==interesting_col) {
-        //    printf("rowsum[%d] = %f\n", i, rowsum[i]);
-        //    printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i], alpha*last_rowsum[i]);
-        //}
+        if (verbose && k==interesting_col) {
+            printf("rowsum[%d] = %f\n", i, rowsum[i]);
+            printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i], alpha*last_rowsum[i]);
+        }
         if (diff_i > 0) {
             pos_max += (diff_i);
         } else {
@@ -21,11 +22,11 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
         count++;
     }
     double estimate = fmaxf(pos_max, fabs(neg_max));
-    //if (k==interesting_col) {
-    //    printf("added %d entries\n", count);
-    //    printf("pos_max: %f, neg_max: %f\n", pos_max, neg_max);
-    //    printf("pressimistic remainder estimate: %f\n", estimate);
-    //}
+    if (verbose && k==interesting_col) {
+        printf("added %d entries\n", count);
+        printf("pos_max: %f, neg_max: %f\n", pos_max, neg_max);
+        printf("pressimistic remainder estimate: %f\n", estimate);
+    }
     return estimate;
 }
 
@@ -42,10 +43,10 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
     double real_squared = 0.0;
     int entry = -1;
     int col_entry_pos = 0;
-    //if (k == interesting_col) {
-    //    printf("X col %d contains %d entries\t", k, X.col_nz[k]);
-    //    printf("last_rowsum: %d\n", last_rowsum);
-    //}
+    if (verbose && k == interesting_col) {
+        printf("X col %d contains %d entries\t", k, X.col_nz[k]);
+        printf("last_rowsum: %d\n", last_rowsum);
+    }
 	for (int i = 0; i < X.col_nwords[k]; i++) {
 		S8bWord word = X.compressed_indices[k][i];
 		unsigned long values = word.values;
@@ -74,8 +75,8 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
         alpha = fabs(estimate_squared/real_squared);
     else
         alpha = 0.0;
-    //if (k==interesting_col)
-    //    printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
+    if (verbose && k==interesting_col)
+        printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
 
     //if (alpha == 1.0) {
     //    alpha = 0.99;
@@ -84,8 +85,8 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
     double remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, X, k, column_cache);
 
     double total_estimate = fabs(last_max*alpha) + remainder;
-    //if (k==interesting_col)
-    //    printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate, last_max, alpha, remainder);
+    if (verbose && k==interesting_col)
+        printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate, last_max, alpha, remainder);
     return total_estimate;
 }
 
@@ -101,9 +102,9 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
 //TODO: should beta[k] be in here?
 int wont_update_effect(XMatrixSparse X, double lambda, int k, double last_max, double *last_rowsum, double *rowsum, int *column_cache, double *beta) {
     double upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, column_cache);
-    //if (k==interesting_col) {
-    //    printf("beta[%d] = %f\n", k, beta[k]);
-    //    printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound, lambda*(X.n/2));
-    //}
+    if (verbose && k==interesting_col) {
+        printf("beta[%d] = %f\n", k, beta[k]);
+        printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound, lambda*(X.n/2));
+    }
     return  upper_bound <= lambda*(X.n/2);
 }

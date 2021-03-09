@@ -842,7 +842,6 @@ typedef struct {
     int *column_cache;
     int n;
     double *beta;
-    double lambda;
     double *last_max;
     int *wont_update;
     int p;
@@ -853,14 +852,13 @@ typedef struct {
     int_pair *precalc_get_num;
 } Iter_Vars;
 
-double run_lambda_iters(Iter_Vars *vars) {
+double run_lambda_iters(Iter_Vars *vars, double lambda) {
     XMatrixSparse Xc = vars->Xc;
     double **last_rowsum = vars->last_rowsum;
     double *rowsum = vars->rowsum;
     int *column_cache = vars->column_cache;
     int n = vars->n;
     double *beta = vars->beta;
-    double lambda = vars->lambda;
     double *last_max = vars->last_max;
     int *wont_update = vars->wont_update;
     int p = vars->p;
@@ -885,7 +883,7 @@ double run_lambda_iters(Iter_Vars *vars) {
         memset(rowsum_delta, 0, sizeof *rowsum_delta * n);
         for (int main_effect = 0; main_effect < p; main_effect++) {
             for (int interaction = main_effect; interaction < vars->p; interaction++) {
-                Changes changes = update_beta_cyclic(X2c, Y, rowsum_delta, n, p, lambda, beta, k, 0, precalc_get_num, column_cache);
+                Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, column_cache);
                 // dBMax = changes.actual_diff;
                 k++;
             }
@@ -907,14 +905,13 @@ double run_lambda_iters(Iter_Vars *vars) {
     return 0.0;
 }
 
-void run_lambda_iters_pruned(Iter_Vars *vars) {
+void run_lambda_iters_pruned(Iter_Vars *vars, double lambda) {
     XMatrixSparse Xc = vars->Xc;
     double **last_rowsum = vars->last_rowsum;
     double *rowsum = vars->rowsum;
     int *column_cache = vars->column_cache;
     int n = vars->n;
     double *beta = vars->beta;
-    double lambda = vars->lambda;
     double *last_max = vars->last_max;
     int *wont_update = vars->wont_update;
     int p = vars->p;
@@ -929,29 +926,41 @@ void run_lambda_iters_pruned(Iter_Vars *vars) {
         error += rowsum[i]*rowsum[i];
     }
     double prev_error = error;
-    for (int iter = 0; iter < 50; iter++) {
-        int k = 0;
+
+    printf("running lambda %f\n", lambda);
+    for (int iter = 0; iter < 1; iter++) {
         double rowsum_delta[n];
-        memset(rowsum_delta, 0, sizeof *rowsum_delta * n);
-        get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache, n, beta);
-        for (int main_effect = 0; main_effect < vars->p; main_effect++) {
-            for (int interaction = main_effect; interaction < vars->p; interaction++) {
-                double old = beta[k];
-                Changes changes = update_beta_cyclic(X2c, Y, rowsum_delta, n, p, lambda, beta, k, 0, precalc_get_num, column_cache);
-                // dBMax = changes.actual_diff;
-                double new = beta[k];
-                if (fabs(changes.pre_lambda_diff) > fabs(max_int_delta[main_effect])) {
-                    max_int_delta[main_effect] = changes.pre_lambda_diff;
+        int ruled_out = get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache, n, beta);
+        if (ruled_out == p) {
+            printf("no need to run lambda %f, ruled out %d branches\n", lambda, ruled_out);
+            break;
+        }
+        for (int iter2 = 0; ruled_out < p && iter2 < 1000; iter2++) {
+            memset(rowsum_delta, 0, sizeof *rowsum_delta * n);
+            for (int k = 0; k < p_int; k++) {
+                int main_effect = precalc_get_num[k].i;
+                if (!wont_update[main_effect]) { //TODO: move this up a look after fixing k++;
+                    double old = beta[k];
+                    Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, column_cache);
+                    // dBMax = changes.actual_diff;
+                    double new = beta[k];
+                    if (fabs(changes.pre_lambda_diff) > fabs(max_int_delta[main_effect])) {
+                        max_int_delta[main_effect] = changes.pre_lambda_diff;
+                    }
                 }
-                k++;
+            }
+            ruled_out = get_wont_update(wont_update, p, Xc, lambda, last_max, last_rowsum, rowsum, column_cache, n, beta);
+            // printf("ruled_out: %d\n", ruled_out);
+            if (ruled_out == p) {
+                printf("ruled out everything after %d iters\n", iter2);
             }
         }
-        for (int i = 0; i < n; i++) {
-            rowsum[i] += rowsum_delta[i];
-        }
+        //for (int i = 0; i < n; i++) {
+        //    rowsum[i] += rowsum_delta[i];
+        //}
         //int no_disagreeing = check_didnt_update(p, p_int, wont_update, beta);
-        int no_disagreeing = 0;
-        g_assert_true(no_disagreeing == 0);
+        //int no_disagreeing = 0;
+        //g_assert_true(no_disagreeing == 0);
 
         for (int i = 0; i < p; i++) {
             if (!wont_update[i]) {
@@ -974,6 +983,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars) {
 
 static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer user_data) {
     printf("starting branch pruning speed test\n");
+    double acceptable_diff = 0.1;
     int n = fixture->n;
     int p = fixture->p;
     double *rowsum = fixture->rowsum;
@@ -982,6 +992,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
     printf("creating X2\n");
     int p_int = fixture->p*(fixture->p+1)/2;
     double *beta = fixture->beta;
+    double *Y = fixture->Y;
     printf("test\n");
 
     XMatrixSparse Xc = fixture->Xc;
@@ -1006,7 +1017,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
     memset(last_max, 0, sizeof(last_max));
 
     // start running tests with decreasing lambda
-    double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
+    // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
+    double lambda_sequence[] = {10000,500, 400, 300};
     int seq_length = sizeof(lambda_sequence)/sizeof(*lambda_sequence);
     double lambda = lambda_sequence[0];
     int ruled_out = 0;
@@ -1029,7 +1041,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
         column_cache,
         n,
         beta,
-        lambda,
         last_max,
         NULL,
         p,
@@ -1050,7 +1061,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
         //TODO: implement working set and update test
         int last_iter_count = 0;
 
-        run_lambda_iters(&iter_vars_basic);
+        run_lambda_iters(&iter_vars_basic, lambda);
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     basic_cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
@@ -1058,11 +1069,15 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
 
     double beta_pruning[p_int];
     for (int i = 0; i < p; i++) {
-        last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n);
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
+        last_max[i] = 0.0;
+        max_int_delta[i] = 0;
     }
     for (int i = 0; i < n; i++) {
-        rowsum[i] = 0;
+        rowsum[i] = -Y[i];
+    }
+    for (int i = 0; i < p_int; i++) {
+        beta_pruning[i] = 0;
     }
     Iter_Vars iter_vars_pruned = {
         Xc,
@@ -1071,7 +1086,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
         column_cache,
         n,
         beta_pruning,
-        lambda,
         last_max,
         wont_update,
         p,
@@ -1091,13 +1105,68 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
         //TODO: implement working set and update test
         int last_iter_count = 0;
 
-        run_lambda_iters_pruned(&iter_vars_pruned);
+        run_lambda_iters_pruned(&iter_vars_pruned, lambda);
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     pruned_cpu_time_used = ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
     printf("time: %f s\n", pruned_cpu_time_used);
 
-    g_assert_true(pruned_cpu_time_used < 0.5 * basic_cpu_time_used);
+    // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
+    double basic_rowsum[n];
+    double pruned_rowsum[n];
+    for (int i = 0; i < n; i++) {
+        basic_rowsum[n] = -Y[i];
+        pruned_rowsum[n] = -Y[i];
+    }
+    for (int k = 0; k < p_int; k++) {
+        int entry =-1;
+        for (int i = 0; i < X2c.col_nwords[k]; i ++) {
+            S8bWord word = X2c.compressed_indices[k][i];
+            unsigned long values = word.values;
+            for (int j = 0; j <= group_size[word.selector]; j++) {
+                int diff = values & masks[word.selector];
+                if (diff != 0) {
+                    entry += diff;
+
+                   // do whatever we need here with the index below:
+                   basic_rowsum[entry] += beta[k];
+                   pruned_rowsum[entry] += beta_pruning[k];
+                   if (basic_rowsum[entry] > 1e20) {
+                       printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
+                   }
+                   if (beta[k] > 1e20) {
+                       printf("beta[%d] = %f\n", k, beta[k]);
+                   }
+                }
+                values >>= item_width[word.selector];
+            }
+        }
+    }
+    double basic_error = 0.0;
+    double pruned_error = 0.0;
+    for (int i = 0; i < n; i++) {
+        basic_error += basic_rowsum[i]*basic_rowsum[i];
+        pruned_error += pruned_rowsum[i]*pruned_rowsum[i];
+        if (basic_rowsum[i] > 1e20) {
+            printf("2. basic_rowsum[%d] = %f\n", i, basic_rowsum[i]);
+        }
+        // printf("%d %f\n", i, basic_error);
+        //if (basic_error == 1.0/0.0) {
+        //    printf("basic_error[%d] = NaN \t rowsum[%d] = %f\n", i, i, basic_rowsum[i]);
+        //}
+    }
+    basic_error = sqrt(basic_error);
+    pruned_error = sqrt(pruned_error);
+
+    printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
+
+    printf("checking beta values come out the same\n");
+    //for (int k = 0; k < p_int; k++) {
+    for (int k = 0; k < 10; k++) {
+        if (fabs(beta[k] - beta_pruning[k]) > acceptable_diff) {
+            printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k], beta_pruning[k], k);
+        }
+    }
 }
 
 int main (int argc, char *argv[]) {
