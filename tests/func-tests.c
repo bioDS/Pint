@@ -1032,7 +1032,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
 
     printf("\nrunning lambda %f\n", lambda);
     // run several iterations of will_update to make sure we catch any new columns
-    for (int retests = 0; retests < 1; retests++) {
+    for (int retests = 0; retests < 5; retests++) {
         int total_changes = 0;
         memset(max_int_delta, 0, sizeof *max_int_delta * p);
         memset(last_max, 0, sizeof *last_max* p);
