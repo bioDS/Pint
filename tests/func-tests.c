@@ -993,13 +993,9 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
                     }
                 } else {
                     if (as->properties[k].present) {
-                        // printf("removing %d\n", k);
                         active_set_remove(as, k);
                     }
                 }
-                //if (!as->properties[k].present && fabs(sumn) > lambda*n/2) {
-                //    active_set_append(as, k);
-                //} else if (
             }
         } else {
             k += p - j;
@@ -1050,6 +1046,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
         printf("active set size: %d, or %.2f \%\n", active_set.length, 100*(double)active_set.length / (double)p_int);
         //********** Solve subproblem     *******************
         for (int iter = 0; iter < 100; iter++) {
+            prev_error = error;
             // update entire working set 
             for (int ki = 0; ki < active_set.length; ki++) {
                 int k = active_set.entries[ki];
@@ -1062,7 +1059,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
             }
             error = sqrt(error);
             if (prev_error/error < 1.0001) {
-                printf("done lambda %.2f after %d iters\n", lambda, iter+1);
+                printf("done after %d iters\n", lambda, iter+1);
                 break;
             }
         }
@@ -1073,7 +1070,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
 
 static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer user_data) {
     printf("starting branch pruning speed test\n");
-    double acceptable_diff = 0.1;
+    double acceptable_diff = 1.05;
     int n = fixture->n;
     int p = fixture->p;
     double *rowsum = fixture->rowsum;
@@ -1241,20 +1238,22 @@ static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer us
         if (basic_rowsum[i] > 1e20) {
             printf("2. basic_rowsum[%d] = %f\n", i, basic_rowsum[i]);
         }
-        // printf("%d %f\n", i, basic_error);
-        //if (basic_error == 1.0/0.0) {
-        //    printf("basic_error[%d] = NaN \t rowsum[%d] = %f\n", i, i, basic_rowsum[i]);
-        //}
     }
     basic_error = sqrt(basic_error);
     pruned_error = sqrt(pruned_error);
 
     printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
+    g_assert_true(fmax(basic_error, pruned_error)/fmin(basic_error, pruned_error) < 1.01);
 
     printf("checking beta values come out the same\n");
     //for (int k = 0; k < p_int; k++) {
     for (int k = 0; k < 10; k++) {
-        if (fabs(beta[k] - beta_pruning[k]) > acceptable_diff) {
+        double basic_beta = fabs(beta[k]);
+        double pruned_beta = fabs(beta[k]);
+        double max = fmax(basic_beta, pruned_beta);
+        double min = fmin(basic_beta, pruned_beta);
+
+        if (max/min > acceptable_diff) {
             printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k], beta_pruning[k], k);
         }
     }
