@@ -905,34 +905,56 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
     return 0.0;
 }
 
+struct AS_Properties {
+    int was_present : 1;
+    int present: 1;
+};
+
 typedef struct {
     int *entries;
-    char *present;
+    struct AS_Properties *properties;
     int length;
     int max_length;
 } Active_Set;
 
 Active_Set new_active_set(int max_length) {
     int *entries = malloc(sizeof *entries * max_length);
-    char *present = malloc(sizeof *present * max_length);
+    struct AS_Properties *properties = malloc(sizeof *properties* max_length);
     memset(entries, 0, sizeof *entries * max_length); // not strictly necessary, but probably safer.
-    memset(present, 0, sizeof *present * max_length); // not strictly necessary, but probably safer.
+    memset(properties, 0, sizeof *properties * max_length); // not strictly necessary, but probably safer.
     int length = 0;
-    Active_Set as = {entries, present, length, max_length};
+    Active_Set as = {entries, properties, length, max_length};
     return as;
 }
 
 void free_active_set(Active_Set as) {
     free(as.entries);
-    free(as.present);
+    free(as.properties);
 }
 
 void active_set_append(Active_Set *as, int value) {
-    int i = as->length;
-    as->entries[i] = value;
-    as->length++;
-    as->present[value] = TRUE;
-    g_assert_true(as->length < as->max_length);
+    if (as->properties[value].was_present) {
+        as->properties[value].present = TRUE;
+    } else {
+        int i = as->length;
+        as->entries[i] = value;
+        as->length++;
+        as->properties[value].present = TRUE;
+        as->properties[value].was_present = TRUE;
+        g_assert_true(as->length < as->max_length);
+    }
+}
+
+void active_set_remove(Active_Set *as, int index) {
+    as->properties[index].present = FALSE;
+}
+
+int active_set_get_index(Active_Set *as, int index) {
+    if (as->properties[index].present) {
+        return as->entries[index];
+    } else {
+        return -INT_MAX;
+    }
 }
 
 void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta) {
@@ -942,33 +964,42 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
             last_max[j] = 0.0;
             int k_start = k;
             for (; k < k_start + p - j; k++) {
-                if (!as->present[k]) {
-                    g_assert_true(precalc_get_num[k].i == j);
-                    g_assert_true(k <= Xc.p);
+                g_assert_true(precalc_get_num[k].i == j);
+                g_assert_true(k <= Xc.p);
 
-                    // check whether k should be in the working set.
-                    int entry = -1;
-                    double sumn = Xc.col_nz[k]*beta[k];
-                    // sum of rowsums for this column
-                    for (int i = 0; i < Xc.col_nwords[k]; i++) {
-                        S8bWord word = Xc.compressed_indices[k][i];
-                        unsigned long values = word.values;
-                        for (int j = 0; j <= group_size[word.selector]; j++) {
-                            int diff = values & masks[word.selector];
-                            if (diff != 0) {
-                                entry += diff;
-                                sumn += -rowsum[entry];
-                            }
-                            values >>= item_width[word.selector];
+                // check whether k should be in the working set.
+                int entry = -1;
+                double sumn = Xc.col_nz[k]*beta[k];
+                // sum of rowsums for this column
+                for (int i = 0; i < Xc.col_nwords[k]; i++) {
+                    S8bWord word = Xc.compressed_indices[k][i];
+                    unsigned long values = word.values;
+                    for (int j = 0; j <= group_size[word.selector]; j++) {
+                        int diff = values & masks[word.selector];
+                        if (diff != 0) {
+                            entry += diff;
+                            sumn += -rowsum[entry];
                         }
-                    }
-                    if (sumn > last_max[j]) {
-                        last_max[j] = fabs(sumn);
-                    }
-                    if (fabs(sumn) > lambda*n/2) {
-                        active_set_append(as, k);
+                        values >>= item_width[word.selector];
                     }
                 }
+                sumn = fabs(sumn);
+                if (sumn > last_max[j]) {
+                    last_max[j] = sumn;
+                }
+                if (sumn > lambda*n/2) {
+                    if (!as->properties[k].present) {
+                        active_set_append(as, k);
+                    }
+                } else {
+                    if (as->properties[k].present) {
+                        // printf("removing %d\n", k);
+                        active_set_remove(as, k);
+                    }
+                }
+                //if (!as->properties[k].present && fabs(sumn) > lambda*n/2) {
+                //    active_set_append(as, k);
+                //} else if (
             }
         } else {
             k += p - j;
