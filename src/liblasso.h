@@ -1,4 +1,6 @@
-#define interesting_col 58
+// #define interesting_col 58
+#define interesting_col 59
+// #define interesting_col 0
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

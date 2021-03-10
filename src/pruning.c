@@ -11,10 +11,10 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum, X
     for (int ind = 0; ind < colsize; ind++) {
         int i = column_cache[ind];
         double diff_i = rowsum[i] - alpha*last_rowsum[i];
-        if (verbose && k==interesting_col) {
-            printf("rowsum[%d] = %f\n", i, rowsum[i]);
-            printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i], alpha*last_rowsum[i]);
-        }
+        // if (verbose && k==interesting_col) {
+            // printf("rowsum[%d] = %f\n", i, rowsum[i]);
+            // printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i], alpha*last_rowsum[i]);
+        // }
         if (diff_i > 0) {
             pos_max += (diff_i);
         } else {
