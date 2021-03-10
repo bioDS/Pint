@@ -87,7 +87,7 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k, double last_m
 
     double total_estimate = fabs(last_max*alpha) + remainder;
     if (verbose && k==interesting_col)
-        printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate, last_max, alpha, remainder);
+        printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate, fabs(last_max), alpha, remainder);
     return total_estimate;
 }
 
