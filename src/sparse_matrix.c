@@ -139,10 +139,10 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_dista
 			current_col_actual = NULL;
 		}
 		iter_done++;
-		//if (p >= 100 && iter_done % (p/100) == 0) {
-		//	printf("create interaction matrix, %d\%\n", done_percent);
-		//	done_percent++;
-		//}
+		if (p >= 100 && iter_done % (p/100) == 0) {
+			printf("create interaction matrix, %d\%\n", done_percent);
+			done_percent++;
+		}
 	}
 
 	long total_words = 0;
