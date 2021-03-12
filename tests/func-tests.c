@@ -17,6 +17,7 @@
 /* XMatrix read_x_csv(char *fn, int n, int p); */
 
 // #define NumCores 4
+#define HALT_ERROR_DIFF 1.01
 
 typedef struct {
     int n;
@@ -912,7 +913,7 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
         }
         error = sqrt(error);
         // printf("prev_error: %f \t error: %f\n", prev_error, error);
-        if (prev_error/error < 1.01) {
+        if (prev_error/error < HALT_ERROR_DIFF) {
             printf("done lambda %.2f after %d iters\n", lambda, iter+1);
             break;
         } else if (iter == 99) {
@@ -1018,50 +1019,13 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
             }
         }
     }
-    //for (int j = 0; j < p; j++) {
-    //    last_max[j] = 0.0;
-    //    int k_start = k;
-    //    for (; k < k_start + p - j; k++) {
-    //        if (!wont_update[j]) {
-    //            g_assert_true(precalc_get_num[k].i == j);
-    //            g_assert_true(k <= Xc.p);
-
-    //            // check whether k should be in the working set.
-    //            int entry = -1;
-    //            double sumn = Xc.col_nz[k]*beta[k];
-    //            // sum of rowsums for this column
-    //            for (int i = 0; i < Xc.col_nwords[k]; i++) {
-    //                S8bWord word = Xc.compressed_indices[k][i];
-    //                unsigned long values = word.values;
-    //                for (int j = 0; j <= group_size[word.selector]; j++) {
-    //                    int diff = values & masks[word.selector];
-    //                    if (diff != 0) {
-    //                        entry += diff;
-    //                        sumn += -rowsum[entry];
-    //                    }
-    //                    values >>= item_width[word.selector];
-    //                }
-    //            }
-    //            sumn = fabs(sumn);
-    //            if (sumn > last_max[j]) {
-    //                last_max[j] = sumn;
-    //            }
-    //            if (sumn > lambda*n/2) {
-    //                active_set_append(as, k);
-    //            } else {
-    //                active_set_remove(as, k);
-    //            }
-    //        } else {
-    //            active_set_remove(as,k);
-    //        }
-    //    }
-    //}
 }
 
 static double pruning_time = 0.0;
 static double working_set_update_time = 0.0;
 static double subproblem_time = 0.0;
 struct timespec start, end;
+
 
 void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, double *old_rowsum) {
     XMatrixSparse Xc = vars->Xc;
@@ -1145,84 +1109,51 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
         }
         //********** Solve subproblem     *******************
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        for (int iter = 0; iter < 100; iter++) {
+        int iter = 0;
+        for (iter = 0; iter < 100; iter++) {
             double prev_error = error;
-
-            int k = 0;
-            parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
-            #pragma omp parallel for num_threads(NumCores) shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static)
-            for (k = 0; k < p_int; k++) {
-                    if (active_set.properties[k].present) {
-                    Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
-                    }
+            // update entire working set 
+            //TODO: we should shuffle the active set, not the matrix
+            if (active_set.length > NumCores) {
+                parallel_shuffle(perm, permutation_split_size, final_split_size, permutation_splits);
             }
-            // g_assert_true(k == p_int);
-
+            parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
+            #pragma omp parallel for num_threads(NumCores) schedule(static) shared(X2c, Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent)
+            for (int ki = 0; ki < active_set.length; ki++) {
+                int k = active_set.entries[perm->data[ki]];
+                if (active_set.properties[k].present) {
+                    total_present++;
+                    Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
+                    if (changes.actual_diff == 0.0) {
+                        total_unchanged++;
+                    } else {
+                        total_changed++;
+                    }
+                } else {
+                    total_notpresent++;
+                }
+            }
+            // check whether we need another iteration
             error = 0.0;
             for (int i = 0; i < n; i++) {
                 error += rowsum[i]*rowsum[i];
             }
             error = sqrt(error);
-            // printf("prev_error: %f \t error: %f\n", prev_error, error);
-            if (prev_error/error < 1.01) {
-                printf("done lambda %.2f after %d iters\n", lambda, iter+1);
+            if (prev_error/error < HALT_ERROR_DIFF) {
+                // printf("done after %d iters\n", lambda, iter+1);
                 break;
-            } else if (iter == 99) {
-                printf("halting lambda %.2f after 100 iters\n", lambda);
             }
-         }
-        //int iter = 0;
-        //for (iter = 0; iter < 100; iter++) {
-        //    double prev_error = error;
-        //    // update entire working set 
-        //    //TODO: we should shuffle the active set, not the matrix
-        //    //if (active_set.length > NumCores) {
-        //    //    // printf("permutation has size %d\n", perm->size);
-        //    //    // printf("shuffling using %d cores. length: %d, %d splits of size %d with %d remaining\n",
-        //    //            // NumCores, active_set.length, permutation_splits, permutation_split_size, final_split_size);
-        //    //    parallel_shuffle(perm, permutation_split_size, final_split_size, permutation_splits);
-        //    //    // gsl_ran_shuffle(rng, perm->data, perm->size, sizeof(size_t));
-        //    //}
-        //    parallel_shuffle(iter_permutation, permutation_split_size, final_split_size, permutation_splits);
-        //    #pragma omp parallel for num_threads(NumCores) schedule(static) shared(X2c, Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent)
-        //    for (int k = 0; k < p_int; k++) {
-        //        Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
-        //    }
-        //    //for (int ki = 0; ki < active_set.length; ki++) {
-        //    //    int k = active_set.entries[perm->data[ki]];
-        //    //    if (active_set.properties[k].present) {
-        //    //        total_present++;
-        //    //        Changes changes = update_beta_cyclic(X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num, thread_column_caches[omp_get_thread_num()]);
-        //    //        if (changes.actual_diff == 0.0) {
-        //    //            total_unchanged++;
-        //    //        } else {
-        //    //            total_changed++;
-        //    //        }
-        //    //    } else {
-        //    //        total_notpresent++;
-        //    //    }
-        //    //}
-        //    // check whether we need another iteration
-        //    error = 0.0;
-        //    for (int i = 0; i < n; i++) {
-        //        error += rowsum[i]*rowsum[i];
-        //    }
-        //    error = sqrt(error);
-        //    if (prev_error/error < 1.0001) {
-        //        // printf("done after %d iters\n", lambda, iter+1);
-        //        break;
-        //    }
-        //}
-        //printf("iter: %d\n", iter);
-        //printf("active set length: %d, present: %d not: %d\n", active_set.length, total_present, total_notpresent);
+        }
+        // printf("iter: %d\n", iter);
+        // printf("active set length: %d, present: %d not: %d\n", active_set.length, total_present, total_notpresent);
         // g_assert_true(total_present/iter+total_notpresent/iter == active_set.length-1);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         subproblem_time += ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
         //printf("%.1f%% of active set updates didn't change\n", (double)(total_changed*100)/(double)(total_changed+total_unchanged));
         //printf("%.1f%% of active set was blank\n", (double)total_present/(double)(total_present+total_notpresent));
-        //if (active_set.length > 0) {
-        //    gsl_permutation_free(perm);
-        //}
+        if (active_set.length > 0) {
+            gsl_permutation_free(perm);
+        }
     }
     
     gsl_rng_free(rng);
