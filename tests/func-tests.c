@@ -979,43 +979,45 @@ int active_set_get_index(Active_Set *as, int index) {
 void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta) {
     #pragma omp parallel for
     for (long i = 0; i < p; i++) {
-        for (long j = i; j < p; j++) {
-            //GQueue *current_col = g_queue_new();
-            //GQueue *current_col_actual = g_queue_new();
-            int k = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
-            // g_assert_true(precalc_get_num[k].i == j);
-            g_assert_true(k <= Xc.p);
-            if (!wont_update[j]) {
-                // worked out by hand as being equivalent to the offset we would have reached.
-                // sumb is the amount we would have reached w/o the limit - the amount that was actually covered by the limit.
+        if (!wont_update[i]) {
+            for (long j = i; j < p; j++) {
+                //GQueue *current_col = g_queue_new();
+                //GQueue *current_col_actual = g_queue_new();
+                int k = (2*(p-1) + 2*(p-1)*(i-1) - (i-1)*(i-1) - (i-1))/2 + j;
+                // g_assert_true(precalc_get_num[k].i == j);
+                g_assert_true(k <= Xc.p);
+                if (!wont_update[j]) {
+                    // worked out by hand as being equivalent to the offset we would have reached.
+                    // sumb is the amount we would have reached w/o the limit - the amount that was actually covered by the limit.
 
-                // check whether k should be in the working set.
-                int entry = -1;
-                double sumn = Xc.col_nz[k]*beta[k];
-                // sum of rowsums for this column
-                for (int i = 0; i < Xc.col_nwords[k]; i++) {
-                    S8bWord word = Xc.compressed_indices[k][i];
-                    unsigned long values = word.values;
-                    for (int j = 0; j <= group_size[word.selector]; j++) {
-                        int diff = values & masks[word.selector];
-                        if (diff != 0) {
-                            entry += diff;
-                            sumn += -rowsum[entry];
+                    // check whether k should be in the working set.
+                    int entry = -1;
+                    double sumn = Xc.col_nz[k]*beta[k];
+                    // sum of rowsums for this column
+                    for (int i = 0; i < Xc.col_nwords[k]; i++) {
+                        S8bWord word = Xc.compressed_indices[k][i];
+                        unsigned long values = word.values;
+                        for (int j = 0; j <= group_size[word.selector]; j++) {
+                            int diff = values & masks[word.selector];
+                            if (diff != 0) {
+                                entry += diff;
+                                sumn += -rowsum[entry];
+                            }
+                            values >>= item_width[word.selector];
                         }
-                        values >>= item_width[word.selector];
                     }
-                }
-                sumn = fabs(sumn);
-                if (sumn > last_max[j]) {
-                    last_max[j] = sumn;
-                }
-                if (sumn > lambda*n/2) {
-                    active_set_append(as, k);
+                    sumn = fabs(sumn);
+                    if (sumn > last_max[j]) {
+                        last_max[j] = sumn;
+                    }
+                    if (sumn > lambda*n/2) {
+                        active_set_append(as, k);
+                    } else {
+                        active_set_remove(as, k);
+                    }
                 } else {
-                    active_set_remove(as, k);
+                    active_set_remove(as,k);
                 }
-            } else {
-                active_set_remove(as,k);
             }
         }
     }
@@ -1056,7 +1058,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
     printf("\nrunning lambda %f\n", lambda);
     // run several iterations of will_update to make sure we catch any new columns
     /*TODO: in principle we should allow more than one, but it seems to only slow things down.
-    * maybe this is because any effects not chosen for the first iter will be small, and therefor not really worht it?
+    * maybe this is because any effects not chosen for the first iter will be small, and therefore not really worht it?
     * (i.e. slow and unreliable).
     * TODO: suffers quite badly when numa updates are allowed
     */
