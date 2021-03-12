@@ -934,24 +934,41 @@ typedef struct {
     struct AS_Properties *properties;
     int length;
     int max_length;
+	int *col_nz;
+	int *col_nwords;
+	//unsigned short **col_nz_indices;
+	gsl_permutation *permutation;
+	S8bWord **compressed_indices;
 } Active_Set;
 
-Active_Set new_active_set(int max_length) {
+Active_Set active_set_new(int max_length) {
     int *entries = malloc(sizeof *entries * max_length);
     struct AS_Properties *properties = malloc(sizeof *properties* max_length);
     memset(entries, 0, sizeof *entries * max_length); // not strictly necessary, but probably safer.
     memset(properties, 0, sizeof *properties * max_length); // not strictly necessary, but probably safer.
     int length = 0;
-    Active_Set as = {entries, properties, length, max_length};
+    Active_Set as = {entries, properties, length, max_length, NULL, NULL, NULL, NULL};
     return as;
 }
 
-void free_active_set(Active_Set as) {
+void active_set_free(Active_Set as) {
     free(as.entries);
     free(as.properties);
+    if (NULL != as.col_nz)
+        free(as.col_nz);
+    if (NULL != as.col_nwords)
+        free(as.col_nwords);
+    if (NULL != as.permutation)
+        free(as.permutation);
+    if (NULL != as.compressed_indices) {
+        for (int i = 0; i < as.length; i++) {
+            free(as.compressed_indices[i]);
+        }
+        free(as.compressed_indices);
+    }
 }
 
-void active_set_append(Active_Set *as, int value) {
+void active_set_append(Active_Set *as, int value, int *col, int len) {
     if (as->properties[value].was_present) {
         as->properties[value].present = TRUE;
     } else {
@@ -976,9 +993,10 @@ int active_set_get_index(Active_Set *as, int index) {
     }
 }
 
-void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta) {
+void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta, int **thread_column_caches) {
     #pragma omp parallel for
     for (long i = 0; i < p; i++) {
+        int *col_cache = thread_column_caches[omp_get_thread_num()];
         if (!wont_update[i]) {
             for (long j = i; j < p; j++) {
                 //GQueue *current_col = g_queue_new();
@@ -993,6 +1011,7 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
                     // check whether k should be in the working set.
                     int entry = -1;
                     double sumn = Xc.col_nz[k]*beta[k];
+                    int pos = 0;
                     // sum of rowsums for this column
                     for (int i = 0; i < Xc.col_nwords[k]; i++) {
                         S8bWord word = Xc.compressed_indices[k][i];
@@ -1002,6 +1021,8 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
                             if (diff != 0) {
                                 entry += diff;
                                 sumn += -rowsum[entry];
+                                col_cache[pos] = entry;
+                                pos++;
                             }
                             values >>= item_width[word.selector];
                         }
@@ -1011,7 +1032,7 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
                         last_max[j] = sumn;
                     }
                     if (sumn > lambda*n/2) {
-                        active_set_append(as, k);
+                        active_set_append(as, k, col_cache, Xc.col_nz[k]);
                     } else {
                         active_set_remove(as, k);
                     }
@@ -1044,7 +1065,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
     double *max_int_delta = vars->max_int_delta;
     int_pair *precalc_get_num = vars->precalc_get_num;
     //active_set[i] if and only if the pair precalc_get_num[i] is in the active set.
-    Active_Set active_set = new_active_set(p_int);
+    Active_Set active_set = active_set_new(p_int);
     gsl_permutation *iter_permutation = vars->iter_permutation;
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_permutation *perm;
@@ -1093,7 +1114,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
         //********** Identify Working Set *******************
         //TODO: is it worth constructing a new set with no 'blank' elements?
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        update_working_set(X2c, rowsum, wont_update, &active_set, last_max, p, n, precalc_get_num, lambda, beta);
+        update_working_set(X2c, rowsum, wont_update, &active_set, last_max, p, n, precalc_get_num, lambda, beta, thread_column_caches);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         working_set_update_time += ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
         // printf("active set size: %d, or %.2f \%\n", active_set.length, 100*(double)active_set.length / (double)p_int);
@@ -1159,7 +1180,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
     }
     
     gsl_rng_free(rng);
-    free_active_set(active_set);
+    active_set_free(active_set);
 }
 
 static void check_branch_pruning_faster(UpdateFixture *fixture, gconstpointer user_data) {
