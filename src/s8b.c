@@ -19,7 +19,7 @@ S8bWord to_s8b(int count, int *vals) {
   return word;
 }
 
-S8bCol to_s8b_col(int size, int *col) {
+S8bCol col_to_s8b_col(int size, int *col) {
   // Read through the the current column entries, and append them as an
   // s8b-encoded list of offsets
   int col_entries[60];
