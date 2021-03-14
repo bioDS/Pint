@@ -993,7 +993,11 @@ int active_set_get_index(Active_Set *as, int index) {
     }
 }
 
-void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta, int **thread_column_caches) {
+/*
+ * Returns true if and only if something was added to the active set.
+*/
+char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Active_Set *as, double *last_max, int p, int n, int_pair *precalc_get_num, double lambda, double *beta, int **thread_column_caches) {
+    char increased_set = FALSE;
     #pragma omp parallel for
     for (long i = 0; i < p; i++) {
         int *col_cache = thread_column_caches[omp_get_thread_num()];
@@ -1033,6 +1037,7 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
                     }
                     if (sumn > lambda*n/2) {
                         active_set_append(as, k, col_cache, Xc.col_nz[k]);
+                        increased_set = TRUE;
                     } else {
                         active_set_remove(as, k);
                     }
@@ -1042,6 +1047,7 @@ void update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update, Acti
             }
         }
     }
+    return increased_set;
 }
 
 static double pruning_time = 0.0;
@@ -1083,7 +1089,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
     * (i.e. slow and unreliable).
     * TODO: suffers quite badly when numa updates are allowed
     */
-    for (int retests = 0; retests < 1; retests++) {
+    for (int retests = 0; retests < 100; retests++) {
         long total_changed = 0;
         long total_unchanged = 0;
         int total_changes = 0;
@@ -1114,10 +1120,14 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
         //********** Identify Working Set *******************
         //TODO: is it worth constructing a new set with no 'blank' elements?
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        update_working_set(X2c, rowsum, wont_update, &active_set, last_max, p, n, precalc_get_num, lambda, beta, thread_column_caches);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        working_set_update_time += ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
-        // printf("active set size: %d, or %.2f \%\n", active_set.length, 100*(double)active_set.length / (double)p_int);
+        char increased_set = update_working_set(X2c, rowsum, wont_update, &active_set, last_max, p, n, precalc_get_num, lambda, beta, thread_column_caches);
+        if (retests > 0 && !increased_set) {
+            // there's no need to re-run on the same set. Nothing has changed and the remaining retests will all do nothing.
+            clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+            working_set_update_time += ((double)(end.tv_nsec-start.tv_nsec))/1e9 + (end.tv_sec - start.tv_sec);
+            break;
+        }
+        printf("active set size: %d, or %.2f \%\n", active_set.length, 100*(double)active_set.length / (double)p_int);
         permutation_splits = max(NumCores, active_set.length / NumCores);
         permutation_split_size = active_set.length / permutation_splits;
         if (active_set.length > NumCores) {
@@ -1167,7 +1177,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum, dou
                 break;
             }
         }
-        // printf("iter: %d\n", iter);
+        printf("iter: %d\n", iter);
         // printf("active set length: %d, present: %d not: %d\n", active_set.length, total_present, total_notpresent);
         // g_assert_true(total_present/iter+total_notpresent/iter == active_set.length-1);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
