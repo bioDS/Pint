@@ -23,6 +23,9 @@
 // #define NumCores 4
 #define HALT_ERROR_DIFF 1.01
 
+struct timespec start, end;
+static double x2_conversion_time = 0.0;
+
 typedef struct {
   int n;
   int p;
@@ -1093,15 +1096,13 @@ typedef struct {
   struct AS_Properties *properties;
   int length;
   int max_length;
-  int *col_nz;
-  int *col_nwords;
-  // unsigned short **col_nz_indices;
   gsl_permutation *permutation;
-  S8bWord **compressed_indices;
+  S8bCol *compressed_cols;
 } Active_Set;
 
 Active_Set active_set_new(int max_length) {
   int *entries = malloc(sizeof *entries * max_length);
+  S8bCol *compressed_cols = malloc(sizeof *compressed_cols * max_length);
   struct AS_Properties *properties = malloc(sizeof *properties * max_length);
   memset(entries, 0,
          sizeof *entries *
@@ -1111,24 +1112,21 @@ Active_Set active_set_new(int max_length) {
              max_length); // not strictly necessary, but probably safer.
   int length = 0;
   Active_Set as = {entries, properties, length, max_length,
-                   NULL,    NULL,       NULL,   NULL};
+                   NULL,    compressed_cols};
   return as;
 }
 
 void active_set_free(Active_Set as) {
   free(as.entries);
   free(as.properties);
-  if (NULL != as.col_nz)
-    free(as.col_nz);
-  if (NULL != as.col_nwords)
-    free(as.col_nwords);
   if (NULL != as.permutation)
     free(as.permutation);
-  if (NULL != as.compressed_indices) {
+  if (NULL != as.compressed_cols) {
     for (int i = 0; i < as.length; i++) {
-      free(as.compressed_indices[i]);
+      if (NULL != as.compressed_cols[i].compressed_indices)
+        free(as.compressed_cols[i].compressed_indices);
     }
-    free(as.compressed_indices);
+    free(as.compressed_cols);
   }
 }
 
@@ -1142,6 +1140,10 @@ void active_set_append(Active_Set *as, int value, int *col, int len) {
     as->properties[value].present = TRUE;
     as->properties[value].was_present = TRUE;
     g_assert_true(as->length < as->max_length);
+    S8bCol s8bCol = col_to_s8b_col(len, col);
+    // printf("new col has %d words, %d entries\n", s8bCol.col_nwords, s8bCol.col_nz);
+    // printf("adding col for effect %d\n", value);
+    as->compressed_cols[value] = s8bCol;
   }
 }
 
@@ -1157,6 +1159,13 @@ int active_set_get_index(Active_Set *as, int index) {
   }
 }
 
+struct RawCol {
+  int len;
+  int *entries;
+};
+
+// struct RawCol get_raw_interaction_col(XMatrixSparse Xc, int i, int j) {}
+
 /*
  * Returns true if and only if something was added to the active set.
  */
@@ -1165,54 +1174,193 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                         int_pair *precalc_get_num, double lambda, double *beta,
                         int **thread_column_caches) {
   char increased_set = FALSE;
-#pragma omp parallel for
+#pragma omp parallel for reduction(& : increased_set) schedule(static)
   for (long i = 0; i < p; i++) {
     int *col_cache = thread_column_caches[omp_get_thread_num()];
     if (!wont_update[i]) {
       for (long j = i; j < p; j++) {
         // GQueue *current_col = g_queue_new();
         // GQueue *current_col_actual = g_queue_new();
+        // worked out by hand as being equivalent to the offset we would have
+        // reached. sumb is the amount we would have reached w/o the limit -
+        // the amount that was actually covered by the limit.
         int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
                  (i - 1)) /
                     2 +
                 j;
+        double sumn = 0.0;
+        int col_nz = 0;
         // g_assert_true(precalc_get_num[k].i == j);
-        g_assert_true(k <= Xc.p);
+        g_assert_true(k <= (Xc.p * (Xc.p + 1) / 2));
         if (!wont_update[j]) {
-          // worked out by hand as being equivalent to the offset we would have
-          // reached. sumb is the amount we would have reached w/o the limit -
-          // the amount that was actually covered by the limit.
 
-          // check whether k should be in the working set.
-          int entry = -1;
-          double sumn = Xc.col_nz[k] * beta[k];
-          int pos = 0;
-          // sum of rowsums for this column
-          for (int i = 0; i < Xc.col_nwords[k]; i++) {
-            S8bWord word = Xc.compressed_indices[k][i];
-            unsigned long values = word.values;
-            for (int j = 0; j <= group_size[word.selector]; j++) {
-              int diff = values & masks[word.selector];
-              if (diff != 0) {
-                entry += diff;
-                sumn += -rowsum[entry];
-                col_cache[pos] = entry;
-                pos++;
+          // we've already calculated the interaction, re-use it.
+          if (as->properties[k].was_present) {
+            // printf("re-using column %d\n", k);
+            S8bCol s8bCol = as->compressed_cols[k];
+            col_nz = s8bCol.col_nz;
+            int entry = -1;
+            int tmpCount = 0;
+            for (int i = 0; i < s8bCol.col_nwords; i++) {
+              S8bWord word = s8bCol.compressed_indices[i];
+              unsigned long values = word.values;
+              for (int j = 0; j <= group_size[word.selector]; j++) {
+                tmpCount++;
+                int diff = values & masks[word.selector];
+                //if (diff > 700)
+                //  printf("diff: %d\n", diff);
+                if (diff != 0) {
+                  entry += diff;
+                  // column_entries[col_entry_pos] = entry;
+                  if (entry > Xc.n) {
+                    printf("entry: %d\n", entry);
+                    printf("col %d col_nz: %d, tmpCount: %d\n", k, col_nz, tmpCount);
+                  }
+                  g_assert_true(entry < Xc.n);
+                  sumn += rowsum[entry];
+                  // if (k==4147) {
+                  //	printf("sumn += rowsum[%d] =  %f\n", entry,
+                  // rowsum[entry]);
+                  //}
+                  // col_entry_pos++;
+                }
+                values >>= item_width[word.selector];
               }
-              values >>= item_width[word.selector];
             }
+          } else {
+            // printf("calculating new column\n");
+            // this column has never been in the workign set before, therefore
+            // its beta value is zero and so is sumn.
+            // calculate the interaction
+            // and maybe store it read columns i and j simultaneously
+            int entry_i = -1;
+            int entry_j = -1;
+            int pos = 0;
+            // sum of rowsums for this column
+            int i_w = 0, j_w = 0;
+            if (Xc.col_nz[j] == 0 || Xc.col_nz[i] == 0) {
+              break;
+            }
+            S8bWord word_i = Xc.compressed_indices[i][i_w];
+            S8bWord word_j = Xc.compressed_indices[j][j_w];
+            int i_wpos = 0, j_wpos = 0;
+            unsigned long values_i = word_i.values;
+            unsigned long values_j = word_j.values;
+            int i_size = group_size[word_i.selector];
+            int j_size = group_size[word_j.selector];
+            // This whole loop is a bit awkward, but what can you do.
+            // printf("interaction between %d (len %d) and %d (len %d)\n", i,
+            //  Xc.col_nz[i], j, Xc.col_nz[j]);
+          read:
+            while (i_w <= Xc.col_nwords[i] && j_w <= Xc.col_nwords[j]) {
+              g_assert_true(entry_i < Xc.n && entry_j < Xc.n);
+              // printf("test, %d/%d vs %d/%d\n", i_w + 1, Xc.col_nwords[i],
+              //  j_w + 1, Xc.col_nwords[j]);
+              // printf("word i has %d entries\n", i_size);
+              if (entry_i == entry_j && entry_i > 0) {
+                // update interaction and move to next entry of each word
+                // printf("%d == %d\n", entry_i, entry_j);
+                sumn += rowsum[entry_i];
+                col_cache[pos] = entry_i;
+                pos++;
+                g_assert_true(pos < Xc.n);
+                // i_wpos++;
+                // j_wpos++;
+                // values_i >>= item_width[word_i.selector];
+                // values_j >>= item_width[word_j.selector];
+              }
+              if (entry_i <= entry_j) {
+                // read through i until we hit the end, or reach or exceed j.
+                // current values will only be equal if we've just taken care of
+                // them.
+                while (i_w <= Xc.col_nwords[i]) {
+                  // current word
+                  while (i_wpos <= i_size) {
+                    // printf("i_wpos %d\n", i_wpos);
+                    int diff = values_i & masks[word_i.selector];
+                    i_wpos++;
+                    values_i >>= item_width[word_i.selector];
+                    if (diff != 0) {
+                      entry_i += diff;
+                      // printf("new entry: %d \t", entry_i);
+                      // we've found the next value of i
+                      // if it's equal we'll handle it earlier in the loop,
+                      // otherwise go to the j read loop.
+                      if (entry_i >= entry_j) {
+                        // printf("stopping i : %d > %d\n", entry_i, entry_j);
+                        goto read;
+                        // break;
+                      }
+                    }
+                  }
+                  // switch to the next word
+                  // printf("i: next word\n");
+                  i_w++;
+                  if (i_w < Xc.col_nwords[i]) {
+                    word_i = Xc.compressed_indices[i][i_w];
+                    values_i = word_i.values;
+                    i_size = group_size[word_i.selector];
+                    // printf("new word size: %d\n", i_size);
+                    i_wpos = 0;
+                  }
+                }
+              }
+              if (entry_j <= entry_i) {
+                // read through j until we hit the end, or reach or exceed
+                // i.
+                while (j_w <= Xc.col_nwords[j]) {
+                  // current word
+                  while (j_wpos <= j_size) {
+                    int diff = values_j & masks[word_j.selector];
+                    j_wpos++;
+                    values_j >>= item_width[word_j.selector];
+                    if (diff != 0) {
+                      entry_j += diff;
+                      // we've found the next value of i
+                      // if it's equal we'll handle it earlier in the loop,
+                      // otherwise go to the j read loop.
+                      if (entry_j >= entry_i) {
+                        // printf("stopping j : %d > %d\n", entry_j, entry_i);
+                        goto read;
+                        // break;
+                      }
+                    }
+                  }
+                  // switch to the next word
+                  // printf("j: next word\n");
+                  j_w++;
+                  if (j_w < Xc.col_nwords[j]) {
+                    word_j = Xc.compressed_indices[j][j_w];
+                    values_j = word_j.values;
+                    j_size = group_size[word_j.selector];
+                    j_wpos = 0;
+                  }
+                }
+              }
+            }
+            col_nz = pos;
+            active_set_append(as, k, col_cache, col_nz);
+            active_set_remove(as, k);
           }
+          sumn += beta[k] * col_nz;
+          if (k == 85)
+            printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
+          // either way, we now have sumn
           sumn = fabs(sumn);
           if (sumn > last_max[j]) {
             last_max[j] = sumn;
           }
           if (sumn > lambda * n / 2) {
-            active_set_append(as, k, col_cache, Xc.col_nz[k]);
+            active_set_append(as, k, col_cache, col_nz);
             increased_set = TRUE;
           } else {
             active_set_remove(as, k);
           }
+          // TODO: store column for re-use even if it's not really added to
+          // the active set?
         } else {
+          // since we don't update any of this columns interactions, they
+          // shouldn't be in the working set
           active_set_remove(as, k);
         }
       }
@@ -1224,10 +1372,9 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
 static double pruning_time = 0.0;
 static double working_set_update_time = 0.0;
 static double subproblem_time = 0.0;
-struct timespec start, end;
 
 void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
-                             double *old_rowsum) {
+                             double *old_rowsum, Active_Set *active_set) {
   XMatrixSparse Xc = vars->Xc;
   double **last_rowsum = vars->last_rowsum;
   int **thread_column_caches = vars->thread_column_caches;
@@ -1241,9 +1388,8 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
   double *Y = vars->Y;
   double *max_int_delta = vars->max_int_delta;
   int_pair *precalc_get_num = vars->precalc_get_num;
-  // active_set[i] if and only if the pair precalc_get_num[i] is in the active
-  // set.
-  Active_Set active_set = active_set_new(p_int);
+  // active_set[i] if and only if the pair precalc_get_num[i] is in the
+  // active set.
   gsl_permutation *iter_permutation = vars->iter_permutation;
   gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
   gsl_permutation *perm;
@@ -1255,14 +1401,15 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
   double prev_error = error;
 
   printf("\nrunning lambda %f\n", lambda);
-  // run several iterations of will_update to make sure we catch any new columns
-  /*TODO: in principle we should allow more than one, but it seems to only slow
-   * things down. maybe this is because any effects not chosen for the first
-   * iter will be small, and therefore not really worht it? (i.e. slow and
-   * unreliable).
+  // run several iterations of will_update to make sure we catch any new
+  // columns
+  /*TODO: in principle we should allow more than one, but it seems to
+   * only slow things down. maybe this is because any effects not chosen
+   * for the first iter will be small, and therefore not really worht
+   * it? (i.e. slow and unreliable).
    * TODO: suffers quite badly when numa updates are allowed
    */
-  for (int retests = 0; retests < 100; retests++) {
+  for (int retests = 0; retests < 1; retests++) {
     long total_changed = 0;
     long total_unchanged = 0;
     int total_changes = 0;
@@ -1283,7 +1430,7 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     }
     for (int j = 0; j < p; j++) {
       if (!wont_update[j]) {
-        memcpy(last_rowsum[j], rowsum, sizeof *rowsum * n);
+        memcpy(last_rowsum[j], rowsum, sizeof *rowsum * n); //TODO: probably overkill
         active_branches++;
       }
     }
@@ -1295,32 +1442,34 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       break;
     }
     //********** Identify Working Set *******************
-    // TODO: is it worth constructing a new set with no 'blank' elements?
+    // TODO: is it worth constructing a new set with no 'blank'
+    // elements?
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    char increased_set = update_working_set(
-        X2c, rowsum, wont_update, &active_set, last_max, p, n, precalc_get_num,
-        lambda, beta, thread_column_caches);
+    char increased_set =
+        update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
+                           precalc_get_num, lambda, beta, thread_column_caches);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     working_set_update_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                                (end.tv_sec - start.tv_sec);
     if (retests > 0 && !increased_set) {
-      // there's no need to re-run on the same set. Nothing has changed and the
-      // remaining retests will all do nothing.
+      // there's no need to re-run on the same set. Nothing has changed
+      // and the remaining retests will all do nothing.
       break;
     }
-    printf("active set size: %d, or %.2f \%\n", active_set.length,
-           100 * (double)active_set.length / (double)p_int);
-    permutation_splits = max(NumCores, active_set.length / NumCores);
-    permutation_split_size = active_set.length / permutation_splits;
-    if (active_set.length > NumCores) {
-      final_split_size = active_set.length % NumCores;
+    printf("active set size: %d, or %.2f \%\n", active_set->length,
+           100 * (double)active_set->length / (double)p_int);
+    permutation_splits = max(NumCores, active_set->length / NumCores);
+    permutation_split_size = active_set->length / permutation_splits;
+    if (active_set->length > NumCores) {
+      final_split_size = active_set->length % NumCores;
     } else {
       final_split_size = 0;
     }
-    if (active_set.length > 0) {
-      // printf("allocation permutation of size %d\n", active_set.length);
+    if (active_set->length > 0) {
+      // printf("allocation permutation of size %d\n",
+      // active_set->length);
       perm = gsl_permutation_calloc(
-          active_set.length); // TODO: don't alloc/free in this loop
+          active_set->length); // TODO: don't alloc/free in this loop
       // printf("permutation has size %d\n", perm->size);
     }
     //********** Solve subproblem     *******************
@@ -1330,16 +1479,16 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       double prev_error = error;
       // update entire working set
       // TODO: we should shuffle the active set, not the matrix
-      if (active_set.length > NumCores) {
+      if (active_set->length > NumCores) {
         parallel_shuffle(perm, permutation_split_size, final_split_size,
                          permutation_splits);
       }
-      parallel_shuffle(iter_permutation, permutation_split_size,
-                       final_split_size, permutation_splits);
+      //parallel_shuffle(iter_permutation, permutation_split_size,
+      //                 final_split_size, permutation_splits);
 #pragma omp parallel for num_threads(NumCores) schedule(static) shared(X2c, Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent)
-      for (int ki = 0; ki < active_set.length; ki++) {
-        int k = active_set.entries[perm->data[ki]];
-        if (active_set.properties[k].present) {
+      for (int ki = 0; ki < active_set->length; ki++) {
+        int k = active_set->entries[perm->data[ki]];
+        if (active_set->properties[k].present) {
           total_present++;
           Changes changes = update_beta_cyclic(
               X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
@@ -1365,10 +1514,10 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       }
     }
     printf("iter: %d\n", iter);
-    // printf("active set length: %d, present: %d not: %d\n", active_set.length,
-    // total_present, total_notpresent);
+    // printf("active set length: %d, present: %d not: %d\n",
+    // active_set->length, total_present, total_notpresent);
     // g_assert_true(total_present/iter+total_notpresent/iter ==
-    // active_set.length-1);
+    // active_set->length-1);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     subproblem_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                        (end.tv_sec - start.tv_sec);
@@ -1376,13 +1525,12 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     // (double)(total_changed*100)/(double)(total_changed+total_unchanged));
     // printf("%.1f%% of active set was blank\n",
     // (double)total_present/(double)(total_present+total_notpresent));
-    if (active_set.length > 0) {
+    if (active_set->length > 0) {
       gsl_permutation_free(perm);
     }
   }
 
   gsl_rng_free(rng);
-  active_set_free(active_set);
 }
 
 static void check_branch_pruning_faster(UpdateFixture *fixture,
@@ -1423,8 +1571,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   memset(last_max, 0, sizeof(last_max));
 
   // start running tests with decreasing lambda
-  // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5,
-  // 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
+  // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25,
+  // 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
   double lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50,  25,
                               10,    5,   2,   1,   0.5, 0.2, 0.1, 0.05};
   // double lambda_sequence[] = {10000,500, 400, 300};
@@ -1512,6 +1660,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     p_rowsum[i] = -Y[i];
   }
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
+  Active_Set active_set = active_set_new(p_int);
   for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
     // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
     // double lambda = lambda_sequence[lambda_ind];
@@ -1519,8 +1668,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum);
+    run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum, &active_set);
   }
+  active_set_free(active_set);
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   pruned_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                          (end.tv_sec - start.tv_sec);
@@ -1571,7 +1721,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   pruned_error = sqrt(pruned_error);
 
   printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
-  printf("pruning time is composed of %.2f pruning, %.2f working set updates, "
+  printf("pruning time is composed of %.2f pruning, %.2f working set "
+         "updates, "
          "and %.2f subproblem time\n",
          pruning_time, working_set_update_time, subproblem_time);
   g_assert_true(
@@ -1631,10 +1782,12 @@ int main(int argc, char *argv[]) {
              pruning_fixture_set_up, check_branch_pruning_faster,
              pruning_fixture_tear_down);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
-  // test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int,
+  // test_simple_coordinate_descent_set_up,
+  // test_simple_coordinate_descent_int,
   // test_simple_coordinate_descent_tear_down);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
-  // test_simple_coordinate_descent_set_up, test_simple_coordinate_descent_int,
+  // test_simple_coordinate_descent_set_up,
+  // test_simple_coordinate_descent_int,
   // test_simple_coordinate_descent_tear_down);
 
   return g_test_run();
