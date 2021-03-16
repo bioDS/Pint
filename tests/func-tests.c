@@ -1539,6 +1539,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
                       2 +
                   j;
           if (active_set->properties[k].present) {
+            // TODO: apply permutation here.
             total_present++;
             int was_zero = FALSE;
             if (beta[k] == 0.0) {
