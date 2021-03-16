@@ -1195,26 +1195,22 @@ double int_col_time = 0.0;
 char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                         Active_Set *as, double *last_max, int p, int n,
                         int_pair *precalc_get_num, double lambda, double *beta,
-                        Thread_Cache *thread_caches) {
+                        Thread_Cache *thread_caches, XMatrixSparse X2c) {
   char increased_set = FALSE;
 #pragma omp parallel for reduction(& : increased_set) shared(last_max) schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time)
-  for (long i = 0; i < p; i++) {
+  for (long main = 0; main < p; main++) {
     Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
-    // TODO: read entire i column only once.
     int *col_i_cache = thread_cache.col_i;
     int *col_j_cache = thread_cache.col_j;
-    // printf("col_i_cache: %lx\n", col_i_cache);
-    // printf("col_j_cache: %lx\n", col_j_cache);
     clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
-    int col_i_len = 0;
-    if (!wont_update[i]) {
-      // read column i into col_i_cache.
+    int main_col_len = 0;
+    if (!wont_update[main]) {
       {
         int *column_entries = col_i_cache;
         long col_entry_pos = 0;
         long entry = -1;
-        for (int r = 0; r < Xc.col_nwords[i]; r++) {
-          S8bWord word = Xc.compressed_indices[i][r];
+        for (int r = 0; r < Xc.col_nwords[main]; r++) {
+          S8bWord word = Xc.compressed_indices[main][r];
           unsigned long values = word.values;
           for (int j = 0; j <= group_size[word.selector]; j++) {
             int diff = values & masks[word.selector];
@@ -1226,24 +1222,27 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             values >>= item_width[word.selector];
           }
         }
-        col_i_len = col_entry_pos;
+        main_col_len = col_entry_pos;
+        g_assert_true(main_col_len == Xc.col_nz[main]);
       }
+      int read_loops = 0;
       clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
       main_col_time += ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
                        (sub_end.tv_sec - sub_start.tv_sec);
-      for (long j = i; j < p; j++) {
+      for (long inter = main; inter < p; inter++) {
+        // TODO: no need to re-read the main column when inter == main.
         // worked out by hand as being equivalent to the offset we would have
         // reached. sumb is the amount we would have reached w/o the limit -
         // the amount that was actually covered by the limit.
-        int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
-                 (i - 1)) /
+        int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
+                 (main - 1) * (main - 1) - (main - 1)) /
                     2 +
-                j;
+                inter;
         double sumn = 0.0;
         int col_nz = 0;
         // g_assert_true(precalc_get_num[k].i == j);
         g_assert_true(k <= (Xc.p * (Xc.p + 1) / 2));
-        if (!wont_update[j]) {
+        if (!wont_update[inter]) {
 
           // we've already calculated the interaction, re-use it.
           if (as->properties[k].was_present) {
@@ -1259,11 +1258,8 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               for (int j = 0; j <= group_size[word.selector]; j++) {
                 tmpCount++;
                 int diff = values & masks[word.selector];
-                // if (diff > 700)
-                //  printf("diff: %d\n", diff);
                 if (diff != 0) {
                   entry += diff;
-                  // column_entries[col_entry_pos] = entry;
                   if (entry > Xc.n) {
                     printf("entry: %d\n", entry);
                     printf("col %d col_nz: %d, tmpCount: %d\n", k, col_nz,
@@ -1271,11 +1267,6 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                   }
                   g_assert_true(entry < Xc.n);
                   sumn += rowsum[entry];
-                  // if (k==4147) {
-                  //	printf("sumn += rowsum[%d] =  %f\n", entry,
-                  // rowsum[entry]);
-                  //}
-                  // col_entry_pos++;
                 }
                 values >>= item_width[word.selector];
               }
@@ -1287,7 +1278,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
           } else {
             clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
             // printf("calculating new column\n");
-            // this column has never been in the workign set before, therefore
+            // this column has never been in the working set before, therefore
             // its beta value is zero and so is sumn.
             // calculate the interaction
             // and maybe store it read columns i and j simultaneously
@@ -1298,11 +1289,8 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             // sum of rowsums for this column
             // int i_w = 0;
             int j_w = 0;
-            if (Xc.col_nz[j] == 0) {
-              break;
-            }
             // S8bWord word_i = Xc.compressed_indices[i][i_w];
-            S8bWord word_j = Xc.compressed_indices[j][j_w];
+            S8bWord word_j = Xc.compressed_indices[inter][j_w];
             // int i_wpos = 0;
             int j_wpos = 0;
             // unsigned long values_i = word_i.values;
@@ -1312,26 +1300,17 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             // This whole loop is a bit awkward, but what can you do.
             // printf("interaction between %d (len %d) and %d (len %d)\n", i,
             //  Xc.col_nz[i], j, Xc.col_nz[j]);
-          read:
-            while (i_pos < col_i_len && j_w <= Xc.col_nwords[j]) {
-              int entry_i = col_i_cache[i_pos];
-              // printf("test, %d/%d vs %d/%d\n", i_w + 1, Xc.col_nwords[i],
-              //  j_w + 1, Xc.col_nwords[j]);
-              // printf("word i has %d entries\n", i_size);
+            int entry_i = -2;
+            while (i_pos < main_col_len && j_w <= Xc.col_nwords[inter]) {
+            read:
               if (entry_i == entry_j) {
                 // update interaction and move to next entry of each word
-                // printf("%d == %d\n", entry_i, entry_j);
-                // printf("pos: %d\n", pos);
                 sumn += rowsum[entry_i];
                 col_j_cache[pos] = entry_i;
                 pos++;
                 g_assert_true(pos < Xc.n);
-                // i_wpos++;
-                // j_wpos++;
-                // values_i >>= item_width[word_i.selector];
-                // values_j >>= item_width[word_j.selector];
               }
-              while (entry_i <= entry_j && i_pos < col_i_len) {
+              while (entry_i <= entry_j && i_pos < main_col_len) {
                 entry_i = col_i_cache[i_pos];
                 i_pos++;
                 if (entry_i == entry_j) {
@@ -1341,7 +1320,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               if (entry_j <= entry_i) {
                 // read through j until we hit the end, or reach or exceed
                 // i.
-                while (j_w <= Xc.col_nwords[j]) {
+                while (j_w <= Xc.col_nwords[inter]) {
                   // current word
                   while (j_wpos <= j_size) {
                     int diff = values_j & masks[word_j.selector];
@@ -1349,21 +1328,19 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                     values_j >>= item_width[word_j.selector];
                     if (diff != 0) {
                       entry_j += diff;
-                      // we've found the next value of i
+                      // we've found the next value of j
                       // if it's equal we'll handle it earlier in the loop,
                       // otherwise go to the j read loop.
                       if (entry_j >= entry_i) {
-                        // printf("stopping j : %d > %d\n", entry_j, entry_i);
                         goto read;
                         // break;
                       }
                     }
                   }
                   // switch to the next word
-                  // printf("j: next word\n");
                   j_w++;
-                  if (j_w < Xc.col_nwords[j]) {
-                    word_j = Xc.compressed_indices[j][j_w];
+                  if (j_w < Xc.col_nwords[inter]) {
+                    word_j = Xc.compressed_indices[inter][j_w];
                     values_j = word_j.values;
                     j_size = group_size[word_j.selector];
                     j_wpos = 0;
@@ -1372,8 +1349,9 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               }
             }
             col_nz = pos;
-            active_set_append(as, k, col_j_cache, col_nz);
-            active_set_remove(as, k);
+            g_assert_true(pos == X2c.col_nz[k]);
+            // active_set_append(as, k, col_j_cache, col_nz);
+            // active_set_remove(as, k);
             clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
             int_col_time +=
                 ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
@@ -1384,10 +1362,11 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
           //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
           // either way, we now have sumn
           sumn = fabs(sumn);
-          if (sumn > last_max[j]) {
-            last_max[j] = sumn;
+          if (sumn > last_max[inter]) {
+            last_max[inter] = sumn;
           }
           if (sumn > lambda * n / 2) {
+            // if (TRUE) {
             active_set_append(as, k, col_j_cache, col_nz);
             increased_set = TRUE;
           } else {
@@ -1490,6 +1469,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
         // if the branch hasn't been pruned then we'll get an accurate estimate
         // for this rowsum from update_working_set.
         if (!wont_update[j]) {
+          // if (TRUE) {
           memcpy(last_rowsum[j], rowsum,
                  sizeof *rowsum * n); // TODO: probably overkill
           active_branches++;
@@ -1511,7 +1491,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     char increased_set =
         update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
-                           precalc_get_num, lambda, beta, thread_caches);
+                           precalc_get_num, lambda, beta, thread_caches, X2c);
     // update_working_set(Xc, rowsum, new_active_branch, active_set, last_max,
     //                   p, n, precalc_get_num, lambda, beta, thread_caches);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1521,7 +1501,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       // there's no need to re-run on the same set. Nothing has changed
       // and the remaining retests will all do nothing.
       printf("didn't increase set, no further iters\n");
-      break;
+      // break;
     }
     printf("active set size: %d, or %.2f \%\n", active_set->length,
            100 * (double)active_set->length / (double)p_int);
@@ -1668,8 +1648,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double **last_rowsum = malloc(sizeof *last_rowsum * p);
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
-    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 200);
-    memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n + 200);
+    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n);
+    memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
   }
 
   for (int j = 0; j < p; j++)
@@ -1726,7 +1706,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+    run_lambda_iters(&iter_vars_basic, lambda, rowsum);
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   basic_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
@@ -1765,7 +1745,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
   printf("getting time for pruned version\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  double *p_rowsum = malloc(sizeof *p_rowsum * n + 200);
+  double *p_rowsum = malloc(sizeof *p_rowsum * n);
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
