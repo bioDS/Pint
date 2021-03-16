@@ -3,6 +3,8 @@
 // #define verbose TRUE
 
 // max of either positive or negative contributions to rowsum sum.
+// TODO: we know every interaction after the first iter, can we give a better
+// estimate?
 double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum,
                             XMatrixSparse X, int k, int *column_cache) {
   int n = X.n;
@@ -96,7 +98,7 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
 }
 
 /**
- *  Branch pruning condition from Morvin & Vert
+ * Branch pruning condition from Morvin & Vert
  * returns True if the branch k should be pruned
  * w is the maximum sum over i of y[i] - rowsum[i]
  *      for any interaction with effect k at the last check.

@@ -45,6 +45,11 @@ typedef struct {
   XMatrixSparse X2c;
 } UpdateFixture;
 
+typedef struct {
+  int *col_i;
+  int *col_j;
+} Thread_Cache;
+
 const static double small_X2_correct_beta[630] = {
     -83.112248,  0.000000,   0.000000,    0.000000,    0.000000, 0.000000,
     0.000000,    -39.419762, 0.000000,    0.000000,    0.000000, 0.000000,
@@ -380,13 +385,19 @@ static void test_X2_from_X() {
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
                                                   gconstpointer use_big) {
   char *xfile, *yfile;
-  if (use_big) {
+  if (use_big == 2) {
+    printf("\nusing huge test case\n");
+    fixture->n = 10000;
+    fixture->p = 5000;
+    xfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv";
+    yfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv";
+  } else if (use_big == 1) {
     printf("\nusing large test case\n");
     fixture->n = 10000;
     fixture->p = 1000;
     xfile = "../X_nlethals50_v15803.csv";
     yfile = "../Y_nlethals50_v15803.csv";
-  } else {
+  } else if (use_big == 0) {
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
@@ -847,8 +858,12 @@ static void pruning_fixture_set_up(UpdateFixture *fixture,
   printf("getting sparse X\n");
   XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
   printf("getting sparse X2\n");
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   XMatrixSparse X2c =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+  x2_conversion_time = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+                       (end.tv_sec - start.tv_sec);
   fixture->Xc = Xc;
   fixture->X2c = X2c;
 }
@@ -1013,7 +1028,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
 typedef struct {
   XMatrixSparse Xc;
   double **last_rowsum;
-  int **thread_column_caches;
+  Thread_Cache *thread_caches;
   int n;
   double *beta;
   double *last_max;
@@ -1031,7 +1046,8 @@ typedef struct {
 double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
   XMatrixSparse Xc = vars->Xc;
   double **last_rowsum = vars->last_rowsum;
-  int **thread_column_caches = vars->thread_column_caches;
+  // int **thread_column_caches = vars->thread_column_caches;
+  Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
   double *beta = vars->beta;
   double *last_max = vars->last_max;
@@ -1063,7 +1079,7 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
       // for (int interaction = main_effect; interaction < p; interaction++) {
       Changes changes = update_beta_cyclic(
           X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
-          thread_column_caches[omp_get_thread_num()]);
+          thread_caches[omp_get_thread_num()].col_i);
       // k++;
       // }
     }
@@ -1111,8 +1127,8 @@ Active_Set active_set_new(int max_length) {
          sizeof *properties *
              max_length); // not strictly necessary, but probably safer.
   int length = 0;
-  Active_Set as = {entries, properties, length, max_length,
-                   NULL,    compressed_cols};
+  Active_Set as = {entries,    properties, length,
+                   max_length, NULL,       compressed_cols};
   return as;
 }
 
@@ -1141,8 +1157,8 @@ void active_set_append(Active_Set *as, int value, int *col, int len) {
     as->properties[value].was_present = TRUE;
     g_assert_true(as->length < as->max_length);
     S8bCol s8bCol = col_to_s8b_col(len, col);
-    // printf("new col has %d words, %d entries\n", s8bCol.col_nwords, s8bCol.col_nz);
-    // printf("adding col for effect %d\n", value);
+    // printf("new col has %d words, %d entries\n", s8bCol.col_nwords,
+    // s8bCol.col_nz); printf("adding col for effect %d\n", value);
     as->compressed_cols[value] = s8bCol;
   }
 }
@@ -1164,6 +1180,13 @@ struct RawCol {
   int *entries;
 };
 
+struct timespec sub_start;
+struct timespec sub_end;
+
+double reused_col_time = 0.0;
+double main_col_time = 0.0;
+double int_col_time = 0.0;
+
 // struct RawCol get_raw_interaction_col(XMatrixSparse Xc, int i, int j) {}
 
 /*
@@ -1172,15 +1195,43 @@ struct RawCol {
 char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                         Active_Set *as, double *last_max, int p, int n,
                         int_pair *precalc_get_num, double lambda, double *beta,
-                        int **thread_column_caches) {
+                        Thread_Cache *thread_caches) {
   char increased_set = FALSE;
-#pragma omp parallel for reduction(& : increased_set) schedule(static)
+#pragma omp parallel for reduction(& : increased_set) shared(last_max) schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time)
   for (long i = 0; i < p; i++) {
-    int *col_cache = thread_column_caches[omp_get_thread_num()];
+    Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
+    // TODO: read entire i column only once.
+    int *col_i_cache = thread_cache.col_i;
+    int *col_j_cache = thread_cache.col_j;
+    // printf("col_i_cache: %lx\n", col_i_cache);
+    // printf("col_j_cache: %lx\n", col_j_cache);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
+    int col_i_len = 0;
     if (!wont_update[i]) {
+      // read column i into col_i_cache.
+      {
+        int *column_entries = col_i_cache;
+        long col_entry_pos = 0;
+        long entry = -1;
+        for (int r = 0; r < Xc.col_nwords[i]; r++) {
+          S8bWord word = Xc.compressed_indices[i][r];
+          unsigned long values = word.values;
+          for (int j = 0; j <= group_size[word.selector]; j++) {
+            int diff = values & masks[word.selector];
+            if (diff != 0) {
+              entry += diff;
+              column_entries[col_entry_pos] = entry;
+              col_entry_pos++;
+            }
+            values >>= item_width[word.selector];
+          }
+        }
+        col_i_len = col_entry_pos;
+      }
+      clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
+      main_col_time += ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
+                       (sub_end.tv_sec - sub_start.tv_sec);
       for (long j = i; j < p; j++) {
-        // GQueue *current_col = g_queue_new();
-        // GQueue *current_col_actual = g_queue_new();
         // worked out by hand as being equivalent to the offset we would have
         // reached. sumb is the amount we would have reached w/o the limit -
         // the amount that was actually covered by the limit.
@@ -1196,6 +1247,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
 
           // we've already calculated the interaction, re-use it.
           if (as->properties[k].was_present) {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
             // printf("re-using column %d\n", k);
             S8bCol s8bCol = as->compressed_cols[k];
             col_nz = s8bCol.col_nz;
@@ -1207,14 +1259,15 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               for (int j = 0; j <= group_size[word.selector]; j++) {
                 tmpCount++;
                 int diff = values & masks[word.selector];
-                //if (diff > 700)
+                // if (diff > 700)
                 //  printf("diff: %d\n", diff);
                 if (diff != 0) {
                   entry += diff;
                   // column_entries[col_entry_pos] = entry;
                   if (entry > Xc.n) {
                     printf("entry: %d\n", entry);
-                    printf("col %d col_nz: %d, tmpCount: %d\n", k, col_nz, tmpCount);
+                    printf("col %d col_nz: %d, tmpCount: %d\n", k, col_nz,
+                           tmpCount);
                   }
                   g_assert_true(entry < Xc.n);
                   sumn += rowsum[entry];
@@ -1227,41 +1280,50 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                 values >>= item_width[word.selector];
               }
             }
+            clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
+            reused_col_time +=
+                ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
+                (sub_end.tv_sec - sub_start.tv_sec);
           } else {
+            clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
             // printf("calculating new column\n");
             // this column has never been in the workign set before, therefore
             // its beta value is zero and so is sumn.
             // calculate the interaction
             // and maybe store it read columns i and j simultaneously
-            int entry_i = -1;
+            // int entry_i = -1;
+            int i_pos = 0;
             int entry_j = -1;
             int pos = 0;
             // sum of rowsums for this column
-            int i_w = 0, j_w = 0;
-            if (Xc.col_nz[j] == 0 || Xc.col_nz[i] == 0) {
+            // int i_w = 0;
+            int j_w = 0;
+            if (Xc.col_nz[j] == 0) {
               break;
             }
-            S8bWord word_i = Xc.compressed_indices[i][i_w];
+            // S8bWord word_i = Xc.compressed_indices[i][i_w];
             S8bWord word_j = Xc.compressed_indices[j][j_w];
-            int i_wpos = 0, j_wpos = 0;
-            unsigned long values_i = word_i.values;
+            // int i_wpos = 0;
+            int j_wpos = 0;
+            // unsigned long values_i = word_i.values;
             unsigned long values_j = word_j.values;
-            int i_size = group_size[word_i.selector];
+            // int i_size = group_size[word_i.selector];
             int j_size = group_size[word_j.selector];
             // This whole loop is a bit awkward, but what can you do.
             // printf("interaction between %d (len %d) and %d (len %d)\n", i,
             //  Xc.col_nz[i], j, Xc.col_nz[j]);
           read:
-            while (i_w <= Xc.col_nwords[i] && j_w <= Xc.col_nwords[j]) {
-              g_assert_true(entry_i < Xc.n && entry_j < Xc.n);
+            while (i_pos < col_i_len && j_w <= Xc.col_nwords[j]) {
+              int entry_i = col_i_cache[i_pos];
               // printf("test, %d/%d vs %d/%d\n", i_w + 1, Xc.col_nwords[i],
               //  j_w + 1, Xc.col_nwords[j]);
               // printf("word i has %d entries\n", i_size);
-              if (entry_i == entry_j && entry_i > 0) {
+              if (entry_i == entry_j) {
                 // update interaction and move to next entry of each word
                 // printf("%d == %d\n", entry_i, entry_j);
+                // printf("pos: %d\n", pos);
                 sumn += rowsum[entry_i];
-                col_cache[pos] = entry_i;
+                col_j_cache[pos] = entry_i;
                 pos++;
                 g_assert_true(pos < Xc.n);
                 // i_wpos++;
@@ -1269,40 +1331,11 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                 // values_i >>= item_width[word_i.selector];
                 // values_j >>= item_width[word_j.selector];
               }
-              if (entry_i <= entry_j) {
-                // read through i until we hit the end, or reach or exceed j.
-                // current values will only be equal if we've just taken care of
-                // them.
-                while (i_w <= Xc.col_nwords[i]) {
-                  // current word
-                  while (i_wpos <= i_size) {
-                    // printf("i_wpos %d\n", i_wpos);
-                    int diff = values_i & masks[word_i.selector];
-                    i_wpos++;
-                    values_i >>= item_width[word_i.selector];
-                    if (diff != 0) {
-                      entry_i += diff;
-                      // printf("new entry: %d \t", entry_i);
-                      // we've found the next value of i
-                      // if it's equal we'll handle it earlier in the loop,
-                      // otherwise go to the j read loop.
-                      if (entry_i >= entry_j) {
-                        // printf("stopping i : %d > %d\n", entry_i, entry_j);
-                        goto read;
-                        // break;
-                      }
-                    }
-                  }
-                  // switch to the next word
-                  // printf("i: next word\n");
-                  i_w++;
-                  if (i_w < Xc.col_nwords[i]) {
-                    word_i = Xc.compressed_indices[i][i_w];
-                    values_i = word_i.values;
-                    i_size = group_size[word_i.selector];
-                    // printf("new word size: %d\n", i_size);
-                    i_wpos = 0;
-                  }
+              while (entry_i <= entry_j && i_pos < col_i_len) {
+                entry_i = col_i_cache[i_pos];
+                i_pos++;
+                if (entry_i == entry_j) {
+                  goto read;
                 }
               }
               if (entry_j <= entry_i) {
@@ -1339,19 +1372,23 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               }
             }
             col_nz = pos;
-            active_set_append(as, k, col_cache, col_nz);
+            active_set_append(as, k, col_j_cache, col_nz);
             active_set_remove(as, k);
+            clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
+            int_col_time +=
+                ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
+                (sub_end.tv_sec - sub_start.tv_sec);
           }
           sumn += beta[k] * col_nz;
-          if (k == 85)
-            printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
+          // if (k == 85)
+          //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
           // either way, we now have sumn
           sumn = fabs(sumn);
           if (sumn > last_max[j]) {
             last_max[j] = sumn;
           }
           if (sumn > lambda * n / 2) {
-            active_set_append(as, k, col_cache, col_nz);
+            active_set_append(as, k, col_j_cache, col_nz);
             increased_set = TRUE;
           } else {
             active_set_remove(as, k);
@@ -1373,11 +1410,11 @@ static double pruning_time = 0.0;
 static double working_set_update_time = 0.0;
 static double subproblem_time = 0.0;
 
-void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
-                             double *old_rowsum, Active_Set *active_set) {
+int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
+                            double *old_rowsum, Active_Set *active_set) {
   XMatrixSparse Xc = vars->Xc;
   double **last_rowsum = vars->last_rowsum;
-  int **thread_column_caches = vars->thread_column_caches;
+  Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
   double *beta = vars->beta;
   double *last_max = vars->last_max;
@@ -1388,11 +1425,13 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
   double *Y = vars->Y;
   double *max_int_delta = vars->max_int_delta;
   int_pair *precalc_get_num = vars->precalc_get_num;
+  long new_nz_beta = 0;
   // active_set[i] if and only if the pair precalc_get_num[i] is in the
   // active set.
   gsl_permutation *iter_permutation = vars->iter_permutation;
   gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
   gsl_permutation *perm;
+  char *new_active_branch = malloc(sizeof *new_active_branch * p);
 
   double error = 0.0;
   for (int i = 0; i < n; i++) {
@@ -1408,8 +1447,13 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
    * for the first iter will be small, and therefore not really worht
    * it? (i.e. slow and unreliable).
    * TODO: suffers quite badly when numa updates are allowed
+   *        - check if this is only true for small p (openmp tests seem to only
+   * improve with p >= 5k)
    */
-  for (int retests = 0; retests < 1; retests++) {
+  // TODO: with multiple iters, many branches are added on the second iter. This
+  // doesn't seem right.
+  for (int retests = 0; retests < 100; retests++) {
+    printf("test %d\n", retests + 1);
     long total_changed = 0;
     long total_unchanged = 0;
     int total_changes = 0;
@@ -1419,41 +1463,64 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     memset(last_max, 0, sizeof *last_max * p);
 
     //********** Branch Pruning       *******************
+    printf("branch pruning. ");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     long active_branches = 0;
-#pragma omp parallel for schedule(static)
+    long new_active_branches = 0;
+#pragma omp parallel for schedule(static) reduction(+:new_active_branches) shared(new_active_branch)
     for (int j = 0; j < p; j++) {
+      int old_wont_update = wont_update[j];
       wont_update[j] =
           wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum,
-                             thread_column_caches[omp_get_thread_num()],
-                             beta); // TODO: use correct cache
+                             thread_caches[omp_get_thread_num()].col_j, beta);
+      new_active_branch[j] = old_wont_update && !wont_update[j];
+      if (new_active_branch[j])
+        new_active_branches++;
     }
-    for (int j = 0; j < p; j++) {
-      if (!wont_update[j]) {
-        memcpy(last_rowsum[j], rowsum, sizeof *rowsum * n); //TODO: probably overkill
-        active_branches++;
+    // this slows things down on multiple numa nodes. There must be something
+    // going on with rowsum/last_rowsum?
+    // #pragma omp threadprivate(local_rowsum) num_threads(NumCores)
+    // #pragma omp parallel num_threads(NumCores) shared(last_rowsum)
+    {
+// int *local_rowsum = malloc(n * sizeof *rowsum);
+// printf("local_rowsum: %x\n");
+// memcpy(local_rowsum, rowsum, n * sizeof *rowsum);
+#pragma omp parallel for schedule(static) reduction(+ : active_branches)
+      for (int j = 0; j < p; j++) {
+        // if the branch hasn't been pruned then we'll get an accurate estimate
+        // for this rowsum from update_working_set.
+        if (!wont_update[j]) {
+          memcpy(last_rowsum[j], rowsum,
+                 sizeof *rowsum * n); // TODO: probably overkill
+          active_branches++;
+        }
       }
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     pruning_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                     (end.tv_sec - start.tv_sec);
-    printf("%d active branches\n", active_branches);
+    printf("(%d active branches, %d new)\n", active_branches,
+           new_active_branches);
     if (active_branches == 0) {
       break;
     }
     //********** Identify Working Set *******************
     // TODO: is it worth constructing a new set with no 'blank'
     // elements?
+    printf("updating working set.\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     char increased_set =
         update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
-                           precalc_get_num, lambda, beta, thread_column_caches);
+                           precalc_get_num, lambda, beta, thread_caches);
+    // update_working_set(Xc, rowsum, new_active_branch, active_set, last_max,
+    //                   p, n, precalc_get_num, lambda, beta, thread_caches);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     working_set_update_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                                (end.tv_sec - start.tv_sec);
     if (retests > 0 && !increased_set) {
       // there's no need to re-run on the same set. Nothing has changed
       // and the remaining retests will all do nothing.
+      printf("didn't increase set, no further iters\n");
       break;
     }
     printf("active set size: %d, or %.2f \%\n", active_set->length,
@@ -1473,35 +1540,67 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       // printf("permutation has size %d\n", perm->size);
     }
     //********** Solve subproblem     *******************
+    printf("solving subproblem.\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     int iter = 0;
     for (iter = 0; iter < 100; iter++) {
       double prev_error = error;
       // update entire working set
       // TODO: we should shuffle the active set, not the matrix
-      if (active_set->length > NumCores) {
-        parallel_shuffle(perm, permutation_split_size, final_split_size,
-                         permutation_splits);
-      }
-      //parallel_shuffle(iter_permutation, permutation_split_size,
+      // if (active_set->length > NumCores) {
+      //  parallel_shuffle(perm, permutation_split_size, final_split_size,
+      //                   permutation_splits);
+      //}
+      // parallel_shuffle(iter_permutation, permutation_split_size,
       //                 final_split_size, permutation_splits);
-#pragma omp parallel for num_threads(NumCores) schedule(static) shared(X2c, Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent)
-      for (int ki = 0; ki < active_set->length; ki++) {
-        int k = active_set->entries[perm->data[ki]];
-        if (active_set->properties[k].present) {
-          total_present++;
-          Changes changes = update_beta_cyclic(
-              X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
-              thread_column_caches[omp_get_thread_num()]);
-          if (changes.actual_diff == 0.0) {
-            total_unchanged++;
+#pragma omp parallel for num_threads(NumCores) schedule(static) shared(X2c, Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta)
+      for (int i = 0; i < p; i++) {
+        for (int j = i; j < p; j++) {
+          int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
+                   (i - 1)) /
+                      2 +
+                  j;
+          if (active_set->properties[k].present) {
+            total_present++;
+            int was_zero = FALSE;
+            if (beta[k] == 0.0) {
+              was_zero = TRUE;
+            }
+            Changes changes = update_beta_cyclic(
+                X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
+                thread_caches[omp_get_thread_num()].col_i);
+            if (changes.actual_diff == 0.0) {
+              total_unchanged++;
+            } else {
+              total_changed++;
+            }
+            if (was_zero && changes.actual_diff != 0) {
+              new_nz_beta++;
+            }
+            if (!was_zero && beta[k] == 0) {
+              new_nz_beta--;
+            }
           } else {
-            total_changed++;
+            total_notpresent++;
           }
-        } else {
-          total_notpresent++;
         }
       }
+      // for (int ki = 0; ki < active_set->length; ki++) {
+      //  int k = active_set->entries[perm->data[ki]];
+      //  if (active_set->properties[k].present) {
+      //    total_present++;
+      //    Changes changes = update_beta_cyclic(
+      //        X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
+      //        thread_caches[omp_get_thread_num()].col_i);
+      //    if (changes.actual_diff == 0.0) {
+      //      total_unchanged++;
+      //    } else {
+      //      total_changed++;
+      //    }
+      //  } else {
+      //    total_notpresent++;
+      //  }
+      //}
       // check whether we need another iteration
       error = 0.0;
       for (int i = 0; i < n; i++) {
@@ -1513,7 +1612,6 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
         break;
       }
     }
-    printf("iter: %d\n", iter);
     // printf("active set length: %d, present: %d not: %d\n",
     // active_set->length, total_present, total_notpresent);
     // g_assert_true(total_present/iter+total_notpresent/iter ==
@@ -1530,7 +1628,9 @@ void run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     }
   }
 
+  free(new_active_branch);
   gsl_rng_free(rng);
+  return new_nz_beta;
 }
 
 static void check_branch_pruning_faster(UpdateFixture *fixture,
@@ -1547,20 +1647,29 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 0.5;
+  const double LAMBDA_MIN = 50;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
+
+  Thread_Cache thread_caches[NumCores];
+
+  for (int i = 0; i < NumCores; i++) {
+    thread_caches[i].col_i = malloc(sizeof(int) * n);
+    thread_caches[i].col_j = malloc(sizeof(int) * n);
+  }
 
   XMatrixSparse Xc = fixture->Xc;
   XMatrixSparse X2c = fixture->X2c;
 
   int *wont_update = malloc(sizeof *wont_update * p);
+#pragma omp parallel for schedule(static)
   for (int j = 0; j < p; j++)
     wont_update[j] = 0;
 
   double **last_rowsum = malloc(sizeof *last_rowsum * p);
+#pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
-    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n);
-    memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
+    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 200);
+    memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n + 200);
   }
 
   for (int j = 0; j < p; j++)
@@ -1592,7 +1701,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   Iter_Vars iter_vars_basic = {
       Xc,
       last_rowsum,
-      fixture->column_caches,
+      thread_caches,
       n,
       beta,
       last_max,
@@ -1610,14 +1719,14 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("getting time for un-pruned version\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
+  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
     // double lambda = lambda_sequence[lambda_ind];
     printf("lambda: %f\n", lambda);
     double dBMax;
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+    // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   basic_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
@@ -1625,6 +1734,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("time: %f s\n", basic_cpu_time_used);
 
   double *beta_pruning = malloc(sizeof *beta_pruning * p_int);
+#pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
     last_max[i] = 0.0;
@@ -1639,7 +1749,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   Iter_Vars iter_vars_pruned = {
       Xc,
       last_rowsum,
-      fixture->column_caches,
+      thread_caches,
       n,
       beta_pruning,
       last_max,
@@ -1655,26 +1765,28 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
   printf("getting time for pruned version\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  double *p_rowsum = malloc(sizeof *p_rowsum * n);
+  double *p_rowsum = malloc(sizeof *p_rowsum * n + 200);
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   Active_Set active_set = active_set_new(p_int);
-  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
+  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
     // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
     // double lambda = lambda_sequence[lambda_ind];
     double dBMax;
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum, &active_set);
+    run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
+                            &active_set);
   }
   active_set_free(active_set);
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   pruned_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                          (end.tv_sec - start.tv_sec);
-  printf("basic time: %.2fs \t pruned time %.2f s\n", basic_cpu_time_used,
+  printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
+         basic_cpu_time_used + x2_conversion_time, x2_conversion_time,
          pruned_cpu_time_used);
 
   // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
@@ -1728,6 +1840,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   g_assert_true(
       fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
 
+  printf("working set upates were: %.2f main effect col, %.2f int col, %.2f "
+         "reused col\n",
+         main_col_time, int_col_time, reused_col_time);
+
   printf("checking beta values come out the same\n");
   // for (int k = 0; k < p_int; k++) {
   for (int k = 0; k < 10; k++) {
@@ -1775,10 +1891,13 @@ int main(int argc, char *argv[]) {
   g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
              pruning_fixture_set_up, check_branch_pruning,
              pruning_fixture_tear_down);
-  g_test_add("/func/test-branch-pruning-faster", UpdateFixture, FALSE,
+  g_test_add("/func/test-branch-pruning-faster", UpdateFixture, 0,
              pruning_fixture_set_up, check_branch_pruning_faster,
              pruning_fixture_tear_down);
-  g_test_add("/func/test-branch-pruning-faster-big", UpdateFixture, TRUE,
+  g_test_add("/func/test-branch-pruning-faster-big", UpdateFixture, 1,
+             pruning_fixture_set_up, check_branch_pruning_faster,
+             pruning_fixture_tear_down);
+  g_test_add("/func/test-branch-pruning-faster-bigger", UpdateFixture, 2,
              pruning_fixture_set_up, check_branch_pruning_faster,
              pruning_fixture_tear_down);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
