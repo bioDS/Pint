@@ -1350,23 +1350,22 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             }
             col_nz = pos;
             g_assert_true(pos == X2c.col_nz[k]);
-            // active_set_append(as, k, col_j_cache, col_nz);
-            // active_set_remove(as, k);
+            active_set_append(as, k, col_j_cache, col_nz);
+            active_set_remove(as, k);
             clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
             int_col_time +=
                 ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
                 (sub_end.tv_sec - sub_start.tv_sec);
           }
-          sumn += beta[k] * col_nz;
           // if (k == 85)
           //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
           // either way, we now have sumn
           sumn = fabs(sumn);
+          sumn += fabs(beta[k] * col_nz);
           if (sumn > last_max[inter]) {
             last_max[inter] = sumn;
           }
           if (sumn > lambda * n / 2) {
-            // if (TRUE) {
             active_set_append(as, k, col_j_cache, col_nz);
             increased_set = TRUE;
           } else {
@@ -1469,7 +1468,6 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
         // if the branch hasn't been pruned then we'll get an accurate estimate
         // for this rowsum from update_working_set.
         if (!wont_update[j]) {
-          // if (TRUE) {
           memcpy(last_rowsum[j], rowsum,
                  sizeof *rowsum * n); // TODO: probably overkill
           active_branches++;
@@ -1501,7 +1499,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       // there's no need to re-run on the same set. Nothing has changed
       // and the remaining retests will all do nothing.
       printf("didn't increase set, no further iters\n");
-      // break;
+      break;
     }
     printf("active set size: %d, or %.2f \%\n", active_set->length,
            100 * (double)active_set->length / (double)p_int);
@@ -1627,7 +1625,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 50;
+  const double LAMBDA_MIN = 0.5;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
