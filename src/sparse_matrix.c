@@ -55,7 +55,6 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
       // GQueue *current_col = g_queue_new();
       // GQueue *current_col_actual = g_queue_new();
       Queue *current_col = queue_new();
-      Queue *current_col_actual = queue_new();
       // worked out by hand as being equivalent to the offset we would have
       // reached.
       long a = min(i, p - d); // number of iters limited by d.
@@ -144,12 +143,8 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
         count++;
       }
 
-      // TODO: remove thise
-      // push actual columns for testing purposes
-      queue_free(current_col_actual);
       queue_free(current_col);
       current_col = NULL;
-      current_col_actual = NULL;
     }
     iter_done++;
     if (p >= 100 && iter_done % (p / 100) == 0) {
@@ -197,31 +192,6 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
     parallel_shuffle(permutation, permutation_split_size, final_split_size,
                      permutation_splits);
   }
-  // TODO: remove
-  S8bWord **permuted_indices = malloc(p_int * sizeof(S8bWord *));
-  pad_int *permuted_nz = malloc(p_int * sizeof(*permuted_nz));
-  int *permuted_nwords = malloc(p_int * sizeof(int));
-#pragma omp parallel for shared(permuted_indices, permuted_nz,                 \
-                                permuted_nwords) schedule(static)
-  for (long i = 0; i < p_int; i++) {
-    permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
-    permuted_nz[i].val = X2.col_nz[permutation->data[i]].val;
-    permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
-    if (permutation->data[i] < 0 || permutation->data[i] >= p_int) {
-      fprintf(stderr, "invalid permutation entry %ld !(0 <= %ld < %ld)\n", i,
-              permutation->data[i], p_int);
-    }
-  }
-  free(X2.compressed_indices);
-  free(X2.col_nz);
-  free(X2.col_nwords);
-  free(r);
-  for (int i = 0; i < NumCores; i++)
-    free(thread_r[i]);
-
-  X2.compressed_indices = permuted_indices;
-  X2.col_nz = permuted_nz;
-  X2.col_nwords = permuted_nwords;
   X2.permutation = permutation;
   global_permutation = permutation;
   global_permutation_inverse = gsl_permutation_alloc(permutation->size);
