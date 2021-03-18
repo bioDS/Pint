@@ -95,10 +95,10 @@ double *simple_coordinate_descent_lasso(
   int largest_col = 0;
   long total_col = 0;
   for (int i = 0; i < p_int; i++) {
-    if (X2.col_nz[i] > largest_col) {
-      largest_col = X2.col_nz[i];
+    if (X2.col_nz[i].val > largest_col) {
+      largest_col = X2.col_nz[i].val;
     }
-    total_col += X2.col_nz[i];
+    total_col += X2.col_nz[i].val;
   }
   int main_sum = 0;
   for (int i = 0; i < p; i++)
@@ -202,7 +202,7 @@ double *simple_coordinate_descent_lasso(
       if (beta[k] == 0.0) {
         was_zero = TRUE;
       }
-      Changes changes = update_beta_cyclic(
+      Changes changes = update_beta_cyclic_old(
           X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num,
           thread_column_caches[omp_get_thread_num()]);
       double diff = changes.actual_diff;
@@ -220,7 +220,7 @@ double *simple_coordinate_descent_lasso(
         dBMax = diff2;
       }
       total_updates++;
-      total_updates_entries += X2.col_nz[k];
+      total_updates_entries += X2.col_nz[k].val;
     }
 
     if (!set_min_lambda) {
@@ -312,8 +312,9 @@ double *simple_coordinate_descent_lasso(
   Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
   // Rprintf("lasso done in %.4f seconds, columns skipped %ld out of %ld a.k.a
   // (%f%%)\n", cpu_time_used, skipped_updates, total_updates,
-  // (skipped_updates*100.0)/((long)total_updates)); Rprintf("cols: performed %ld
-  // zero updates (%f%%)\n", zero_updates, ((float)zero_updates/(total_updates))
+  // (skipped_updates*100.0)/((long)total_updates)); Rprintf("cols: performed
+  // %ld zero updates (%f%%)\n", zero_updates,
+  // ((float)zero_updates/(total_updates))
   // * 100); Rprintf("skipped entries %ld out of %ld a.k.a (%f%%)\n",
   // skipped_updates_entries, total_updates_entries,
   // (skipped_updates_entries*100.0)/((long)total_updates_entries));
@@ -396,12 +397,15 @@ double *simple_coordinate_descent_lasso(
   return beta;
 }
 
-Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y,
-                           double *rowsum, int n, int p, double lambda,
-                           double *beta, long k, double intercept,
-                           int_pair *precalc_get_num, int *column_entry_cache) {
-  double sumk = xmatrix_sparse.col_nz[k];
-  double sumn = xmatrix_sparse.col_nz[k] * beta[k];
+Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
+                               double *rowsum, int n, int p, double lambda,
+                               double *beta, long k, double intercept,
+                               int_pair *precalc_get_num,
+                               int *column_entry_cache) {
+  double sumk = xmatrix_sparse.col_nz[k].val;
+  double sumn = xmatrix_sparse.col_nz[k].val * beta[k];
+  // double sumk = col.col_nz;
+  // double sumn = col.col_nz * beta[k];
   int *column_entries = column_entry_cache;
 
   // if (k==2905) {
@@ -442,14 +446,64 @@ Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, double *Y,
   Bk_diff = beta[k] - Bk_diff;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
-    for (int e = 0; e < xmatrix_sparse.col_nz[k]; e++) {
+    for (int e = 0; e < xmatrix_sparse.col_nz[k].val; e++) {
       int i = column_entries[e];
 #pragma omp atomic
       rowsum[i] += Bk_diff;
     }
   } else {
     zero_updates++;
-    zero_updates_entries += xmatrix_sparse.col_nz[k];
+    zero_updates_entries += xmatrix_sparse.col_nz[k].val;
+  }
+
+  Changes changes;
+  changes.actual_diff = Bk_diff;
+  changes.pre_lambda_diff = sumn;
+
+  return changes;
+}
+Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
+                           double lambda, double *beta, long k,
+                           double intercept, int_pair *precalc_get_num,
+                           int *column_entry_cache) {
+  double sumk = col.col_nz;
+  double sumn = col.col_nz * beta[k];
+  int *column_entries = column_entry_cache;
+
+  long col_entry_pos = 0;
+  long entry = -1;
+  for (int i = 0; i < col.col_nwords; i++) {
+    alignas(64) S8bWord word = col.compressed_indices[i];
+    unsigned long values = word.values;
+    for (int j = 0; j <= group_size[word.selector]; j++) {
+      int diff = values & masks[word.selector];
+      if (diff != 0) {
+        entry += diff;
+        column_entries[col_entry_pos] = entry;
+        sumn += intercept - rowsum[entry];
+        col_entry_pos++;
+      }
+      values >>= item_width[word.selector];
+    }
+  }
+
+  double Bk_diff = beta[k];
+  if (sumk == 0.0) {
+    beta[k] = 0.0;
+  } else {
+    beta[k] = soft_threshold(sumn, lambda * n / 2) / sumk;
+  }
+  Bk_diff = beta[k] - Bk_diff;
+  // update every rowsum[i] w/ effects of beta change.
+  if (Bk_diff != 0) {
+    for (int e = 0; e < col.col_nz; e++) {
+      int i = column_entries[e];
+#pragma omp atomic
+      rowsum[i] += Bk_diff;
+    }
+  } else {
+    zero_updates++;
+    zero_updates_entries += col.col_nz;
   }
 
   Changes changes;

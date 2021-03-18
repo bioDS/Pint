@@ -215,10 +215,10 @@ static void test_update_beta_cyclic(UpdateFixture *fixture,
   printf("beta[27]: %f\n", fixture->beta[27]);
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-  update_beta_cyclic(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
-                     fixture->n, fixture->p, fixture->lambda, fixture->beta,
-                     fixture->k, fixture->intercept, fixture->precalc_get_num,
-                     fixture->column_caches);
+  update_beta_cyclic_old(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
+                         fixture->n, fixture->p, fixture->lambda, fixture->beta,
+                         fixture->k, fixture->intercept,
+                         fixture->precalc_get_num, fixture->column_caches);
   printf("beta[27]: %f\n", fixture->beta[27]);
   g_assert_true(fixture->beta[27] != 0.0);
   g_assert_true(fixture->beta[27] < -263.94);
@@ -278,12 +278,13 @@ static void test_compressed_main_X() {
     col_entry_pos = 0;
     for (int i = 0; i < n; i++) {
       // printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
-      if (col_entry_pos > Xs.col_nz[k] || column_entries[col_entry_pos] < i) {
+      if (col_entry_pos > Xs.col_nz[k].val ||
+          column_entries[col_entry_pos] < i) {
         if (xm.X[k][i] != 0) {
           printf("\n[%d][%d] is not in the index but should be", k, i);
           g_assert_true(FALSE);
         }
-      } else if (Xs.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
+      } else if (Xs.col_nz[k].val > 0 && column_entries[col_entry_pos] == i) {
         if (xm.X[k][i] != 1) {
           printf("\n[%d][%d] missing from \n", k, i);
           g_assert_true(FALSE);
@@ -365,12 +366,13 @@ static void test_X2_from_X() {
     col_entry_pos = 0;
     for (int i = 0; i < n; i++) {
       // printf("\ncolumn %d contains %d entries", k, X2s.col_nz[k]);
-      if (col_entry_pos > X2s.col_nz[k] || column_entries[col_entry_pos] < i) {
+      if (col_entry_pos > X2s.col_nz[k].val ||
+          column_entries[col_entry_pos] < i) {
         if (xm2.X[k][i] != 0) {
           printf("\n[%d][%d] is not in the index but should be", k, i);
           g_assert_true(FALSE);
         }
-      } else if (X2s.col_nz[k] > 0 && column_entries[col_entry_pos] == i) {
+      } else if (X2s.col_nz[k].val > 0 && column_entries[col_entry_pos] == i) {
         if (xm2.X[k][i] != 1) {
           printf("\n[%d][%d] missing from \n", k, i);
           g_assert_true(FALSE);
@@ -484,7 +486,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
       // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
       int k = fixture->xmatrix_sparse.permutation->data[i];
       // int k = i;
-      Changes changes = update_beta_cyclic(
+      Changes changes = update_beta_cyclic_old(
           fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n,
           fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num,
           fixture->column_caches[0]);
@@ -594,8 +596,8 @@ static void check_X2_encoding() {
     col_sizes[j] = queue_get_length(col_q);
     col_nz_indices[j] = malloc(sizeof *col_nz_indices[j] * col_sizes[j]);
     printf(" real col size: %d, \tcompressed col contains %d entries \n",
-           col_sizes[j], xmatrix_sparse.col_nz[j]);
-    g_assert_true(col_sizes[j] == xmatrix_sparse.col_nz[j]);
+           col_sizes[j], xmatrix_sparse.col_nz[j].val);
+    g_assert_true(col_sizes[j] == xmatrix_sparse.col_nz[j].val);
     int pos = 0;
     while (!queue_is_empty(col_q)) {
       col_nz_indices[j][pos] = queue_pop_head(col_q);
@@ -610,8 +612,8 @@ static void check_X2_encoding() {
   long total = 0;
   int no_entries = 0;
   for (int i = 0; i < p_int; i++) {
-    no_entries += xmatrix_sparse.col_nz[i];
-    for (int j = 0; j < xmatrix_sparse.col_nz[i]; j++) {
+    no_entries += xmatrix_sparse.col_nz[i].val;
+    for (int j = 0; j < xmatrix_sparse.col_nz[i].val; j++) {
       total += col_nz_indices[i][j];
     }
   }
@@ -622,7 +624,7 @@ static void check_X2_encoding() {
   int prev_entry = 0;
   for (int i = 0; i < p_int; i++) {
     prev_entry = 0;
-    for (int j = 0; j < xmatrix_sparse.col_nz[i]; j++) {
+    for (int j = 0; j < xmatrix_sparse.col_nz[i].val; j++) {
       total += col_nz_indices[i][j] - prev_entry;
       prev_entry = col_nz_indices[i][j];
     }
@@ -654,7 +656,7 @@ static void check_X2_encoding() {
   }
   max_size_given_entries[60] = 0;
 
-  printf("num entries in col 0: %d\n", xmatrix_sparse.col_nz[0]);
+  printf("num entries in col 0: %d\n", xmatrix_sparse.col_nz[0].val);
   int *col_entries = malloc(60 * sizeof(int));
   int count = 0;
   // GList *s8b_col = NULL;
@@ -663,7 +665,7 @@ static void check_X2_encoding() {
   int largest_entry = 0;
   int max_bits = max_size_given_entries[0];
   int diff = col_nz_indices[0][0] + 1;
-  for (int i = 0; i < xmatrix_sparse.col_nz[0]; i++) {
+  for (int i = 0; i < xmatrix_sparse.col_nz[0].val; i++) {
     if (i != 0)
       diff = col_nz_indices[0][i] - col_nz_indices[0][i - 1];
     // printf("current no. %d, diff %d. available bits %d\n",
@@ -740,15 +742,15 @@ static void check_X2_encoding() {
       }
     }
     printf("col %d, checked %d out of %d present\n", k, checked, col_sizes[k]);
-    g_assert_true(checked == xmatrix_sparse.col_nz[k]);
+    g_assert_true(checked == xmatrix_sparse.col_nz[k].val);
   }
 
   int bytes = length * sizeof(S8bWord);
   printf("col[0] contains %d words, for a toal of %d bytes, instead of %d "
          "shorts (%d bytes). Effective reduction %f\n",
-         length, bytes, xmatrix_sparse.col_nz[0],
-         xmatrix_sparse.col_nz[0] * sizeof(short),
-         (double)bytes / (xmatrix_sparse.col_nz[0] * sizeof(short)));
+         length, bytes, xmatrix_sparse.col_nz[0].val,
+         xmatrix_sparse.col_nz[0].val * sizeof(short),
+         (double)bytes / (xmatrix_sparse.col_nz[0].val * sizeof(short)));
 
   printf("liblasso vs test compressed first col:\n");
   for (int i = 0; i < xmatrix_sparse.col_nwords[0]; i++) {
@@ -859,13 +861,13 @@ static void pruning_fixture_set_up(UpdateFixture *fixture,
   XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
   printf("getting sparse X2\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  XMatrixSparse X2c =
-      sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+  // XMatrixSparse X2c =
+  //    sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   x2_conversion_time = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                        (end.tv_sec - start.tv_sec);
   fixture->Xc = Xc;
-  fixture->X2c = X2c;
+  // fixture->X2c = X2c;
 }
 
 static void pruning_fixture_tear_down(UpdateFixture *fixture,
@@ -925,8 +927,9 @@ static void check_branch_pruning(UpdateFixture *fixture,
     wont_update[j] = 0;
 
   double **last_rowsum = malloc(sizeof *last_rowsum * p);
+#pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
-    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n);
+    last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + PADDING);
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
   }
 
@@ -974,9 +977,9 @@ static void check_branch_pruning(UpdateFixture *fixture,
       for (int main_effect = 0; main_effect < p; main_effect++) {
         for (int interaction = main_effect; interaction < p; interaction++) {
           double old = beta[k];
-          Changes changes =
-              update_beta_cyclic(X2c, fixture->Y, rowsum, n, p, lambda, beta, k,
-                                 0, fixture->precalc_get_num, column_cache);
+          Changes changes = update_beta_cyclic_old(
+              X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0,
+              fixture->precalc_get_num, column_cache);
           dBMax = changes.actual_diff;
           double new = beta[k];
           if (!working_set[k] && fabs(changes.pre_lambda_diff) >
@@ -1077,7 +1080,7 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
     for (int k = 0; k < p_int; k++) {
       // for (int main_effect = 0; main_effect < p; main_effect++) {
       // for (int interaction = main_effect; interaction < p; interaction++) {
-      Changes changes = update_beta_cyclic(
+      Changes changes = update_beta_cyclic_old(
           X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
           thread_caches[omp_get_thread_num()].col_i);
       // k++;
@@ -1108,68 +1111,74 @@ struct AS_Properties {
 };
 
 typedef struct {
-  int *entries;
-  struct AS_Properties *properties;
+  // int *entries;
+  // struct AS_Properties *properties;
+  struct AS_Entry *entries;
   int length;
   int max_length;
   gsl_permutation *permutation;
-  S8bCol *compressed_cols;
+  // S8bCol *compressed_cols;
 } Active_Set;
 
+/*
+ * Fits 6 to a cache line. As long as schedule is static, this should be fine.
+ */
+struct AS_Entry {
+  long val : 62;
+  int was_present : 1;
+  int present : 1;
+  S8bCol col;
+  // TODO: shouldn't need this
+  // char padding[39];
+};
+
 Active_Set active_set_new(int max_length) {
-  int *entries = malloc(sizeof *entries * max_length);
-  S8bCol *compressed_cols = malloc(sizeof *compressed_cols * max_length);
-  struct AS_Properties *properties = malloc(sizeof *properties * max_length);
+  struct AS_Entry *entries = malloc(sizeof *entries * max_length);
+  // N.B this is what sets was_present to false for every entry
   memset(entries, 0,
          sizeof *entries *
              max_length); // not strictly necessary, but probably safer.
-  memset(properties, 0,
-         sizeof *properties *
-             max_length); // not strictly necessary, but probably safer.
   int length = 0;
-  Active_Set as = {entries,    properties, length,
-                   max_length, NULL,       compressed_cols};
+  Active_Set as = {entries, length, max_length, NULL};
   return as;
 }
 
 void active_set_free(Active_Set as) {
+  for (int i = 0; i < as.length; i++) {
+    struct AS_Entry *e = &as.entries[i];
+    if (NULL != e->col.compressed_indices) {
+      free(e->col.compressed_indices);
+    }
+  }
   free(as.entries);
-  free(as.properties);
   if (NULL != as.permutation)
     free(as.permutation);
-  if (NULL != as.compressed_cols) {
-    for (int i = 0; i < as.length; i++) {
-      if (NULL != as.compressed_cols[i].compressed_indices)
-        free(as.compressed_cols[i].compressed_indices);
-    }
-    free(as.compressed_cols);
-  }
 }
 
 void active_set_append(Active_Set *as, int value, int *col, int len) {
-  if (as->properties[value].was_present) {
-    as->properties[value].present = TRUE;
+  struct AS_Entry *e = &as->entries[value];
+  if (e->was_present) {
+    e->present = TRUE;
   } else {
     int i = as->length;
-    as->entries[i] = value;
-    as->length++;
-    as->properties[value].present = TRUE;
-    as->properties[value].was_present = TRUE;
+    e->val = value;
+    e->present = TRUE;
+    e->was_present = TRUE;
     g_assert_true(as->length < as->max_length);
-    S8bCol s8bCol = col_to_s8b_col(len, col);
     // printf("new col has %d words, %d entries\n", s8bCol.col_nwords,
     // s8bCol.col_nz); printf("adding col for effect %d\n", value);
-    as->compressed_cols[value] = s8bCol;
+    e->col = col_to_s8b_col(len, col);
   }
 }
 
 void active_set_remove(Active_Set *as, int index) {
-  as->properties[index].present = FALSE;
+  as->entries[index].present = FALSE;
 }
 
 int active_set_get_index(Active_Set *as, int index) {
-  if (as->properties[index].present) {
-    return as->entries[index];
+  struct AS_Entry *e = &as->entries[index];
+  if (e->present) {
+    return e->val;
   } else {
     return -INT_MAX;
   }
@@ -1197,7 +1206,8 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                         int_pair *precalc_get_num, double lambda, double *beta,
                         Thread_Cache *thread_caches, XMatrixSparse X2c) {
   char increased_set = FALSE;
-#pragma omp parallel for reduction(& : increased_set) shared(last_max) schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time)
+  long length_increase = 0;
+#pragma omp parallel for reduction(& : increased_set) shared(last_max) schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, length_increase)
   for (long main = 0; main < p; main++) {
     Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
     int *col_i_cache = thread_cache.col_i;
@@ -1223,7 +1233,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
           }
         }
         main_col_len = col_entry_pos;
-        g_assert_true(main_col_len == Xc.col_nz[main]);
+        g_assert_true(main_col_len == Xc.col_nz[main].val);
       }
       int read_loops = 0;
       clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
@@ -1245,10 +1255,10 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
         if (!wont_update[inter]) {
 
           // we've already calculated the interaction, re-use it.
-          if (as->properties[k].was_present) {
+          if (as->entries[k].was_present) {
             clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
             // printf("re-using column %d\n", k);
-            S8bCol s8bCol = as->compressed_cols[k];
+            S8bCol s8bCol = as->entries[k].col;
             col_nz = s8bCol.col_nz;
             int entry = -1;
             int tmpCount = 0;
@@ -1349,8 +1359,9 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               }
             }
             col_nz = pos;
-            g_assert_true(pos == X2c.col_nz[k]);
+            // g_assert_true(pos == X2c.col_nz[k]);
             active_set_append(as, k, col_j_cache, col_nz);
+            length_increase++;
             active_set_remove(as, k);
             clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
             int_col_time +=
@@ -1381,6 +1392,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
       }
     }
   }
+  as->length += length_increase;
   return increased_set;
 }
 
@@ -1538,7 +1550,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
                    (i - 1)) /
                       2 +
                   j;
-          if (active_set->properties[k].present) {
+          if (active_set->entries[k].present) {
             // TODO: apply permutation here.
             total_present++;
             int was_zero = FALSE;
@@ -1546,8 +1558,8 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
               was_zero = TRUE;
             }
             Changes changes = update_beta_cyclic(
-                X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
-                thread_caches[omp_get_thread_num()].col_i);
+                active_set->entries[k].col, Y, rowsum, n, p, lambda, beta, k, 0,
+                precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
             if (changes.actual_diff == 0.0) {
               total_unchanged++;
             } else {
@@ -1568,7 +1580,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       //  int k = active_set->entries[perm->data[ki]];
       //  if (active_set->properties[k].present) {
       //    total_present++;
-      //    Changes changes = update_beta_cyclic(
+      //    Changes changes = update_beat_cyclic_old(
       //        X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
       //        thread_caches[omp_get_thread_num()].col_i);
       //    if (changes.actual_diff == 0.0) {
@@ -1626,7 +1638,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 0.5;
+  const double LAMBDA_MIN = 50;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
@@ -1705,7 +1717,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+    // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   basic_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
@@ -1767,6 +1779,14 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
          basic_cpu_time_used + x2_conversion_time, x2_conversion_time,
          pruned_cpu_time_used);
+  printf("pruning time is composed of %.2f pruning, %.2f working set "
+         "updates, "
+         "and %.2f subproblem time\n",
+         pruning_time, working_set_update_time, subproblem_time);
+
+  printf("working set upates were: %.2f main effect col, %.2f int col, %.2f "
+         "reused col\n",
+         main_col_time, int_col_time, reused_col_time);
 
   // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
   double *basic_rowsum = malloc(sizeof *basic_rowsum * n);
@@ -1775,6 +1795,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     basic_rowsum[i] = -Y[i];
     pruned_rowsum[i] = -Y[i];
   }
+  return;
   for (int k = 0; k < p_int; k++) {
     int entry = -1;
     for (int i = 0; i < X2c.col_nwords[k]; i++) {

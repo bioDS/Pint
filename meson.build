@@ -1,5 +1,5 @@
 project('lasso', 'c',
-	default_options : ['c_std=gnu99'])
+	default_options : ['c_std=c11'])
 
 conf_data = configuration_data()
 conf_data.set('NOT_R', true)

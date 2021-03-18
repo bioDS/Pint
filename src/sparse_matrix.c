@@ -36,8 +36,8 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
 
   // TODO: granted all these pointers are the same size, but it's messy
   X2.compressed_indices = malloc(p_int * sizeof(int *));
-  X2.col_nz = malloc(p_int * sizeof(int));
-  memset(X2.col_nz, 0, p_int * sizeof(int));
+  X2.col_nz = malloc(p_int * sizeof(*X2.col_nz));
+  memset(X2.col_nz, 0, p_int * sizeof(*X2.col_nz));
   X2.col_nwords = malloc(p_int * sizeof(int));
   memset(X2.col_nwords, 0, p_int * sizeof(int));
 
@@ -131,8 +131,10 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
 
       // push all our words to an array in X2
       // printf("%d\n", colno);
+      // X2.compressed_indices[colno] = malloc(length * sizeof(S8bWord) +
+      // PADDING);
       X2.compressed_indices[colno] = malloc(length * sizeof(S8bWord));
-      X2.col_nz[colno] = total_nz_entries;
+      X2.col_nz[colno].val = total_nz_entries;
       X2.col_nwords[colno] = length;
       count = 0;
       while (!queue_is_empty(current_col)) {
@@ -160,7 +162,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   long total_entries = 0;
   for (int i = 0; i < p_int; i++) {
     total_words += X2.col_nwords[i];
-    total_entries += X2.col_nz[i];
+    total_entries += X2.col_nz[i].val;
   }
   printf("mean nz entries: %f\n", (double)total_entries / (double)p_int);
   printf("mean words: %f\n", (double)total_count / (double)total_words);
@@ -197,13 +199,13 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   }
   // TODO: remove
   S8bWord **permuted_indices = malloc(p_int * sizeof(S8bWord *));
-  int *permuted_nz = malloc(p_int * sizeof(int));
+  pad_int *permuted_nz = malloc(p_int * sizeof(*permuted_nz));
   int *permuted_nwords = malloc(p_int * sizeof(int));
 #pragma omp parallel for shared(permuted_indices, permuted_nz,                 \
                                 permuted_nwords) schedule(static)
   for (long i = 0; i < p_int; i++) {
     permuted_indices[i] = X2.compressed_indices[permutation->data[i]];
-    permuted_nz[i] = X2.col_nz[permutation->data[i]];
+    permuted_nz[i].val = X2.col_nz[permutation->data[i]].val;
     permuted_nwords[i] = X2.col_nwords[permutation->data[i]];
     if (permutation->data[i] < 0 || permutation->data[i] >= p_int) {
       fprintf(stderr, "invalid permutation entry %ld !(0 <= %ld < %ld)\n", i,

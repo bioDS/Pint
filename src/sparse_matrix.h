@@ -14,7 +14,7 @@ typedef struct Column_Set {
 } Column_Set;
 
 typedef struct XMatrixSparse {
-  int *col_nz;
+  pad_int *col_nz;
   int *col_nwords;
   // unsigned short **col_nz_indices;
   gsl_permutation *permutation;

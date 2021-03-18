@@ -6,6 +6,7 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_rng.h>
 #include <math.h>
+#include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +17,13 @@
 #else
 #include <R.h>
 #endif
+
+typedef struct {
+  long val;
+  // disable padding for now, pretty sure we don't need it.
+  // alignas(64) long val;
+  // char padding[64 - sizeof(long)];
+} pad_int;
 
 typedef struct {
   int i;
@@ -55,6 +63,9 @@ int_pair *get_all_nums(int p, int max_interaction_distance);
 // are all ids the same size?
 #define ID_LEN 20
 #define BUF_SIZE 16384
+
+// pad by an entire cache line, just to be safe.
+#define PADDING 64
 
 extern int NumCores;
 extern long permutation_splits;

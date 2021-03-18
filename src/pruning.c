@@ -1,91 +1,78 @@
 #include "liblasso.h"
+#include <stdalign.h>
 #define verbose FALSE
 // #define verbose TRUE
+
+// Force all paramaters for this function onto a single cache line.
+struct pe_params {
+  alignas(64) long n;
+  long colsize;
+  double pos_max;
+  double neg_max;
+  double estimate;
+  long i;
+  double diff_i;
+  long ind;
+  // char padding[] __attribute__((alignment(16)));
+};
 
 // max of either positive or negative contributions to rowsum sum.
 // TODO: we know every interaction after the first iter, can we give a better
 // estimate?
 double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum,
                             XMatrixSparse X, int k, int *column_cache) {
-  int n = X.n;
-  int colsize = X.col_nz[k];
-  double pos_max = 0.0, neg_max = 0.0;
-  int count = 0;
-  for (int ind = 0; ind < colsize; ind++) {
-    int i = column_cache[ind];
-    double diff_i = rowsum[i] - alpha * last_rowsum[i];
-    // if (verbose && k==interesting_col) {
-    // printf("rowsum[%d] = %f\n", i, rowsum[i]);
-    // printf("i: %d, diff_i = %f:  %f - %f\n", i, diff_i, rowsum[i],
-    // alpha*last_rowsum[i]);
-    // }
-    if (diff_i > 0) {
-      pos_max += (diff_i);
+  struct pe_params p = {X.n, X.col_nz[k].val, 0.0, 0.0, 0.0, 0, 0.0};
+  for (p.ind = 0; p.ind < p.colsize; p.ind++) {
+    p.i = column_cache[p.ind];
+    p.diff_i = rowsum[p.i] - alpha * last_rowsum[p.i];
+    if (p.diff_i > 0) {
+      p.pos_max += (p.diff_i);
     } else {
-      neg_max += diff_i;
+      p.neg_max += p.diff_i;
     }
-    count++;
   }
-  double estimate = fmaxf(pos_max, fabs(neg_max));
-  if (verbose && k == interesting_col) {
-    printf("added %d entries\n", count);
-    printf("pos_max: %f, neg_max: %f\n", pos_max, neg_max);
-    printf("pressimistic remainder estimate: %f\n", estimate);
-  }
-  return estimate;
+  p.estimate = fmaxf(p.pos_max, fabs(p.neg_max));
+  return p.estimate;
 }
 
 double exact_multiple() {}
 
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
-// TODO: exclude interactions already in the working set
 double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
                             double last_max, double *last_rowsum,
                             double *rowsum, int *column_cache) {
   double alpha = 0.0;
   // read through the compressed column
+  // TODO: make these an aligned struct?
   double estimate_squared = 0.0;
   double real_squared = 0.0;
   int entry = -1;
   int col_entry_pos = 0;
-  if (verbose && k == interesting_col) {
-    printf("X col %d contains %d entries\t", k, X.col_nz[k]);
-    printf("last_rowsum: %d\n", last_rowsum);
-  }
+  // forcing alignment puts values on it's own cache line, so which seems to
+  // help.
   for (int i = 0; i < X.col_nwords[k]; i++) {
-    S8bWord word = X.compressed_indices[k][i];
-    unsigned long values = word.values;
-    for (int j = 0; j <= group_size[word.selector]; j++) {
-      int diff = values & masks[word.selector];
+    alignas(64) S8bWord word = X.compressed_indices[k][i];
+    alignas(64) long values = word.values;
+    for (alignas(64) int j = 0; j <= group_size[word.selector]; j++) {
+      long diff = values & masks[word.selector];
       if (diff != 0) {
         entry += diff;
         column_cache[col_entry_pos] = entry;
         col_entry_pos++;
 
         // do whatever we need here with the index below:
-        if (k == interesting_col) {
-          // printf("entry: %d\n", entry);
-        }
-        if (k == interesting_col && (entry == 0 || entry == 999)) {
-          // printf("ri: %f, l_ri: %f\n", rowsum[entry], last_rowsum[entry]);
-        }
         estimate_squared += rowsum[entry] * last_rowsum[entry];
         real_squared += last_rowsum[entry] * last_rowsum[entry];
       }
       values >>= item_width[word.selector];
     }
   }
-  // printf("col_entry_pos: %d\n", col_entry_pos);
   if (real_squared != 0.0)
     alpha = fabs(estimate_squared / real_squared);
   else
     alpha = 0.0;
   if (verbose && k == interesting_col)
     printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
-
-  // if (alpha == 1.0) {
-  //    alpha = 0.99;
-  //}
 
   double remainder =
       pessimistic_estimate(alpha, last_rowsum, rowsum, X, k, column_cache);
