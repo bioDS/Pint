@@ -21,7 +21,7 @@ struct pe_params {
 // estimate?
 double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum,
                             XMatrixSparse X, int k, int *column_cache) {
-  struct pe_params p = {X.n, X.col_nz[k].val, 0.0, 0.0, 0.0, 0, 0.0};
+  struct pe_params p = {X.n, X.cols[k].nz, 0.0, 0.0, 0.0, 0, 0.0};
   for (p.ind = 0; p.ind < p.colsize; p.ind++) {
     p.i = column_cache[p.ind];
     p.diff_i = rowsum[p.i] - alpha * last_rowsum[p.i];
@@ -50,8 +50,8 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
   int col_entry_pos = 0;
   // forcing alignment puts values on it's own cache line, so which seems to
   // help.
-  for (int i = 0; i < X.col_nwords[k]; i++) {
-    alignas(64) S8bWord word = X.compressed_indices[k][i];
+  for (int i = 0; i < X.cols[k].nwords; i++) {
+    alignas(64) S8bWord word = X.cols[k].compressed_indices[i];
     alignas(64) long values = word.values;
     for (alignas(64) int j = 0; j <= group_size[word.selector]; j++) {
       long diff = values & masks[word.selector];

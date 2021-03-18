@@ -6,12 +6,10 @@ XMatrixSparse sparsify_X(int **X, int n, int p) {
 
 void free_sparse_matrix(XMatrixSparse X) {
   for (int i = 0; i < X.p; i++) {
-    free(X.compressed_indices[i]);
+    free(X.cols[i].compressed_indices);
   }
-  free(X.compressed_indices);
+  free(X.cols);
   gsl_permutation_free(X.permutation);
-  free(X.col_nz);
-  free(X.col_nwords);
 }
 
 /**
@@ -35,11 +33,13 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   printf("p_int: %d\n", p_int);
 
   // TODO: granted all these pointers are the same size, but it's messy
-  X2.compressed_indices = malloc(p_int * sizeof(int *));
-  X2.col_nz = malloc(p_int * sizeof(*X2.col_nz));
-  memset(X2.col_nz, 0, p_int * sizeof(*X2.col_nz));
-  X2.col_nwords = malloc(p_int * sizeof(int));
-  memset(X2.col_nwords, 0, p_int * sizeof(int));
+  // X2.compressed_indices = malloc(p_int * sizeof(int *));
+  // X2.col_nz = malloc(p_int * sizeof(*X2.col_nz));
+  // memset(X2.col_nz, 0, p_int * sizeof(*X2.col_nz));
+  // X2.col_nwords = malloc(p_int * sizeof(int));
+  // memset(X2.col_nwords, 0, p_int * sizeof(int));
+
+  X2.cols = malloc(sizeof *X2.cols * p_int);
 
   int done_percent = 0;
   long total_count = 0;
@@ -128,20 +128,17 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
       free(col_entries);
       length = queue_get_length(current_col);
 
-      // push all our words to an array in X2
-      // printf("%d\n", colno);
-      // X2.compressed_indices[colno] = malloc(length * sizeof(S8bWord) +
-      // PADDING);
-      X2.compressed_indices[colno] = malloc(length * sizeof(S8bWord));
-      X2.col_nz[colno].val = total_nz_entries;
-      X2.col_nwords[colno] = length;
+      S8bWord *indices = malloc(sizeof *indices * length);
       count = 0;
       while (!queue_is_empty(current_col)) {
         S8bWord *current_word = queue_pop_head(current_col);
-        X2.compressed_indices[colno][count] = *current_word;
+        indices[count] = *current_word;
         free(current_word);
         count++;
       }
+
+      S8bCol new_col = {indices, total_nz_entries, length};
+      X2.cols[colno] = new_col;
 
       queue_free(current_col);
       current_col = NULL;
@@ -156,8 +153,8 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   long total_words = 0;
   long total_entries = 0;
   for (int i = 0; i < p_int; i++) {
-    total_words += X2.col_nwords[i];
-    total_entries += X2.col_nz[i].val;
+    total_words += X2.cols[i].nwords;
+    total_entries += X2.cols[i].nz;
   }
   printf("mean nz entries: %f\n", (double)total_entries / (double)p_int);
   printf("mean words: %f\n", (double)total_count / (double)total_words);

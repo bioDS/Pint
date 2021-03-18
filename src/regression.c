@@ -77,8 +77,8 @@ double *simple_coordinate_descent_lasso(
   memset(col_ysum, 0, p_int * sizeof(double));
   for (int col = 0; col < p_int; col++) {
     int entry = -1;
-    for (int i = 0; i < X2.col_nwords[col]; i++) {
-      S8bWord word = X2.compressed_indices[col][i];
+    for (int i = 0; i < X2.cols[col].nwords; i++) {
+      S8bWord word = X2.cols[col].compressed_indices[i];
       unsigned long values = word.values;
       for (int j = 0; j <= group_size[word.selector]; j++) {
         int diff = values & masks[word.selector];
@@ -95,10 +95,10 @@ double *simple_coordinate_descent_lasso(
   int largest_col = 0;
   long total_col = 0;
   for (int i = 0; i < p_int; i++) {
-    if (X2.col_nz[i].val > largest_col) {
-      largest_col = X2.col_nz[i].val;
+    if (X2.cols[i].nz > largest_col) {
+      largest_col = X2.cols[i].nz;
     }
-    total_col += X2.col_nz[i].val;
+    total_col += X2.cols[i].nz;
   }
   int main_sum = 0;
   for (int i = 0; i < p; i++)
@@ -140,8 +140,8 @@ double *simple_coordinate_descent_lasso(
     // we need to recalculate the rowsums
     for (int col = 0; col < p_int; col++) {
       int entry = -1;
-      for (int i = 0; i < X2.col_nwords[col]; i++) {
-        S8bWord word = X2.compressed_indices[col][i];
+      for (int i = 0; i < X2.cols[col].nwords; i++) {
+        S8bWord word = X2.cols[col].compressed_indices[i];
         unsigned long values = word.values;
         for (int j = 0; j <= group_size[word.selector]; j++) {
           int diff = values & masks[word.selector];
@@ -220,7 +220,7 @@ double *simple_coordinate_descent_lasso(
         dBMax = diff2;
       }
       total_updates++;
-      total_updates_entries += X2.col_nz[k].val;
+      total_updates_entries += X2.cols[k].nz;
     }
 
     if (!set_min_lambda) {
@@ -329,8 +329,8 @@ double *simple_coordinate_descent_lasso(
   memset(temp_rowsum, 0, n * sizeof(double));
   for (long col = 0; col < p_int; col++) {
     int entry = -1;
-    for (int i = 0; i < X2.col_nwords[col]; i++) {
-      S8bWord word = X2.compressed_indices[col][i];
+    for (int i = 0; i < X2.cols[col].nwords; i++) {
+      S8bWord word = X2.cols[col].compressed_indices[i];
       unsigned long values = word.values;
       for (int j = 0; j <= group_size[word.selector]; j++) {
         int diff = values & masks[word.selector];
@@ -367,14 +367,7 @@ double *simple_coordinate_descent_lasso(
 
   // free beta sets
   // free X2
-  for (long i = 0; i < p_int; i++) {
-    if (X2.col_nwords[i] > 0) {
-      free(X2.compressed_indices[i]);
-    }
-  }
-  free(X2.compressed_indices);
-  free(X2.col_nz);
-  free(X2.col_nwords);
+  free_sparse_matrix(X2);
   free(col_ysum);
   gsl_permutation_free(iter_permutation);
   gsl_rng_free(iter_rng);
@@ -402,10 +395,10 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
                                double *beta, long k, double intercept,
                                int_pair *precalc_get_num,
                                int *column_entry_cache) {
-  double sumk = xmatrix_sparse.col_nz[k].val;
-  double sumn = xmatrix_sparse.col_nz[k].val * beta[k];
-  // double sumk = col.col_nz;
-  // double sumn = col.col_nz * beta[k];
+  double sumk = xmatrix_sparse.cols[k].nz;
+  double sumn = xmatrix_sparse.cols[k].nz * beta[k];
+  // double sumk = col.nz;
+  // double sumn = col.nz * beta[k];
   int *column_entries = column_entry_cache;
 
   // if (k==2905) {
@@ -413,8 +406,8 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
   //}
   long col_entry_pos = 0;
   long entry = -1;
-  for (int i = 0; i < xmatrix_sparse.col_nwords[k]; i++) {
-    S8bWord word = xmatrix_sparse.compressed_indices[k][i];
+  for (int i = 0; i < xmatrix_sparse.cols[k].nwords; i++) {
+    S8bWord word = xmatrix_sparse.cols[k].compressed_indices[i];
     unsigned long values = word.values;
     for (int j = 0; j <= group_size[word.selector]; j++) {
       int diff = values & masks[word.selector];
@@ -446,14 +439,14 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
   Bk_diff = beta[k] - Bk_diff;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
-    for (int e = 0; e < xmatrix_sparse.col_nz[k].val; e++) {
+    for (int e = 0; e < xmatrix_sparse.cols[k].nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic
       rowsum[i] += Bk_diff;
     }
   } else {
     zero_updates++;
-    zero_updates_entries += xmatrix_sparse.col_nz[k].val;
+    zero_updates_entries += xmatrix_sparse.cols[k].nz;
   }
 
   Changes changes;
@@ -466,13 +459,13 @@ Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
                            double lambda, double *beta, long k,
                            double intercept, int_pair *precalc_get_num,
                            int *column_entry_cache) {
-  double sumk = col.col_nz;
-  double sumn = col.col_nz * beta[k];
+  double sumk = col.nz;
+  double sumn = col.nz * beta[k];
   int *column_entries = column_entry_cache;
 
   long col_entry_pos = 0;
   long entry = -1;
-  for (int i = 0; i < col.col_nwords; i++) {
+  for (int i = 0; i < col.nwords; i++) {
     alignas(64) S8bWord word = col.compressed_indices[i];
     unsigned long values = word.values;
     for (int j = 0; j <= group_size[word.selector]; j++) {
@@ -496,14 +489,14 @@ Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
   Bk_diff = beta[k] - Bk_diff;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
-    for (int e = 0; e < col.col_nz; e++) {
+    for (int e = 0; e < col.nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic
       rowsum[i] += Bk_diff;
     }
   } else {
     zero_updates++;
-    zero_updates_entries += col.col_nz;
+    zero_updates_entries += col.nz;
   }
 
   Changes changes;

@@ -5,8 +5,8 @@ typedef struct S8bWord {
 
 typedef struct {
   S8bWord *compressed_indices;
-  unsigned int col_nz;
-  unsigned int col_nwords;
+  unsigned int nz;
+  unsigned int nwords;
 } S8bCol;
 
 static int item_width[16] = {0, 0, 1,  2,  3,  4,  5,  6,

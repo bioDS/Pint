@@ -73,8 +73,8 @@ S8bCol col_to_s8b_col(int size, int *col) {
   // push all our words to an array in the new col
   S8bCol s8bCol;
   s8bCol.compressed_indices = malloc(length * sizeof(S8bWord));
-  s8bCol.col_nz = total_nz_entries;
-  s8bCol.col_nwords = length;
+  s8bCol.nz = total_nz_entries;
+  s8bCol.nwords = length;
   count = 0;
   while (!queue_is_empty(current_col)) {
     S8bWord *current_word = queue_pop_head(current_col);
