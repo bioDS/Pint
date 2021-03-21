@@ -851,19 +851,21 @@ int check_didnt_update(int p, int p_int, int *wont_update, double *beta) {
 }
 
 static void pruning_fixture_set_up(UpdateFixture *fixture,
-                                   gconstpointer user_data) {
-  test_simple_coordinate_descent_set_up(fixture, user_data);
+                                   gconstpointer use_big) {
+  test_simple_coordinate_descent_set_up(fixture, use_big);
   printf("getting sparse X\n");
   XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
   printf("getting sparse X2\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  // XMatrixSparse X2c =
-  //    sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+  if (use_big < 2) {
+    XMatrixSparse X2c =
+        sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+    fixture->X2c = X2c;
+  }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   x2_conversion_time = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                        (end.tv_sec - start.tv_sec);
   fixture->Xc = Xc;
-  // fixture->X2c = X2c;
 }
 
 static void pruning_fixture_tear_down(UpdateFixture *fixture,
@@ -1356,6 +1358,10 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             }
             col_nz = pos;
             // g_assert_true(pos == X2c.nz[k]);
+            // N.B. putting everything we use in the active set, but marking it
+            // as inactive. this speeds up future checks quite significantly, at
+            // the cost of increased memory use. For a gpu implenentation we
+            // probably don't want this.
             active_set_append(as, k, col_j_cache, col_nz);
             length_increase++;
             active_set_remove(as, k);
@@ -1428,16 +1434,15 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
   for (int i = 0; i < n; i++) {
     error += rowsum[i] * rowsum[i];
   }
-  double prev_error = error;
 
   // allocate a local copy of rowsum for each thread
   int **thread_rowsums[NumCores];
-#pragma omp parallel for
-  for (int i = 0; i < NumCores; i++) {
-    int *tr = malloc(sizeof *rowsum * n + 64);
-    memcpy(tr, rowsum, sizeof *rowsum * n);
-    thread_rowsums[omp_get_thread_num()] = tr;
-  }
+  //#pragma omp parallel for
+  //  for (int i = 0; i < NumCores; i++) {
+  //    int *tr = malloc(sizeof *rowsum * n + 64);
+  //    memcpy(tr, rowsum, sizeof *rowsum * n);
+  //    thread_rowsums[omp_get_thread_num()] = tr;
+  //  }
 
   printf("\nrunning lambda %f\n", lambda);
   // run several iterations of will_update to make sure we catch any new
@@ -1459,29 +1464,33 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     int total_changes = 0;
     int total_present = 0;
     int total_notpresent = 0;
-    memset(max_int_delta, 0, sizeof *max_int_delta * p);
-    memset(last_max, 0, sizeof *last_max * p);
+// memset(max_int_delta, 0, sizeof *max_int_delta * p);
+// memset(last_max, 0, sizeof *last_max * p);
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < p; i++) {
+      max_int_delta[i] = 0;
+      last_max[i] = 0;
+    }
 
     //********** Branch Pruning       *******************
     printf("branch pruning. ");
     long active_branches = 0;
     long new_active_branches = 0;
 
-    // make a local copy of rowsum for each thread
-#pragma omp parallel for
-    for (int i = 0; i < NumCores; i++) {
-      memcpy(thread_rowsums[omp_get_thread_num()], rowsum, sizeof *rowsum * n);
-    }
-
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    // make a local copy of rowsum for each thread
+    //#pragma omp parallel for
+    //    for (int i = 0; i < NumCores; i++) {
+    //      memcpy(thread_rowsums[omp_get_thread_num()], rowsum, sizeof *rowsum
+    //      * n);
+    //    }
+
 #pragma omp parallel for schedule(static) reduction(+ : new_active_branches)
     for (int j = 0; j < p; j++) {
       int old_wont_update = wont_update[j];
       wont_update[j] =
-          wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
-                             thread_rowsums[omp_get_thread_num()],
+          wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum,
                              thread_caches[omp_get_thread_num()].col_j, beta);
-      // new_active_branch[j] = old_wont_update && !wont_update[j];
       char new_active_branch = old_wont_update && !wont_update[j];
       if (new_active_branch)
         new_active_branches++;
@@ -1494,6 +1503,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
 // int *local_rowsum = malloc(n * sizeof *rowsum);
 // printf("local_rowsum: %x\n");
 // memcpy(local_rowsum, rowsum, n * sizeof *rowsum);
+// TODO: parallelising this loop slows down numa updates.
 #pragma omp parallel for schedule(static) reduction(+ : active_branches)
       for (int j = 0; j < p; j++) {
         // if the branch hasn't been pruned then we'll get an accurate estimate
@@ -1638,10 +1648,10 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     }
   }
 
-#pragma omp parallel for
-  for (int i = 0; i < NumCores; i++) {
-    free(thread_rowsums[omp_get_thread_num()]);
-  }
+  //#pragma omp parallel for
+  //  for (int i = 0; i < NumCores; i++) {
+  //    free(thread_rowsums[omp_get_thread_num()]);
+  //  }
 
   // free(new_active_branch);
   gsl_rng_free(rng);
@@ -1662,7 +1672,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 50;
+  const double LAMBDA_MIN = 0.5;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
@@ -1741,7 +1751,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+    if (Xc.p <= 1000) {
+      run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+    }
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   basic_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
@@ -1779,11 +1791,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   };
 
   printf("getting time for pruned version\n");
-  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   double *p_rowsum = malloc(sizeof *p_rowsum * n);
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   Active_Set active_set = active_set_new(p_int);
   for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
@@ -1797,13 +1809,13 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
                             &active_set);
   }
 
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   printf("addresses maybe of interest:\n");
   printf("Xc.cols:       %lx\n", Xc.cols);
   printf("last_rowsum:   %lx\n", last_rowsum);
   printf("p_rowsum:      %lx\n", p_rowsum);
   printf("wont_update:   %lx\n", wont_update);
   active_set_free(active_set);
-  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
   pruned_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                          (end.tv_sec - start.tv_sec);
   printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
@@ -1825,7 +1837,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     basic_rowsum[i] = -Y[i];
     pruned_rowsum[i] = -Y[i];
   }
-  return;
+  if (Xc.p > 1000) {
+    return;
+  }
   for (int k = 0; k < p_int; k++) {
     int entry = -1;
     for (int i = 0; i < X2c.cols[k].nwords; i++) {
