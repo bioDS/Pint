@@ -14,13 +14,16 @@ typedef struct Column_Set {
 } Column_Set;
 
 typedef struct XMatrixSparse {
-  // pad_int *col_nz;
-  // int *col_nwords;
+  pad_int *col_nz;
+  int *col_nwords;
+  unsigned long *col_start;
   // unsigned short **col_nz_indices;
   gsl_permutation *permutation;
   // S8bWord **compressed_indices;
+  S8bWord *compressed_indices;
   long n;
   long p;
+  long total_words;
   S8bCol *cols;
 } XMatrixSparse;
 

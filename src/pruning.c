@@ -98,12 +98,14 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
 int wont_update_effect(XMatrixSparse X, double lambda, int k, double last_max,
                        double *last_rowsum, double *rowsum, int *column_cache,
                        double *beta) {
-  double upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum,
-                                            rowsum, column_cache);
+  int *cache = malloc(X.n * sizeof *column_cache);
+  double upper_bound =
+      l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, cache);
   if (verbose && k == interesting_col) {
     printf("beta[%d] = %f\n", k, beta[k]);
     printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound,
            lambda * (X.n / 2));
   }
+  free(cache);
   return upper_bound <= lambda * (X.n / 2);
 }

@@ -159,6 +159,30 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   printf("mean nz entries: %f\n", (double)total_entries / (double)p_int);
   printf("mean words: %f\n", (double)total_count / (double)total_words);
   printf("mean size: %f\n", (double)total_sum / (double)total_entries);
+  X2.total_words = total_words;
+
+  S8bWord *compressed_indices =
+      malloc(total_words * sizeof *compressed_indices);
+  unsigned long *col_start = malloc(p_int * sizeof *col_start);
+  int *col_nz = malloc(p_int * sizeof *col_nz);
+  unsigned long offset = 0;
+  for (int i = 0; i < p_int; i++) {
+    col_start[i] = offset;
+    col_nz[i] = X2.cols[i].nz;
+    for (int w = 0; w < X2.cols[i].nwords; w++) {
+      compressed_indices[col_start[i] + w] = X2.cols[i].compressed_indices[w];
+      if (compressed_indices[col_start[i] + w].values !=
+          X2.cols[i].compressed_indices[w].values) {
+        printf("error!\n");
+      }
+      offset++;
+    }
+    total_words += X2.cols[i].nwords;
+    total_entries += X2.cols[i].nz;
+  }
+  X2.col_start = col_start;
+  X2.compressed_indices = compressed_indices;
+  X2.col_nz = X2.compressed_indices;
 
   gsl_rng *r;
   gsl_permutation *permutation = gsl_permutation_alloc(p_int);

@@ -1,5 +1,5 @@
 project('lasso', 'c',
-	default_options : ['c_std=c11'])
+	default_options : ['c_std=gnu11'])
 
 conf_data = configuration_data()
 conf_data.set('NOT_R', true)
@@ -9,6 +9,7 @@ configuration_inc = include_directories('.')
 add_project_arguments([
   '-I' + meson.build_root(),
   '-ffast-math',
+  '-fno-stack-protector',
   '-Ofast'
 ], language: 'c')
 
