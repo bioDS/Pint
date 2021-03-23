@@ -1241,10 +1241,18 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
   printf("col_start: %lx\n", Xc.col_start);
   printf("append: %lx\n", append);
   printf("remove: %lx\n", remove);
-#pragma omp target teams distribute parallel for reduction(& : increased_set) \
- reduction(+: length_increase) map(to: rowsum[:n], last_max[:p], beta[:p], \
-  wont_update[:p], entries[:p_int], Xc.cols[:p], Xc.compressed_indices[:Xc.total_words], Xc.col_start[:p]) \
-  map(tofrom: append[:p_int], remove[:p_int]) schedule(static,1)
+#pragma omp target teams distribute map(                                       \
+    to                                                                         \
+    : rowsum[:n], last_max                                                     \
+            [:p], beta                                                         \
+            [:p], wont_update                                                  \
+            [:p], entries                                                      \
+            [:p_int], Xc.cols                                                  \
+            [:p], Xc.compressed_indices                                        \
+            [:Xc.total_words], Xc.col_start                                    \
+            [:p]) map(tofrom                                                   \
+                      : append[:p_int], remove                                 \
+                              [:p_int])
   for (long main = 0; main < p; main++) {
     // for (long main = p - 2; main < p; main++) {
     // Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
@@ -1279,10 +1287,11 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
         // g_assert_true(main_col_len == Xc.cols[main].nz);
       }
       int read_loops = 0;
-      // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
-      // main_col_time += ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9
-      // +
-      //                 (sub_end.tv_sec - sub_start.tv_sec);
+// clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
+// main_col_time += ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9
+// +
+//                 (sub_end.tv_sec - sub_start.tv_sec);
+#pragma omp parallel for reduction(& : increased_set) reduction(+: length_increase) schedule(static, 1)
       for (long inter = main; inter < p; inter++) {
         int col_j_cache[n];
         // TODO: no need to re-read the main column when inter == main.
@@ -1817,7 +1826,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 5;
+  const double LAMBDA_MIN = 500;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
