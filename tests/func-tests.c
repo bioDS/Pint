@@ -1214,10 +1214,74 @@ struct to_append {
   int length;
 };
 
+static unsigned int *target_X;
+static unsigned int *target_size;
+static unsigned int *target_col_offsets;
+
+void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
+  int n = Xc->n;
+  int p = Xc->p;
+
+  target_X = omp_target_alloc(Xc->total_entries * sizeof *target_X,
+                              omp_get_default_device());
+  target_size =
+      omp_target_alloc(p * sizeof *target_size, omp_get_default_device());
+  target_col_offsets = omp_target_alloc(p * sizeof *target_col_offsets,
+                                        omp_get_default_device());
+  printf("total entries: %d\n", Xc->total_entries);
+  unsigned int *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
+  unsigned int *temp_offset = malloc(p * sizeof *temp_offset);
+  unsigned int *temp_size = malloc(p * sizeof *temp_offset);
+  memset(temp_X, 0, Xc->total_entries * sizeof *temp_X);
+  long offset = 0;
+  for (int k = 0; k < p; k++) {
+    temp_offset[k] = offset;
+    temp_size[k] = Xc->cols[k].nz;
+    int *col = &temp_X[offset];
+    // read column
+    {
+      int col_entry_pos = 0;
+      int entry = -1;
+      for (int i = 0; i < Xc->cols[k].nwords; i++) {
+        S8bWord word = Xc->cols[k].compressed_indices[i];
+        unsigned long values = word.values;
+        for (int j = 0; j <= group_size[word.selector]; j++) {
+          int diff = values & masks[word.selector];
+          if (diff != 0) {
+            entry += diff;
+            col[col_entry_pos] = entry;
+            col_entry_pos++;
+            offset++;
+          }
+          values >>= item_width[word.selector];
+        }
+      }
+      // offset += col_entry_pos;
+    }
+  }
+  // memcpy(target_size, Xc.col_nz, n * sizeof *target_size);
+  omp_target_memcpy(target_size, temp_size, p * sizeof *target_size, 0, 0,
+                    omp_get_default_device(), omp_get_initial_device());
+  omp_target_memcpy(target_col_offsets, temp_offset, p * sizeof *temp_offset, 0,
+                    0, omp_get_default_device(), omp_get_initial_device());
+  omp_target_memcpy(target_X, temp_X, Xc->total_entries * sizeof *target_size,
+                    0, 0, omp_get_default_device(), omp_get_initial_device());
+  free(temp_X);
+  // target_X = temp_X;
+  free(temp_offset);
+  free(temp_size);
+  // target_col_offsets = temp_offset;
+}
+
 /*
  * Returns true if and only if something was added to the active set.
  * TODO: for each branch, use set p booleans (bit-field in struct w/ accessor?)
  * to set whether they should be updated?
+ * TODO: running to lambda 500 on bigger we spend more time in memcpy than
+ * calculations.
+ * - move calculation of dense main columns into own loop and only do it once.
+ * - keep Xc (or more likely the decompressed version) on the gpu, don't copy it
+ * back and forth.
  */
 char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
                         Active_Set *as, double *last_max, int p, int n,
@@ -1241,10 +1305,8 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
   printf("col_start: %lx\n", Xc.col_start);
   printf("append: %lx\n", append);
   printf("remove: %lx\n", remove);
-#pragma omp target teams distribute map(                                       \
-    to                                                                         \
-    : rowsum[:n], last_max                                                     \
-            [:p], beta                                                         \
+#pragma omp target teams distribute parallel for map(to : rowsum[:n], \
+    last_max[:p], beta                                                         \
             [:p], wont_update                                                  \
             [:p], entries                                                      \
             [:p_int], Xc.cols                                                  \
@@ -1252,47 +1314,19 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
             [:Xc.total_words], Xc.col_start                                    \
             [:p]) map(tofrom                                                   \
                       : append[:p_int], remove                                 \
-                              [:p_int])
+                              [:p_int]) reduction(+: length_increase) \
+                              is_device_ptr(target_X, target_size, target_col_offsets) collapse(2)
+
+  //#pragma omp parallel for reduction(& : increased_set) shared(last_max) \
+//  schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, \
+//   length_increase)
   for (long main = 0; main < p; main++) {
-    // for (long main = p - 2; main < p; main++) {
-    // Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
-    // int *col_i_cache = thread_cache.col_i;
-    // int *col_j_cache = thread_cache.col_j;
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
-    int main_col_len = 0;
-    if (!wont_update[main]) {
-      int col_i_cache[n];
-      {
-        int *column_entries = col_i_cache;
-        long col_entry_pos = 0;
-        long entry = -1;
-        for (int r = 0; r < Xc.cols[main].nwords; r++) {
-          // S8bWord word = Xc.cols[main].compressed_indices[r];
-          S8bWord word = Xc.compressed_indices[Xc.col_start[main] + r];
-          // g_assert_true(Xc.compressed_indices[Xc.col_start[main] + r].values
-          // ==
-          //              Xc.cols[main].compressed_indices[r].values);
-          unsigned long values = word.values;
-          for (int j = 0; j <= group_size[word.selector]; j++) {
-            int diff = values & masks[word.selector];
-            if (diff != 0) {
-              entry += diff;
-              column_entries[col_entry_pos] = entry;
-              col_entry_pos++;
-            }
-            values >>= item_width[word.selector];
-          }
-        }
-        main_col_len = col_entry_pos;
-        // g_assert_true(main_col_len == Xc.cols[main].nz);
-      }
-      int read_loops = 0;
-// clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
-// main_col_time += ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9
-// +
-//                 (sub_end.tv_sec - sub_start.tv_sec);
-#pragma omp parallel for reduction(& : increased_set) reduction(+: length_increase) schedule(static, 1)
-      for (long inter = main; inter < p; inter++) {
+// #pragma omp parallel for reduction(& : increased_set) reduction(+: length_increase) schedule(static, 1)
+      for (long inter = 0; inter < p; inter++) {
+    if (inter >= main && !wont_update[main]) {
+      unsigned long offset = target_col_offsets[main];
+      int *col_i_cache = &target_X[offset];
+      int main_col_len = target_size[main];
         int col_j_cache[n];
         // TODO: no need to re-read the main column when inter == main.
         // worked out by hand as being equivalent to the offset we would have
@@ -1826,7 +1860,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   double *beta = fixture->beta;
   double *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 500;
+  const double LAMBDA_MIN = 5;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
@@ -1953,6 +1987,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
+  target_setup(&Xc, &fixture->xmatrix);
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   Active_Set active_set = active_set_new(p_int);

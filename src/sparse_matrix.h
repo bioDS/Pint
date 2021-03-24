@@ -24,6 +24,7 @@ typedef struct XMatrixSparse {
   long n;
   long p;
   long total_words;
+  long total_entries;
   S8bCol *cols;
 } XMatrixSparse;
 
