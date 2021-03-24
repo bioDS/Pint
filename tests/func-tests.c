@@ -1308,11 +1308,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
 #pragma omp target teams distribute parallel for map(to : rowsum[:n], \
     last_max[:p], beta                                                         \
             [:p], wont_update                                                  \
-            [:p], entries                                                      \
-            [:p_int], Xc.cols                                                  \
-            [:p], Xc.compressed_indices                                        \
-            [:Xc.total_words], Xc.col_start                                    \
-            [:p]) map(tofrom                                                   \
+            [:p]) map(from                                                   \
                       : append[:p_int], remove                                 \
                               [:p_int]) reduction(+: length_increase) \
                               is_device_ptr(target_X, target_size, target_col_offsets) collapse(2)
@@ -1321,74 +1317,36 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
 //  schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, \
 //   length_increase)
   for (long main = 0; main < p; main++) {
-// #pragma omp parallel for reduction(& : increased_set) reduction(+: length_increase) schedule(static, 1)
-      for (long inter = 0; inter < p; inter++) {
-    if (inter >= main && !wont_update[main]) {
-      unsigned long offset = target_col_offsets[main];
-      int *col_i_cache = &target_X[offset];
-      int main_col_len = target_size[main];
-        int col_j_cache[n];
-        // TODO: no need to re-read the main column when inter == main.
-        // worked out by hand as being equivalent to the offset we would have
-        // reached. sumb is the amount we would have reached w/o the limit -
-        // the amount that was actually covered by the limit.
-        int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
-                 (main - 1) * (main - 1) - (main - 1)) /
-                    2 +
-                inter;
-        double sumn = 0.0;
-        int col_nz = 0;
-        if (!wont_update[inter]) {
-
-          // we've already calculated the interaction, re-use it.
-          // if (entries[k].was_present) {
-          //  // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
-          //  S8bCol s8bCol = entries[k].col;
-          //  col_nz = s8bCol.nz;
-          //  int entry = -1;
-          //  int tmpCount = 0;
-          //  for (int i = 0; i < s8bCol.nwords; i++) {
-          //    S8bWord word = s8bCol.compressed_indices[i];
-          //    unsigned long values = word.values;
-          //    for (int j = 0; j <= group_size[word.selector]; j++) {
-          //      tmpCount++;
-          //      int diff = values & masks[word.selector];
-          //      if (diff != 0) {
-          //        entry += diff;
-          //        sumn += rowsum[entry];
-          //      }
-          //      values >>= item_width[word.selector];
-          //    }
-          //  }
-          //  // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
-          //  // reused_col_time +=
-          //  //    ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
-          //  //    (sub_end.tv_sec - sub_start.tv_sec);
-          //} else {
-          // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_start);
-          // this column has never been in the working set before, therefore
-          // its beta value is zero and so is sumn.
-          // calculate the interaction
-          // and maybe store it read columns i and j simultaneously
-          // int entry_i = -1;
+    // #pragma omp parallel for reduction(& : increased_set) reduction(+:
+    // length_increase) schedule(static, 1)
+    for (long inter = 0; inter < p; inter++) {
+      if (inter >= main) {
+      int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
+               (main - 1) * (main - 1) - (main - 1)) /
+                  2 +
+              inter;
+        if (!wont_update[main] && !wont_update[inter]) {
+          unsigned long offset = target_col_offsets[main];
+          int *col_i_cache = &target_X[offset];
+          int main_col_len = target_size[main];
+          int inter_col_len = target_size[inter];
+          int *col_j_cache = &target_X[target_col_offsets[inter]];
+          double sumn = 0.0;
+          int col_nz = 0;
           int i_pos = 0;
+          int j_pos = 0;
           int entry_j = -1;
           int pos = 0;
           // sum of rowsums for this column
           int j_w = 0;
-          // S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
-          S8bWord word_j = Xc.compressed_indices[Xc.col_start[inter] + j_w];
-          int j_wpos = 0;
-          unsigned long values_j = word_j.values;
-          int j_size = group_size[word_j.selector];
           // This whole loop is a bit awkward, but what can you do.
           int entry_i = -2;
-          while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
+          //TODO: paralellise over this too? we're still waiting a lot in the gpu, presumably for a few large interaction columns.
+          while (i_pos < main_col_len && j_pos <= inter_col_len) {
           read:
             if (entry_i == entry_j) {
               // update interaction and move to next entry of each word
               sumn += rowsum[entry_i];
-              col_j_cache[pos] = entry_i;
               pos++;
             }
             while (entry_i <= entry_j && i_pos < main_col_len) {
@@ -1399,73 +1357,30 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
               }
             }
             if (entry_j <= entry_i) {
-              // read through j until we hit the end, or reach or exceed
-              // i.
-              while (j_w <= Xc.cols[inter].nwords) {
-                // current word
-                while (j_wpos <= j_size) {
-                  int diff = values_j & masks[word_j.selector];
-                  j_wpos++;
-                  values_j >>= item_width[word_j.selector];
-                  if (diff != 0) {
-                    entry_j += diff;
-                    // we've found the next value of j
-                    // if it's equal we'll handle it earlier in the loop,
-                    // otherwise go to the j read loop.
-                    if (entry_j >= entry_i) {
-                      goto read;
-                      // break;
-                    }
-                  }
-                }
-                // switch to the next word
-                j_w++;
-                if (j_w < Xc.cols[inter].nwords) {
-                  // word_j = Xc.cols[inter].compressed_indices[j_w];
-                  word_j = Xc.compressed_indices[Xc.col_start[inter] + j_w];
-                  values_j = word_j.values;
-                  j_size = group_size[word_j.selector];
-                  j_wpos = 0;
-                }
+              entry_j = col_j_cache[j_pos];
+              j_pos++;
+              if (entry_i == entry_j) {
+                goto read;
               }
             }
-            // }
             col_nz = pos;
-            // g_assert_true(pos == X2c.nz[k]);
-            // N.B. putting everything we use in the active set, but marking it
-            // as inactive. this speeds up future checks quite significantly, at
-            // the cost of increased memory use. For a gpu implenentation we
-            // probably don't want this.
-            // active_set_append(as, k, col_j_cache, col_nz);
-            // length_increase++;
-            // active_set_remove(as, k);
-            // clock_gettime(CLOCK_MONOTONIC_RAW, &sub_end);
-            // int_col_time +=
-            //    ((double)(sub_end.tv_nsec - sub_start.tv_nsec)) / 1e9 +
-            //    (sub_end.tv_sec - sub_start.tv_sec);
           }
-          // if (k == 85)
-          //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
-          // either way, we now have sumn
           sumn = fabs(sumn);
           sumn += fabs(beta[k] * col_nz);
           if (sumn > last_max[inter]) {
             last_max[inter] = sumn;
           }
-          if (sumn > lambda * n / 2 && !entries[k].present) {
+          if (sumn > lambda * n / 2) {
             append[k] = TRUE;
-            // active_set_append(as, k, col_j_cache, col_nz);
-            // length_increase++;
-            // increased_set = TRUE;
           } else {
-            // active_set_remove(as, k);
             remove[k] = TRUE;
           }
         } else {
           // since we don't update any of this columns interactions, they
           // shouldn't be in the working set
           // active_set_remove(as, k);
-          remove[k] = TRUE;
+          //if (wont_update[inter])
+           remove[k] = TRUE;
         }
       }
     }
