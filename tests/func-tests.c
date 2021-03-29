@@ -8,32 +8,32 @@
 #include <time.h>
 
 /* int **X2_from_X(int **X, int n, int p); */
-/* double *simple_coordinate_descent_lasso(int **X, double *Y, int n, int p,
- * double lambda, char *method); */
-/* double update_beta_greedy_l1(int **X, double *Y, int n, int p, double lambda,
- * double *beta, int k, double dBMax); */
-/* double update_intercept_cyclic(double intercept, int **X, double *Y, double
+/* float *simple_coordinate_descent_lasso(int **X, float *Y, int n, int p,
+ * float lambda, char *method); */
+/* float update_beta_greedy_l1(int **X, float *Y, int n, int p, float lambda,
+ * float *beta, int k, float dBMax); */
+/* float update_intercept_cyclic(float intercept, int **X, float *Y, float
  * *beta, int n, int p); */
-/* double update_beta_cyclic(int **X, double *Y, int n, int p, double lambda,
- * double *beta, int k, double dBMax, double intercept); */
-/* double update_beta_glmnet(int **X, double *Y, int n, int p, double lambda,
- * double *beta, int k, double dBMax, double intercept); */
-/* double soft_threshold(double z, double gamma); */
-/* double *read_y_csv(char *fn, int n); */
+/* float update_beta_cyclic(int **X, float *Y, int n, int p, float lambda,
+ * float *beta, int k, float dBMax, float intercept); */
+/* float update_beta_glmnet(int **X, float *Y, int n, int p, float lambda,
+ * float *beta, int k, float dBMax, float intercept); */
+/* float soft_threshold(float z, float gamma); */
+/* float *read_y_csv(char *fn, int n); */
 /* XMatrix read_x_csv(char *fn, int n, int p); */
 
 // #define NumCores 4
 #define HALT_ERROR_DIFF 1.01
 
 struct timespec start, end;
-static double x2_conversion_time = 0.0;
+static float x2_conversion_time = 0.0;
 
 #pragma omp declare target
-double fabs(double a) {
-  if (-a > a)
-    return -a;
-  return a;
-}
+//float fabs(float a) {
+//  if (-a > a)
+//    return -a;
+//  return a;
+//}
 #pragma omp end declare target
 
 typedef struct {
@@ -41,13 +41,13 @@ typedef struct {
   int p;
   XMatrix xmatrix;
   int **X;
-  double *Y;
-  double *rowsum;
-  double lambda;
-  double *beta;
+  float *Y;
+  float *rowsum;
+  float lambda;
+  float *beta;
   int k;
-  double dBMax;
-  double intercept;
+  float dBMax;
+  float intercept;
   XMatrixSparse xmatrix_sparse;
   int_pair *precalc_get_num;
   int **column_caches;
@@ -60,7 +60,7 @@ typedef struct {
   int *col_j;
 } Thread_Cache;
 
-const static double small_X2_correct_beta[630] = {
+const static float small_X2_correct_beta[630] = {
     -83.112248,  0.000000,   0.000000,    0.000000,    0.000000, 0.000000,
     0.000000,    -39.419762, 0.000000,    0.000000,    0.000000, 0.000000,
     0.000000,    0.000000,   0.000000,    0.000000,    0.000000, 0.000000,
@@ -178,10 +178,10 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture,
   fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
   fixture->X = fixture->xmatrix.X;
   fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
-  fixture->rowsum = malloc(fixture->n * sizeof(double));
+  fixture->rowsum = malloc(fixture->n * sizeof(float));
   fixture->lambda = 6.46;
-  fixture->beta = malloc(fixture->p * sizeof(double));
-  memset(fixture->beta, 0, fixture->p * sizeof(double));
+  fixture->beta = malloc(fixture->p * sizeof(float));
+  memset(fixture->beta, 0, fixture->p * sizeof(float));
   fixture->k = 27;
   fixture->dBMax = 0;
   fixture->intercept = 0;
@@ -419,11 +419,11 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
   fixture->X = fixture->xmatrix.X;
   printf("reading Y from %s\n", yfile);
   fixture->Y = read_y_csv(yfile, fixture->n);
-  fixture->rowsum = malloc(fixture->n * sizeof(double));
+  fixture->rowsum = malloc(fixture->n * sizeof(float));
   fixture->lambda = 20;
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  fixture->beta = malloc(p_int * sizeof(double));
-  memset(fixture->beta, 0, p_int * sizeof(double));
+  fixture->beta = malloc(p_int * sizeof(float));
+  memset(fixture->beta, 0, p_int * sizeof(float));
   fixture->k = 27;
   fixture->dBMax = 0;
   fixture->intercept = 0;
@@ -468,14 +468,14 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture *fixture,
 static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
                                                gconstpointer user_data) {
   // are we running the shuffle test, or sequential?
-  double acceptable_diff = 0.1;
+  float acceptable_diff = 0.1;
   int shuffle = FALSE;
   if (user_data == TRUE) {
     printf("\nrunning shuffle test!\n");
     acceptable_diff = 10;
     shuffle = TRUE;
   }
-  double *glmnet_beta = read_y_csv(
+  float *glmnet_beta = read_y_csv(
       "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
   printf("starting interaction test\n");
   fixture->xmatrix = read_x_csv(
@@ -484,9 +484,9 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  double *beta = fixture->beta;
+  float *beta = fixture->beta;
 
-  double dBMax;
+  float dBMax;
   for (int j = 0; j < 10; j++)
     for (int i = 0; i < p_int; i++) {
       // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -514,13 +514,13 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
       printf(" ]\n");
     }
   }
-  printf("frac agreement: %f\n", (double)no_agreeing / p_int);
+  printf("frac agreement: %f\n", (float)no_agreeing / p_int);
   g_assert_true(no_agreeing == p_int);
 }
 
 static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
                                                      gconstpointer user_data) {
-  double *glmnet_beta = read_y_csv(
+  float *glmnet_beta = read_y_csv(
       "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
   printf("starting interaction test\n");
   fixture->p = 35;
@@ -530,13 +530,13 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  double *beta = fixture->beta;
+  float *beta = fixture->beta;
 
   beta = simple_coordinate_descent_lasso(
       fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
       0, 0.01, 1.0001, FALSE, 1, "test", FALSE, -1);
 
-  double acceptable_diff = 10;
+  float acceptable_diff = 10;
   int no_agreeing = 0;
   for (int i = 0; i < p_int; i++) {
     int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -550,14 +550,14 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
       printf(" ]\n");
     }
   }
-  printf("frac agreement: %f\n", (double)no_agreeing / p_int);
+  printf("frac agreement: %f\n", (float)no_agreeing / p_int);
   g_assert_true(no_agreeing >= 0.8 * p_int);
 }
 
 // will fail if Y has been normalised
 static void test_read_y_csv() {
   int n = 1000;
-  double *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
+  float *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
   g_assert_true(Y[0] == -133.351709197933);
   g_assert_true(Y[999] == -352.293608898344);
 }
@@ -623,7 +623,7 @@ static void check_X2_encoding() {
       total += col_nz_indices[i][j];
     }
   }
-  printf("\nmean entry size: %f\n", (double)total / (double)no_entries);
+  printf("\nmean entry size: %f\n", (float)total / (float)no_entries);
 
   // mean diff size
   total = 0;
@@ -635,7 +635,7 @@ static void check_X2_encoding() {
       prev_entry = col_nz_indices[i][j];
     }
   }
-  printf("mean diff size: %f\n", (double)total / (double)no_entries);
+  printf("mean diff size: %f\n", (float)total / (float)no_entries);
 
   printf("size of s8bword struct: %d (int is %ld)\n", sizeof(S8bWord),
          sizeof(int));
@@ -756,7 +756,7 @@ static void check_X2_encoding() {
          "shorts (%d bytes). Effective reduction %f\n",
          length, bytes, xmatrix_sparse.cols[0].nz,
          xmatrix_sparse.cols[0].nz * sizeof(short),
-         (double)bytes / (xmatrix_sparse.cols[0].nz * sizeof(short)));
+         (float)bytes / (xmatrix_sparse.cols[0].nz * sizeof(short)));
 
   printf("liblasso vs test compressed first col:\n");
   for (int i = 0; i < xmatrix_sparse.cols[0].nwords; i++) {
@@ -833,7 +833,7 @@ static void check_permutation() {
   gsl_permutation_free(perm);
 }
 
-int check_didnt_update(int p, int p_int, int *wont_update, double *beta) {
+int check_didnt_update(int p, int p_int, int *wont_update, float *beta) {
   int no_disagreeing = 0;
   for (int i = 0; i < p_int; i++) {
     // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -853,7 +853,7 @@ int check_didnt_update(int p, int p_int, int *wont_update, double *beta) {
       }
     }
   }
-  // printf("frac disagreement: %f\n", (double)no_disagreeing/p);
+  // printf("frac disagreement: %f\n", (float)no_disagreeing/p);
   if (no_disagreeing == 0) {
     // printf("no disagreements\n");
   }
@@ -873,7 +873,7 @@ static void pruning_fixture_set_up(UpdateFixture *fixture,
     fixture->X2c = X2c;
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  x2_conversion_time = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+  x2_conversion_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                        (end.tv_sec - start.tv_sec);
   fixture->Xc = Xc;
 }
@@ -887,12 +887,12 @@ static void pruning_fixture_tear_down(UpdateFixture *fixture,
 }
 
 int get_wont_update(char *working_set, int *wont_update, int p,
-                    XMatrixSparse Xc, double lambda, double *last_max,
-                    double **last_rowsum, double *rowsum, int *column_cache,
-                    int n, double *beta) {
+                    XMatrixSparse Xc, float lambda, float *last_max,
+                    float **last_rowsum, float *rowsum, int *column_cache,
+                    int n, float *beta) {
   int ruled_out = 0;
   for (int j = 0; j < p; j++) {
-    double sum = 0.0;
+    float sum = 0.0;
     wont_update[j] = wont_update_effect(
         Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache, beta);
     if (wont_update[j])
@@ -914,15 +914,15 @@ static void check_branch_pruning(UpdateFixture *fixture,
   printf("\nstarting branch pruning test\n");
   int n = fixture->n;
   int p = fixture->p;
-  double *rowsum = fixture->rowsum;
-  // double lambda = fixture->lambda;
+  float *rowsum = fixture->rowsum;
+  // float lambda = fixture->lambda;
   int shuffle = FALSE;
   printf("starting interaction test\n");
   // fixture->xmatrix = read_x_csv("/ho/testXSmall.csv", fixture->n,
   // fixture->p);
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  double *beta = fixture->beta;
+  float *beta = fixture->beta;
   char *working_set = malloc(sizeof *working_set * p_int);
   memset(working_set, 0, sizeof *working_set * p_int);
 
@@ -934,7 +934,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   for (int j = 0; j < p; j++)
     wont_update[j] = 0;
 
-  double **last_rowsum = malloc(sizeof *last_rowsum * p);
+  float **last_rowsum = malloc(sizeof *last_rowsum * p);
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + PADDING);
@@ -945,37 +945,37 @@ static void check_branch_pruning(UpdateFixture *fixture,
     for (int i = 0; i < n; i++)
       g_assert_true(last_rowsum[j][i] == 0.0);
 
-  double last_max[n];
+  float last_max[n];
   memset(last_max, 0, sizeof(last_max));
 
   // start running tests with decreasing lambda
-  // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5,
+  // float lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5,
   // 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
-  double lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50, 25,
+  float lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50, 25,
                               10,    5,   2,   1,   0.5, 0.2, 0.1};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
-  double lambda = lambda_sequence[0];
+  float lambda = lambda_sequence[0];
   int ruled_out = 0;
-  double *old_rowsum = malloc(sizeof *old_rowsum * n);
+  float *old_rowsum = malloc(sizeof *old_rowsum * n);
 
-  double error = 0.0;
+  float error = 0.0;
   for (int i = 0; i < n; i++) {
     error += rowsum[i] * rowsum[i];
   }
   error = sqrt(error);
   printf("initial error: %f\n", error);
 
-  double max_int_delta[p];
+  float max_int_delta[p];
   memset(max_int_delta, 0, sizeof *max_int_delta * p);
   for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind++) {
     memcpy(old_rowsum, rowsum, sizeof *rowsum * n);
     lambda = lambda_sequence[lambda_ind];
     printf("\nrunning lambda %f, current error: %f\n", lambda, error);
-    double dBMax;
+    float dBMax;
     // TODO: implement working set and update test
     int iter = 0;
     for (iter = 0; iter < 50; iter++) {
-      double prev_error = error;
+      float prev_error = error;
 
       ruled_out =
           get_wont_update(working_set, wont_update, p, Xc, lambda, last_max,
@@ -984,12 +984,12 @@ static void check_branch_pruning(UpdateFixture *fixture,
       int k = 0;
       for (int main_effect = 0; main_effect < p; main_effect++) {
         for (int interaction = main_effect; interaction < p; interaction++) {
-          double old = beta[k];
+          float old = beta[k];
           Changes changes = update_beta_cyclic_old(
               X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0,
               fixture->precalc_get_num, column_cache);
           dBMax = changes.actual_diff;
-          double new = beta[k];
+          float new = beta[k];
           if (!working_set[k] && fabs(changes.pre_lambda_diff) >
                                      fabs(max_int_delta[main_effect])) {
             max_int_delta[main_effect] = changes.pre_lambda_diff;
@@ -1038,40 +1038,40 @@ static void check_branch_pruning(UpdateFixture *fixture,
 
 typedef struct {
   XMatrixSparse Xc;
-  double **last_rowsum;
+  float **last_rowsum;
   Thread_Cache *thread_caches;
   int n;
-  double *beta;
-  double *last_max;
+  float *beta;
+  float *last_max;
   int *wont_update;
   int p;
   int p_int;
   XMatrixSparse X2c;
-  double *Y;
-  double *max_int_delta;
+  float *Y;
+  float *max_int_delta;
   int_pair *precalc_get_num;
   gsl_permutation *iter_permutation;
 } Iter_Vars;
 
 // nothing in vars is changed
-double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
+float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   XMatrixSparse Xc = vars->Xc;
-  double **last_rowsum = vars->last_rowsum;
+  float **last_rowsum = vars->last_rowsum;
   // int **thread_column_caches = vars->thread_column_caches;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  double *beta = vars->beta;
-  double *last_max = vars->last_max;
+  float *beta = vars->beta;
+  float *last_max = vars->last_max;
   int *wont_update = vars->wont_update;
   int p = vars->p;
   int p_int = vars->p_int;
   XMatrixSparse X2c = vars->X2c;
-  double *Y = vars->Y;
-  double *max_int_delta = vars->max_int_delta;
+  float *Y = vars->Y;
+  float *max_int_delta = vars->max_int_delta;
   int_pair *precalc_get_num = vars->precalc_get_num;
   gsl_permutation *iter_permutation = vars->iter_permutation;
 
-  double error = 0.0;
+  float error = 0.0;
   for (int i = 0; i < n; i++) {
     error += rowsum[i] * rowsum[i];
   }
@@ -1079,7 +1079,7 @@ double run_lambda_iters(Iter_Vars *vars, double lambda, double *rowsum) {
   for (int iter = 0; iter < 100; iter++) {
     // printf("iter %d\n", iter);
     // last_iter_count = iter;
-    double prev_error = error;
+    float prev_error = error;
 
     parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
                      permutation_splits);
@@ -1200,9 +1200,9 @@ struct RawCol {
 struct timespec sub_start;
 struct timespec sub_end;
 
-double reused_col_time = 0.0;
-double main_col_time = 0.0;
-double int_col_time = 0.0;
+float reused_col_time = 0.0;
+float main_col_time = 0.0;
+float int_col_time = 0.0;
 
 // struct RawCol get_raw_interaction_col(XMatrixSparse Xc, int i, int j) {}
 
@@ -1283,9 +1283,9 @@ void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
  * - keep Xc (or more likely the decompressed version) on the gpu, don't copy it
  * back and forth.
  */
-char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
-                        Active_Set *as, double *last_max, int p, int n,
-                        int_pair *precalc_get_num, double lambda, double *beta,
+char update_working_set(XMatrixSparse Xc, float *rowsum, int *wont_update,
+                        Active_Set *as, float *last_max, int p, int n,
+                        int_pair *precalc_get_num, float lambda, float *beta,
                         Thread_Cache *thread_caches, XMatrixSparse X2c) {
   char increased_set = FALSE;
   long length_increase = 0;
@@ -1331,7 +1331,7 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
           int main_col_len = target_size[main];
           int inter_col_len = target_size[inter];
           int *col_j_cache = &target_X[target_col_offsets[inter]];
-          double sumn = 0.0;
+          float sumn = 0.0;
           int col_nz = 0;
           int i_pos = 0;
           int j_pos = 0;
@@ -1494,24 +1494,24 @@ char update_working_set(XMatrixSparse Xc, double *rowsum, int *wont_update,
   return increased_set;
 }
 
-static double pruning_time = 0.0;
-static double working_set_update_time = 0.0;
-static double subproblem_time = 0.0;
+static float pruning_time = 0.0;
+static float working_set_update_time = 0.0;
+static float subproblem_time = 0.0;
 
-int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
-                            double *old_rowsum, Active_Set *active_set) {
+int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
+                            float *old_rowsum, Active_Set *active_set) {
   XMatrixSparse Xc = vars->Xc;
-  double **last_rowsum = vars->last_rowsum;
+  float **last_rowsum = vars->last_rowsum;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  double *beta = vars->beta;
-  double *last_max = vars->last_max;
+  float *beta = vars->beta;
+  float *last_max = vars->last_max;
   int *wont_update = vars->wont_update;
   int p = vars->p;
   int p_int = vars->p_int;
   XMatrixSparse X2c = vars->X2c;
-  double *Y = vars->Y;
-  double *max_int_delta = vars->max_int_delta;
+  float *Y = vars->Y;
+  float *max_int_delta = vars->max_int_delta;
   int_pair *precalc_get_num = vars->precalc_get_num;
   long new_nz_beta = 0;
   // active_set[i] if and only if the pair precalc_get_num[i] is in the
@@ -1526,7 +1526,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
   //    new_active_branch[i] = FALSE;
   //  }
 
-  double error = 0.0;
+  float error = 0.0;
   for (int i = 0; i < n; i++) {
     error += rowsum[i] * rowsum[i];
   }
@@ -1619,7 +1619,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       }
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    pruning_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+    pruning_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                     (end.tv_sec - start.tv_sec);
     printf("(%d active branches, %d new)\n", active_branches,
            new_active_branches);
@@ -1637,7 +1637,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     // update_working_set(Xc, rowsum, new_active_branch, active_set, last_max,
     //                   p, n, precalc_get_num, lambda, beta, thread_caches);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    working_set_update_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+    working_set_update_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                                (end.tv_sec - start.tv_sec);
     if (retests > 0 && !increased_set) {
       // there's no need to re-run on the same set. Nothing has changed
@@ -1646,7 +1646,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
       break;
     }
     printf("active set size: %d, or %.2f \%\n", active_set->length,
-           100 * (double)active_set->length / (double)p_int);
+           100 * (float)active_set->length / (float)p_int);
     permutation_splits = max(NumCores, active_set->length / NumCores);
     permutation_split_size = active_set->length / permutation_splits;
     if (active_set->length > NumCores) {
@@ -1666,7 +1666,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     int iter = 0;
     for (iter = 0; iter < 100; iter++) {
-      double prev_error = error;
+      float prev_error = error;
       // update entire working set
       // TODO: we should shuffle the active set, not the matrix
       // if (active_set->length > NumCores) {
@@ -1740,12 +1740,12 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
     // g_assert_true(total_present/iter+total_notpresent/iter ==
     // active_set->length-1);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    subproblem_time += ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+    subproblem_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                        (end.tv_sec - start.tv_sec);
     // printf("%.1f%% of active set updates didn't change\n",
-    // (double)(total_changed*100)/(double)(total_changed+total_unchanged));
+    // (float)(total_changed*100)/(float)(total_changed+total_unchanged));
     // printf("%.1f%% of active set was blank\n",
-    // (double)total_present/(double)(total_present+total_notpresent));
+    // (float)total_present/(float)(total_present+total_notpresent));
     if (active_set->length > 0) {
       gsl_permutation_free(perm);
     }
@@ -1764,18 +1764,18 @@ int run_lambda_iters_pruned(Iter_Vars *vars, double lambda, double *rowsum,
 static void check_branch_pruning_faster(UpdateFixture *fixture,
                                         gconstpointer user_data) {
   printf("starting branch pruning speed test\n");
-  double acceptable_diff = 1.05;
+  float acceptable_diff = 1.05;
   int n = fixture->n;
   int p = fixture->p;
-  double *rowsum = fixture->rowsum;
+  float *rowsum = fixture->rowsum;
   int shuffle = FALSE;
   printf("starting interaction test\n");
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  double *beta = fixture->beta;
-  double *Y = fixture->Y;
+  float *beta = fixture->beta;
+  float *Y = fixture->Y;
   printf("test\n");
-  const double LAMBDA_MIN = 5;
+  const float LAMBDA_MIN = 5;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
@@ -1793,9 +1793,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   for (int j = 0; j < p; j++)
     wont_update[j] = 0;
 
-  // double last_rowsum[p][n];
-  double **last_rowsum = malloc(sizeof *last_rowsum * p);
-  last_rowsum[0] = malloc(sizeof(double) * p * n);
+  // float last_rowsum[p][n];
+  float **last_rowsum = malloc(sizeof *last_rowsum * p);
+  last_rowsum[0] = malloc(sizeof(float) * p * n);
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 64);
@@ -1808,26 +1808,26 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     for (int i = 0; i < n; i++)
       g_assert_true(last_rowsum[j][i] == 0.0);
 
-  double last_max[n];
+  float last_max[n];
   memset(last_max, 0, sizeof(last_max));
 
   // start running tests with decreasing lambda
-  // double lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25,
+  // float lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25,
   // 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
-  double lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50,  25,
+  float lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50,  25,
                               10,    5,   2,   1,   0.5, 0.2, 0.1, 0.05};
-  // double lambda_sequence[] = {10000,500, 400, 300};
+  // float lambda_sequence[] = {10000,500, 400, 300};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
-  double *old_rowsum = malloc(sizeof *old_rowsum * n);
+  float *old_rowsum = malloc(sizeof *old_rowsum * n);
 
-  double error = 0.0;
+  float error = 0.0;
   for (int i = 0; i < n; i++) {
     error += rowsum[i] * rowsum[i];
   }
   error = sqrt(error);
   // printf("initial error: %f\n", error);
 
-  double *max_int_delta = malloc(sizeof *max_int_delta * p);
+  float *max_int_delta = malloc(sizeof *max_int_delta * p);
   memset(max_int_delta, 0, sizeof *max_int_delta * p);
 
   Iter_Vars iter_vars_basic = {
@@ -1847,14 +1847,14 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       iter_permutation,
   };
   struct timespec start, end;
-  double basic_cpu_time_used, pruned_cpu_time_used;
+  float basic_cpu_time_used, pruned_cpu_time_used;
   printf("getting time for un-pruned version\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
-    // double lambda = lambda_sequence[lambda_ind];
+  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+    // float lambda = lambda_sequence[lambda_ind];
     printf("lambda: %f\n", lambda);
-    double dBMax;
+    float dBMax;
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
@@ -1863,11 +1863,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     }
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  basic_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+  basic_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                         (end.tv_sec - start.tv_sec);
   printf("time: %f s\n", basic_cpu_time_used);
 
-  double *beta_pruning = malloc(sizeof *beta_pruning * p_int);
+  float *beta_pruning = malloc(sizeof *beta_pruning * p_int);
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
@@ -1898,7 +1898,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   };
 
   printf("getting time for pruned version\n");
-  double *p_rowsum = malloc(sizeof *p_rowsum * n);
+  float *p_rowsum = malloc(sizeof *p_rowsum * n);
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
@@ -1906,10 +1906,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   Active_Set active_set = active_set_new(p_int);
-  for (double lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
     // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
-    // double lambda = lambda_sequence[lambda_ind];
-    double dBMax;
+    // float lambda = lambda_sequence[lambda_ind];
+    float dBMax;
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
@@ -1924,7 +1924,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("p_rowsum:      %lx\n", p_rowsum);
   printf("wont_update:   %lx\n", wont_update);
   active_set_free(active_set);
-  pruned_cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+  pruned_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                          (end.tv_sec - start.tv_sec);
   printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
          basic_cpu_time_used + x2_conversion_time, x2_conversion_time,
@@ -1939,8 +1939,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
          main_col_time, int_col_time, reused_col_time);
 
   // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
-  double *basic_rowsum = malloc(sizeof *basic_rowsum * n);
-  double *pruned_rowsum = malloc(sizeof *pruned_rowsum * n);
+  float *basic_rowsum = malloc(sizeof *basic_rowsum * n);
+  float *pruned_rowsum = malloc(sizeof *pruned_rowsum * n);
   for (int i = 0; i < n; i++) {
     basic_rowsum[i] = -Y[i];
     pruned_rowsum[i] = -Y[i];
@@ -1972,8 +1972,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       }
     }
   }
-  double basic_error = 0.0;
-  double pruned_error = 0.0;
+  float basic_error = 0.0;
+  float pruned_error = 0.0;
   for (int i = 0; i < n; i++) {
     basic_error += basic_rowsum[i] * basic_rowsum[i];
     pruned_error += pruned_rowsum[i] * pruned_rowsum[i];
@@ -1999,10 +1999,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("checking beta values come out the same\n");
   // for (int k = 0; k < p_int; k++) {
   for (int k = 0; k < 10; k++) {
-    double basic_beta = fabs(beta[k]);
-    double pruned_beta = fabs(beta[k]);
-    double max = fmax(basic_beta, pruned_beta);
-    double min = fmin(basic_beta, pruned_beta);
+    float basic_beta = fabs(beta[k]);
+    float pruned_beta = fabs(beta[k]);
+    float max = fmax(basic_beta, pruned_beta);
+    float min = fmin(basic_beta, pruned_beta);
 
     if (max / min > acceptable_diff) {
       printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k],

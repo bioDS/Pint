@@ -62,11 +62,11 @@ XMatrix read_x_csv(char *fn, int n, int p) {
   return xmatrix;
 }
 
-double *read_y_csv(char *fn, int n) {
+float *read_y_csv(char *fn, int n) {
   char *buf = malloc(BUF_SIZE);
   char *temp = malloc(BUF_SIZE);
   memset(buf, 0, BUF_SIZE);
-  double *Y = malloc(n * sizeof(double));
+  float *Y = malloc(n * sizeof(float));
 
   FILE *fp = fopen(fn, "r");
   if (fp == NULL) {
@@ -95,7 +95,7 @@ double *read_y_csv(char *fn, int n) {
   // finding the intercept.
   if (NORMALISE_Y == 1) {
     printf("%d, normalising y values\n", NORMALISE_Y);
-    double mean = 0.0;
+    float mean = 0.0;
     for (int i = 0; i < n; i++) {
       mean += Y[i];
     }

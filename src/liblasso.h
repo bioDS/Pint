@@ -46,7 +46,7 @@ enum LOG_LEVEL {
 #include "regression.h"
 
 int **X2_from_X(int **X, int n, int p);
-double *read_y_csv(char *fn, int n);
+float *read_y_csv(char *fn, int n);
 XMatrix read_x_csv(char *fn, int n, int p);
 int_pair get_num(long num, long p);
 void free_static_resources();
@@ -80,12 +80,12 @@ extern int zero_updates;
 extern int zero_updates_entries;
 extern int VERBOSE;
 extern int *colsum;
-extern double *col_ysum;
+extern float *col_ysum;
 extern int max_size_given_entries[61];
 
 #define NUM_MAX_ROWSUMS 1
-extern double max_rowsums[NUM_MAX_ROWSUMS];
-extern double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
+extern float max_rowsums[NUM_MAX_ROWSUMS];
+extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 extern gsl_permutation *global_permutation;
 extern gsl_permutation *global_permutation_inverse;
 extern int_pair *cached_nums;

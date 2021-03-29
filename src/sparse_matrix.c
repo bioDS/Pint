@@ -156,9 +156,9 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
     total_words += X2.cols[i].nwords;
     total_entries += X2.cols[i].nz;
   }
-  printf("mean nz entries: %f\n", (double)total_entries / (double)p_int);
-  printf("mean words: %f\n", (double)total_count / (double)total_words);
-  printf("mean size: %f\n", (double)total_sum / (double)total_entries);
+  printf("mean nz entries: %f\n", (float)total_entries / (float)p_int);
+  printf("mean words: %f\n", (float)total_count / (float)total_words);
+  printf("mean size: %f\n", (float)total_sum / (float)total_entries);
   X2.total_words = total_words;
   X2.total_entries = total_entries;
 

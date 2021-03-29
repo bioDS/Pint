@@ -2,26 +2,81 @@
 #include <time.h>
 #include <unistd.h>
 
-double calculate_error(int n, long p_int, XMatrixSparse X2, double *Y, int **X,
-                       double *beta, double p, double intercept,
-                       double *rowsum) {
-  double error = 0.0;
+// check a particular pair of betas in the adaptive calibration scheme
+int adaptive_calibration_check_beta(float c_bar, float lambda_1,
+                                    Sparse_Betas beta_1, float lambda_2,
+                                    Sparse_Betas beta_2, int beta_length,
+                                    int n) {
+  float max_diff = 0.0;
+  float adjusted_max_diff = 0.0;
+
+  int b1_ind = 0;
+  int b2_ind = 0;
+
+  while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
+    while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind] &&
+           b1_ind < beta_1.count)
+      b1_ind++;
+    while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind] &&
+           b2_ind < beta_2.count)
+      b2_ind++;
+    if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
+        beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
+      float diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
+      if (diff > max_diff)
+        max_diff = diff;
+      b1_ind++;
+    }
+  }
+
+  adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
+
+  if (adjusted_max_diff <= c_bar) {
+    return 1;
+  }
+  return 0;
+}
+
+// checks whether the last element in the beta_sequence is the one we should
+// stop at, according to Chichignoud et als 'Adaptive Calibration Scheme'
+// returns TRUE if we are finished, FALSE if we should continue.
+int check_adaptive_calibration(float c_bar, Beta_Sequence beta_sequence,
+                               int n) {
+  // printf("\nchecking %d betas\n", beta_sequence.count);
+  for (int i = 0; i < beta_sequence.count; i++) {
+    int this_result = adaptive_calibration_check_beta(
+        c_bar, beta_sequence.lambdas[beta_sequence.count - 1],
+        beta_sequence.betas[beta_sequence.count - 1], beta_sequence.lambdas[i],
+        beta_sequence.betas[i], beta_sequence.vec_length, n);
+    // printf("result: %d\n", this_result);
+    if (this_result == 0) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+
+float calculate_error(int n, long p_int, XMatrixSparse X2, float *Y, int **X,
+                       float *beta, float p, float intercept,
+                       float *rowsum) {
+  float error = 0.0;
   for (int row = 0; row < n; row++) {
-    double row_err = intercept - rowsum[row];
+    float row_err = intercept - rowsum[row];
     error += row_err * row_err;
   }
   return error;
 }
 
-double *simple_coordinate_descent_lasso(
-    XMatrix xmatrix, double *Y, int n, int p, long max_interaction_distance,
-    double lambda_min, double lambda_max, int max_iter, int verbose,
-    double frac_overlap_allowed, double halt_beta_diff,
+float *simple_coordinate_descent_lasso(
+    XMatrix xmatrix, float *Y, int n, int p, long max_interaction_distance,
+    float lambda_min, float lambda_max, int max_iter, int verbose,
+    float frac_overlap_allowed, float halt_beta_diff,
     enum LOG_LEVEL log_level, char **job_args, int job_args_num,
     int use_adaptive_calibration, int max_nz_beta) {
   long num_nz_beta = 0;
   long became_zero = 0;
-  double lambda = lambda_max;
+  float lambda = lambda_max;
   VERBOSE = verbose;
   int_pair *precalc_get_num;
   int **X = xmatrix.X;
@@ -39,9 +94,9 @@ double *simple_coordinate_descent_lasso(
   if (max_interaction_distance == -1) {
     max_interaction_distance = p_int / 2 + 1;
   }
-  double *beta;
-  beta = malloc(p_int * sizeof(double)); // probably too big in most cases.
-  memset(beta, 0, p_int * sizeof(double));
+  float *beta;
+  beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
+  memset(beta, 0, p_int * sizeof(float));
 
   precalc_get_num = malloc(p_int * sizeof(int_pair));
   int offset = 0;
@@ -60,21 +115,21 @@ double *simple_coordinate_descent_lasso(
 
   cached_nums = get_all_nums(p, max_interaction_distance);
 
-  double error = 0.0, prev_error;
+  float error = 0.0, prev_error;
   for (int i = 0; i < n; i++) {
     error += Y[i] * Y[i];
   }
-  double intercept = 0.0;
+  float intercept = 0.0;
 
-  double *rowsum = malloc(n * sizeof(double));
+  float *rowsum = malloc(n * sizeof(float));
   for (int i = 0; i < n; i++)
     rowsum[i] = -Y[i];
 
-  colsum = malloc(p_int * sizeof(double));
-  memset(colsum, 0, p_int * sizeof(double));
+  colsum = malloc(p_int * sizeof(float));
+  memset(colsum, 0, p_int * sizeof(float));
 
-  col_ysum = malloc(p_int * sizeof(double));
-  memset(col_ysum, 0, p_int * sizeof(double));
+  col_ysum = malloc(p_int * sizeof(float));
+  memset(col_ysum, 0, p_int * sizeof(float));
   for (int col = 0; col < p_int; col++) {
     int entry = -1;
     for (int i = 0; i < X2.cols[col].nwords; i++) {
@@ -106,7 +161,7 @@ double *simple_coordinate_descent_lasso(
       main_sum += X[i][j];
 
   struct timespec start, end;
-  double cpu_time_used;
+  float cpu_time_used;
 
   int set_min_lambda = FALSE;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
@@ -117,7 +172,7 @@ double *simple_coordinate_descent_lasso(
   parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
                    permutation_splits);
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  double final_lambda = lambda_min;
+  float final_lambda = lambda_min;
   int max_lambda_count = 50;
   Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
   int lambda_count = 1;
@@ -160,7 +215,7 @@ double *simple_coordinate_descent_lasso(
     log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
   // set-up beta_sequence struct
-  double *beta_cache = NULL;
+  float *beta_cache = NULL;
   int *index_cache = NULL;
   Beta_Sequence beta_sequence;
   if (use_adaptive_calibration) {
@@ -168,7 +223,7 @@ double *simple_coordinate_descent_lasso(
     beta_sequence.count = 0;
     beta_sequence.vec_length = p_int;
     beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
-    beta_sequence.lambdas = malloc(max_lambda_count * sizeof(double));
+    beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
     beta_cache = malloc(p_int * sizeof(beta));
     index_cache = malloc(p_int * sizeof(int));
   }
@@ -179,7 +234,7 @@ double *simple_coordinate_descent_lasso(
     if (log_level == ITER)
       save_log(iter, lambda, lambda_count, beta, p_int, log_file);
     prev_error = error;
-    double dBMax = 0.0; // largest beta diff this cycle
+    float dBMax = 0.0; // largest beta diff this cycle
 
     // update intercept (don't for the moment, it should be 0 anyway)
     // intercept = update_intercept_cyclic(intercept, X, Y, beta, n, p);
@@ -205,7 +260,7 @@ double *simple_coordinate_descent_lasso(
       Changes changes = update_beta_cyclic_old(
           X2, Y, rowsum, n, p, lambda, beta, k, intercept, precalc_get_num,
           thread_column_caches[omp_get_thread_num()]);
-      double diff = changes.actual_diff;
+      float diff = changes.actual_diff;
       // TODO: kills performance
       // if (fabs(diff) < lambda)
       //	diff=0.0;
@@ -215,7 +270,7 @@ double *simple_coordinate_descent_lasso(
       if (!was_zero && beta[k] == 0) {
         became_zero++;
       }
-      double diff2 = diff * diff;
+      float diff2 = diff * diff;
       if (diff2 > dBMax) {
         dBMax = diff2;
       }
@@ -275,9 +330,9 @@ double *simple_coordinate_descent_lasso(
                 count++;
               }
             }
-            sparse_betas.betas = malloc(count * sizeof(double));
+            sparse_betas.betas = malloc(count * sizeof(float));
             sparse_betas.indices = malloc(count * sizeof(int));
-            memcpy(sparse_betas.betas, beta_cache, count * sizeof(double));
+            memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
             memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
 
             sparse_betas.count = count;
@@ -306,7 +361,7 @@ double *simple_coordinate_descent_lasso(
   Rprintf("after %d total iters\n", iter_count);
 
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  cpu_time_used = ((double)(end.tv_nsec - start.tv_nsec)) / 1e9 +
+  cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                   (end.tv_sec - start.tv_sec);
 
   Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
@@ -325,8 +380,8 @@ double *simple_coordinate_descent_lasso(
 
   // TODO: this really should be 0. Fix things until it is.
   Rprintf("checking how much rowsums have diverged:\n");
-  double *temp_rowsum = malloc(n * sizeof(double));
-  memset(temp_rowsum, 0, n * sizeof(double));
+  float *temp_rowsum = malloc(n * sizeof(float));
+  memset(temp_rowsum, 0, n * sizeof(float));
   for (long col = 0; col < p_int; col++) {
     int entry = -1;
     for (int i = 0; i < X2.cols[col].nwords; i++) {
@@ -342,8 +397,8 @@ double *simple_coordinate_descent_lasso(
       }
     }
   }
-  double total_rowsum_diff = 0;
-  double frac_rowsum_diff = 0;
+  float total_rowsum_diff = 0;
+  float frac_rowsum_diff = 0;
   for (int i = 0; i < n; i++) {
     total_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i]));
     if (fabs(rowsum[i]) > 1)
@@ -390,15 +445,15 @@ double *simple_coordinate_descent_lasso(
   return beta;
 }
 
-Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
-                               double *rowsum, int n, int p, double lambda,
-                               double *beta, long k, double intercept,
+Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
+                               float *rowsum, int n, int p, float lambda,
+                               float *beta, long k, float intercept,
                                int_pair *precalc_get_num,
                                int *column_entry_cache) {
-  double sumk = xmatrix_sparse.cols[k].nz;
-  double sumn = xmatrix_sparse.cols[k].nz * beta[k];
-  // double sumk = col.nz;
-  // double sumn = col.nz * beta[k];
+  float sumk = xmatrix_sparse.cols[k].nz;
+  float sumn = xmatrix_sparse.cols[k].nz * beta[k];
+  // float sumk = col.nz;
+  // float sumn = col.nz * beta[k];
   int *column_entries = column_entry_cache;
 
   // if (k==2905) {
@@ -430,7 +485,7 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
   //}
 
   // TODO: This is probably slower than necessary.
-  double Bk_diff = beta[k];
+  float Bk_diff = beta[k];
   if (sumk == 0.0) {
     beta[k] = 0.0;
   } else {
@@ -455,12 +510,12 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, double *Y,
 
   return changes;
 }
-Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
-                           double lambda, double *beta, long k,
-                           double intercept, int_pair *precalc_get_num,
+Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
+                           float lambda, float *beta, long k,
+                           float intercept, int_pair *precalc_get_num,
                            int *column_entry_cache) {
-  double sumk = col.nz;
-  double sumn = col.nz * beta[k];
+  float sumk = col.nz;
+  float sumn = col.nz * beta[k];
   int *column_entries = column_entry_cache;
 
   long col_entry_pos = 0;
@@ -480,7 +535,7 @@ Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
     }
   }
 
-  double Bk_diff = beta[k];
+  float Bk_diff = beta[k];
   if (sumk == 0.0) {
     beta[k] = 0.0;
   } else {
@@ -506,10 +561,10 @@ Changes update_beta_cyclic(S8bCol col, double *Y, double *rowsum, int n, int p,
   return changes;
 }
 
-double update_intercept_cyclic(double intercept, int **X, double *Y,
-                               double *beta, int n, int p) {
-  double new_intercept = 0.0;
-  double sumn = 0.0, sumx = 0.0;
+float update_intercept_cyclic(float intercept, int **X, float *Y,
+                               float *beta, int n, int p) {
+  float new_intercept = 0.0;
+  float sumn = 0.0, sumx = 0.0;
 
   for (int i = 0; i < n; i++) {
     sumx = 0.0;
@@ -520,58 +575,4 @@ double update_intercept_cyclic(double intercept, int **X, double *Y,
   }
   new_intercept = sumn / n;
   return new_intercept;
-}
-
-// check a particular pair of betas in the adaptive calibration scheme
-int adaptive_calibration_check_beta(double c_bar, double lambda_1,
-                                    Sparse_Betas beta_1, double lambda_2,
-                                    Sparse_Betas beta_2, int beta_length,
-                                    int n) {
-  double max_diff = 0.0;
-  double adjusted_max_diff = 0.0;
-
-  int b1_ind = 0;
-  int b2_ind = 0;
-
-  while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
-    while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind] &&
-           b1_ind < beta_1.count)
-      b1_ind++;
-    while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind] &&
-           b2_ind < beta_2.count)
-      b2_ind++;
-    if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
-        beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
-      double diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
-      if (diff > max_diff)
-        max_diff = diff;
-      b1_ind++;
-    }
-  }
-
-  adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
-
-  if (adjusted_max_diff <= c_bar) {
-    return 1;
-  }
-  return 0;
-}
-
-// checks whether the last element in the beta_sequence is the one we should
-// stop at, according to Chichignoud et als 'Adaptive Calibration Scheme'
-// returns TRUE if we are finished, FALSE if we should continue.
-int check_adaptive_calibration(double c_bar, Beta_Sequence beta_sequence,
-                               int n) {
-  // printf("\nchecking %d betas\n", beta_sequence.count);
-  for (int i = 0; i < beta_sequence.count; i++) {
-    int this_result = adaptive_calibration_check_beta(
-        c_bar, beta_sequence.lambdas[beta_sequence.count - 1],
-        beta_sequence.betas[beta_sequence.count - 1], beta_sequence.lambdas[i],
-        beta_sequence.betas[i], beta_sequence.vec_length, n);
-    // printf("result: %d\n", this_result);
-    if (this_result == 0) {
-      return TRUE;
-    }
-  }
-  return FALSE;
 }

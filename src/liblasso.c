@@ -21,11 +21,11 @@ int zero_updates_entries = 0;
 
 int VERBOSE = 1;
 int *colsum;
-double *col_ysum;
+float *col_ysum;
 int max_size_given_entries[61];
 
-double max_rowsums[NUM_MAX_ROWSUMS];
-double max_cumulative_rowsums[NUM_MAX_ROWSUMS];
+float max_rowsums[NUM_MAX_ROWSUMS];
+float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 
 gsl_permutation *global_permutation;
 gsl_permutation *global_permutation_inverse;
@@ -142,19 +142,19 @@ int max(int a, int b) {
 }
 
 // n.b.: for glmnet gamma should be lambda * [alpha=1] = lambda
-double soft_threshold(double z, double gamma) {
-  double abs = fabs(z);
+float soft_threshold(float z, float gamma) {
+  float abs = fabs(z);
   if (abs < gamma)
     return 0.0;
-  double val = abs - gamma;
+  float val = abs - gamma;
   if (signbit(z))
     return -val;
   else
     return val;
 }
 
-double get_sump(int p, int k, int i, double *beta, int **X) {
-  double sump = 0;
+float get_sump(int p, int k, int i, float *beta, int **X) {
+  float sump = 0;
   for (int j = 0; j < p; j++) {
     if (j != k)
       sump += X[i][j] * beta[j];

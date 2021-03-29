@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
 	if (strcmp(verbose, "T") == 0)
 		VERBOSE = 1;
 
-	double lambda;
+	float lambda;
 
 	if ((lambda = strtod(argv[5], NULL)) == 0)
 		lambda = 3.604;
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
 	int max_interaction_distance = atoi(argv[8]);
 	printf("using max interaction distance: %d\n", max_interaction_distance);
 
-	double overlap = atof(argv[9]);
+	float overlap = atof(argv[9]);
 	printf("using frac: %.2f\n", overlap);
 
 	enum LOG_LEVEL log_level = NONE;
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
 
 	// testing: wip
 	XMatrix xmatrix = read_x_csv(argv[1], N, P);
-	double *Y = read_y_csv(argv[2], N);
+	float *Y = read_y_csv(argv[2], N);
 
 	int **X2;
 	int nbeta;
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	double *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
+	float *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
 			0.04, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, FALSE, 50);
 	int nbeta_int = nbeta;
 	nbeta_int = get_p_int(nbeta, max_interaction_distance);

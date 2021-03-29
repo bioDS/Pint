@@ -22,7 +22,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 static int log_pos = 0;
 // save the current beta values to a log, so the program can be resumed if it is
 // interrupted
-void save_log(int iter, double lambda_value, int lambda_count, double *beta,
+void save_log(int iter, float lambda_value, int lambda_count, float *beta,
               int n_betas, FILE *log_file) {
   // Rather than filling the log with beta values, we want to only keep two
   // copies. The current one, and a backup in case we stop while writing the
@@ -92,8 +92,8 @@ int check_can_restore_from_log(char *filename, int n, int p, int num_betas,
 // returns the opened log for future use.
 FILE *restore_from_log(char *filename, int n, int p, int num_betas,
                        char **job_args, int job_args_num, int *actual_iter,
-                       int *actual_lambda_count, double *actual_lambda_value,
-                       double *actual_beta) {
+                       int *actual_lambda_count, float *actual_lambda_value,
+                       float *actual_beta) {
 
   FILE *log_file = fopen(filename, "r+");
   int buf_size = num_betas * 16 + 500;
@@ -135,8 +135,8 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
     // the first one was fine, but the second one may be more recent.
     int first_iter, first_lambda_count;
     int second_iter, second_lambda_count;
-    double first_lambda_value;
-    double second_lambda_value;
+    float first_lambda_value;
+    float second_lambda_value;
     sscanf(buffer, " %d, %d, %le\n", &first_iter, &first_lambda_count,
            &first_lambda_value);
     fgets(buffer, buf_size, log_file);
@@ -159,7 +159,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
   if (can_restore) {
     // buffer contains the current lambda and iter values.
     int first_iter = -1, first_lambda_count = -1;
-    double first_lambda_value = -1;
+    float first_lambda_value = -1;
     printf("final buf: '%s'\n", buffer);
     sscanf(buffer, " %d, %d, %le", &first_iter, &first_lambda_count,
            &first_lambda_value);
