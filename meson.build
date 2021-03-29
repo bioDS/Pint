@@ -6,8 +6,8 @@ add_project_arguments([
   '-I' + meson.build_root(),
   '-ffast-math',
   '-fno-stack-protector',
-  '-fcf-protection=none',
-  '-Ofast'
+  '-Ofast',
+  '-g',
 ], language: 'c')
 
 subdir('src')

@@ -29,7 +29,7 @@ struct timespec start, end;
 static float x2_conversion_time = 0.0;
 
 #pragma omp declare target
-//float fabs(float a) {
+// float fabs(float a) {
 //  if (-a > a)
 //    return -a;
 //  return a;
@@ -952,7 +952,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   // float lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25, 10, 5,
   // 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
   float lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50, 25,
-                              10,    5,   2,   1,   0.5, 0.2, 0.1};
+                             10,    5,   2,   1,   0.5, 0.2, 0.1};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
   float lambda = lambda_sequence[0];
   int ruled_out = 0;
@@ -1217,10 +1217,13 @@ struct to_append {
 static unsigned int *target_X;
 static unsigned int *target_size;
 static unsigned int *target_col_offsets;
+static float *target_sumn;
+static unsigned int *target_col_nz;
 
 void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
   int n = Xc->n;
   int p = Xc->p;
+  int p_int = p*(p+1)/2;
 
   target_X = omp_target_alloc(Xc->total_entries * sizeof *target_X,
                               omp_get_default_device());
@@ -1228,6 +1231,10 @@ void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
       omp_target_alloc(p * sizeof *target_size, omp_get_default_device());
   target_col_offsets = omp_target_alloc(p * sizeof *target_col_offsets,
                                         omp_get_default_device());
+  //target_sumn =
+  //    omp_target_alloc(p_int * sizeof *target_sumn, omp_get_default_device());
+  //target_col_nz =
+  //    omp_target_alloc(p_int * sizeof *target_col_nz, omp_get_default_device());
   printf("total entries: %d\n", Xc->total_entries);
   unsigned int *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
   unsigned int *temp_offset = malloc(p * sizeof *temp_offset);
@@ -1305,13 +1312,13 @@ char update_working_set(XMatrixSparse Xc, float *rowsum, int *wont_update,
   printf("col_start: %lx\n", Xc.col_start);
   printf("append: %lx\n", append);
   printf("remove: %lx\n", remove);
-#pragma omp target teams distribute parallel for map(to : rowsum[:n], \
+#pragma omp target teams distribute map(to : rowsum[:n], \
     last_max[:p], beta                                                         \
             [:p], wont_update                                                  \
             [:p]) map(from                                                   \
                       : append[:p_int], remove                                 \
                               [:p_int]) reduction(+: length_increase) \
-                              is_device_ptr(target_X, target_size, target_col_offsets) collapse(2)
+                              is_device_ptr(target_X, target_size, target_col_offsets) collapse(1)
 
   //#pragma omp parallel for reduction(& : increased_set) shared(last_max) \
 //  schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, \
@@ -1319,52 +1326,66 @@ char update_working_set(XMatrixSparse Xc, float *rowsum, int *wont_update,
   for (long main = 0; main < p; main++) {
     // #pragma omp parallel for reduction(& : increased_set) reduction(+:
     // length_increase) schedule(static, 1)
-    for (long inter = 0; inter < p; inter++) {
-      if (inter >= main) {
-      int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
-               (main - 1) * (main - 1) - (main - 1)) /
-                  2 +
-              inter;
-        if (!wont_update[main] && !wont_update[inter]) {
-          unsigned long offset = target_col_offsets[main];
-          int *col_i_cache = &target_X[offset];
-          int main_col_len = target_size[main];
-          int inter_col_len = target_size[inter];
-          int *col_j_cache = &target_X[target_col_offsets[inter]];
+    // #pragma omp parallel for schedule(static, 1)
           float sumn = 0.0;
           int col_nz = 0;
-          int i_pos = 0;
           int j_pos = 0;
-          int entry_j = -1;
-          int pos = 0;
-          // sum of rowsums for this column
-          int j_w = 0;
-          // This whole loop is a bit awkward, but what can you do.
-          int entry_i = -2;
-          //TODO: paralellise over this too? we're still waiting a lot in the gpu, presumably for a few large interaction columns.
-          while (i_pos < main_col_len && j_pos <= inter_col_len) {
-          read:
-            if (entry_i == entry_j) {
-              // update interaction and move to next entry of each word
-              sumn += rowsum[entry_i];
-              pos++;
+    #pragma omp parallel for simd private(sumn, col_nz, j_pos) collapse(1) shared(remove)
+    for (long inter = 0; inter < p; inter++) {
+      //if (inter >= main) {
+      //  if (!wont_update[main] && !wont_update[inter]) {
+          // unsigned long offset = target_col_offsets[main];
+          // int *col_i_cache = &target_X[offset];
+          // int main_col_len = target_size[main];
+          // int inter_col_len = target_size[inter];
+          // int *col_j_cache = &target_X[target_col_offsets[inter]];
+          // int entry_j = -1;
+          // int pos = 0;
+          //// sum of rowsums for this column
+          // int j_w = 0;
+          //// This whole loop is a bit awkward, but what can you do.
+          // int entry_i = -2;
+          // TODO: paralellise over this too? we're still waiting a lot in the
+          // gpu, presumably for a few large interaction columns.
+          //#pragma omp parallel for
+          //for (int a = 0; a < 2; a++) {
+          //}
+          //#pragma omp nowait
+          // #pragma omp parallel for private(j_pos) reduction(+ : sumn, col_nz)
+          for (int i_pos = 0; i_pos < target_size[main]; i_pos++) {
+            if (i_pos == 0) {
+              sumn = 0.0;
+              col_nz = 0;
+              j_pos = 0;
             }
-            while (entry_i <= entry_j && i_pos < main_col_len) {
-              entry_i = col_i_cache[i_pos];
-              i_pos++;
-              if (entry_i == entry_j) {
-                goto read;
+            if (inter >= main) {
+              if (!wont_update[main] && !wont_update[inter]) {
+                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
+                         (main - 1) * (main - 1) - (main - 1)) /
+                            2 +
+                        inter;
+                // int entry_i = col_i_cache[i_pos];
+                int entry_i = target_X[target_col_offsets[main] + i_pos];
+                // int entry_j = col_j_cache[j_pos];
+                int entry_j = target_X[target_col_offsets[inter] + j_pos];
+                if (entry_i == entry_j) {
+                  sumn += rowsum[entry_i];
+                  col_nz++;
+                }
+                // find correct position of j_pos;
+                // TODO: Not particularly efficient for the late chunks where
+                // i_pos is high.
+                while (target_X[target_col_offsets[inter] + j_pos] < entry_i &&
+                       j_pos < target_size[inter]) {
+                  j_pos++;
+                }
               }
             }
-            if (entry_j <= entry_i) {
-              entry_j = col_j_cache[j_pos];
-              j_pos++;
-              if (entry_i == entry_j) {
-                goto read;
-              }
-            }
-            col_nz = pos;
           }
+          int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
+                   (main - 1) * (main - 1) - (main - 1)) /
+                      2 +
+                  inter;
           sumn = fabs(sumn);
           sumn += fabs(beta[k] * col_nz);
           if (sumn > last_max[inter]) {
@@ -1375,14 +1396,6 @@ char update_working_set(XMatrixSparse Xc, float *rowsum, int *wont_update,
           } else {
             remove[k] = TRUE;
           }
-        } else {
-          // since we don't update any of this columns interactions, they
-          // shouldn't be in the working set
-          // active_set_remove(as, k);
-          //if (wont_update[inter])
-           remove[k] = TRUE;
-        }
-      }
     }
   }
   printf("re-calculating working set columns\n");
@@ -1815,7 +1828,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   // float lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25,
   // 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.01};
   float lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50,  25,
-                              10,    5,   2,   1,   0.5, 0.2, 0.1, 0.05};
+                             10,    5,   2,   1,   0.5, 0.2, 0.1, 0.05};
   // float lambda_sequence[] = {10000,500, 400, 300};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
   float *old_rowsum = malloc(sizeof *old_rowsum * n);
