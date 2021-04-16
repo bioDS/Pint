@@ -132,11 +132,9 @@ char update_working_set_device(
         fprintf(stderr, "failed to write device buffers, %d\n", ret);
     }
 
-    printf("host beta[0] = %f\n", beta[0]);
     float device_beta_test = -1.0;
     clEnqueueReadBuffer(command_queue, setup->target_beta, CL_TRUE, 0,
         sizeof(float), &device_beta_test, 0, NULL, NULL);
-    printf("device beta[0] = %f\n", device_beta_test);
 
     //host_append = (int*)calloc(p_int, sizeof(int));
     //memset(host_append, 0, p_int * sizeof(int));

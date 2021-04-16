@@ -1338,10 +1338,6 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
 //      wont_update[0:n])
     for (int j = 0; j < p; j++) {
       int old_wont_update = wont_update[j];
-      if (j == interesting_col) {
-        printf("last_max[%d]: %f\n", j, last_max[j]);
-        printf("&last_max[%d]: %lx\n", j, &last_max[j]);
-      }
       wont_update[j] =
            wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
            rowsum,
@@ -1737,9 +1733,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
           pruned_rowsum[entry] += beta_pruning[k];
           if (basic_rowsum[entry] > 1e20) {
             printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
-          }
-          if (beta[k] > 1e20) {
-            printf("beta[%d] = %f\n", k, beta[k]);
           }
         }
         values >>= item_width[word.selector];
