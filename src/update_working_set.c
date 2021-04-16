@@ -100,7 +100,7 @@ char update_working_set_device(
     struct X_uncompressed Xu, char* host_append,
     float* rowsum, int* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, 
-    struct OpenCL_Setup* setup, int *host_last_max)
+    struct OpenCL_Setup* setup, float *host_last_max)
 {
     int *host_X = Xu.host_X;
     int* host_col_nz = Xu.host_col_nz;
@@ -189,7 +189,7 @@ char update_working_set_device(
     clEnqueueReadBuffer(command_queue, setup->target_append, CL_TRUE, 0,
         sizeof(*host_append) * p_int, host_append, 0, NULL, NULL);
     clEnqueueReadBuffer(command_queue, setup->target_last_max, CL_TRUE, 0,
-        sizeof(int) * p, host_last_max, 0, NULL, NULL);
+        sizeof(float) * p, host_last_max, 0, NULL, NULL);
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     // gpu_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 }
