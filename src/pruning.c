@@ -1,17 +1,17 @@
 #include "liblasso.h"
 #include <stdalign.h>
-#define verbose FALSE
-// #define verbose TRUE
+// #define verbose FALSE
+#define verbose TRUE
 
 // Force all paramaters for this function onto a single cache line.
 struct pe_params {
   alignas(64) long n;
   long colsize;
-  double pos_max;
-  double neg_max;
-  double estimate;
+  float pos_max;
+  float neg_max;
+  float estimate;
   long i;
-  double diff_i;
+  float diff_i;
   long ind;
   // char padding[] __attribute__((alignment(16)));
 };
@@ -19,7 +19,7 @@ struct pe_params {
 // max of either positive or negative contributions to rowsum sum.
 // TODO: we know every interaction after the first iter, can we give a better
 // estimate?
-double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum,
+float pessimistic_estimate(float alpha, float *last_rowsum, float *rowsum,
                             XMatrixSparse X, int k, int *column_cache) {
   struct pe_params p = {X.n, X.cols[k].nz, 0.0, 0.0, 0.0, 0, 0.0};
   for (p.ind = 0; p.ind < p.colsize; p.ind++) {
@@ -35,17 +35,17 @@ double pessimistic_estimate(double alpha, double *last_rowsum, double *rowsum,
   return p.estimate;
 }
 
-double exact_multiple() {}
+float exact_multiple() {}
 
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
-double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
-                            double last_max, double *last_rowsum,
-                            double *rowsum, int *column_cache) {
-  double alpha = 0.0;
+float l2_combined_estimate(XMatrixSparse X, float lambda, int k,
+                            float last_max, float *last_rowsum,
+                            float *rowsum, int *column_cache) {
+  float alpha = 0.0;
   // read through the compressed column
   // TODO: make these an aligned struct?
-  double estimate_squared = 0.0;
-  double real_squared = 0.0;
+  float estimate_squared = 0.0;
+  float real_squared = 0.0;
   int entry = -1;
   int col_entry_pos = 0;
   // forcing alignment puts values on it's own cache line, so which seems to
@@ -74,10 +74,10 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
   if (verbose && k == interesting_col)
     printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
 
-  double remainder =
+  float remainder =
       pessimistic_estimate(alpha, last_rowsum, rowsum, X, k, column_cache);
 
-  double total_estimate = fabs(last_max * alpha) + remainder;
+  float total_estimate = fabs(last_max * alpha) + remainder;
   if (verbose && k == interesting_col)
     printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate,
            fabs(last_max), alpha, remainder);
@@ -95,11 +95,11 @@ double l2_combined_estimate(XMatrixSparse X, double lambda, int k,
  * somewhere convenient for this thread.
  */
 // TODO: should beta[k] be in here?
-int wont_update_effect(XMatrixSparse X, double lambda, int k, double last_max,
-                       double *last_rowsum, double *rowsum, int *column_cache,
-                       double *beta) {
+int wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
+                       float *last_rowsum, float *rowsum, int *column_cache,
+                       float *beta) {
   int *cache = malloc(X.n * sizeof *column_cache);
-  double upper_bound =
+  float upper_bound =
       l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, cache);
   if (verbose && k == interesting_col) {
     printf("beta[%d] = %f\n", k, beta[k]);

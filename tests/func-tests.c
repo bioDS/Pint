@@ -28,13 +28,13 @@
 struct timespec start, end;
 static float x2_conversion_time = 0.0;
 
-#pragma omp declare target
+// #pragma omp declare target
 // float fabs(float a) {
 //  if (-a > a)
 //    return -a;
 //  return a;
 //}
-#pragma omp end declare target
+// #pragma omp end declare target
 
 typedef struct {
   int n;
@@ -55,10 +55,6 @@ typedef struct {
   XMatrixSparse X2c;
 } UpdateFixture;
 
-typedef struct {
-  int *col_i;
-  int *col_j;
-} Thread_Cache;
 
 const static float small_X2_correct_beta[630] = {
     -83.112248,  0.000000,   0.000000,    0.000000,    0.000000, 0.000000,
@@ -1051,6 +1047,7 @@ typedef struct {
   float *max_int_delta;
   int_pair *precalc_get_num;
   gsl_permutation *iter_permutation;
+  struct X_uncompressed Xu;
 } Iter_Vars;
 
 // nothing in vars is changed
@@ -1113,84 +1110,6 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   return 0.0;
 }
 
-struct AS_Properties {
-  int was_present : 1;
-  int present : 1;
-};
-
-typedef struct {
-  // int *entries;
-  // struct AS_Properties *properties;
-  struct AS_Entry *entries;
-  int length;
-  int max_length;
-  gsl_permutation *permutation;
-  // S8bCol *compressed_cols;
-} Active_Set;
-
-/*
- * Fits 6 to a cache line. As long as schedule is static, this should be fine.
- */
-struct AS_Entry {
-  long val : 62;
-  int was_present : 1;
-  int present : 1;
-  S8bCol col;
-  // TODO: shouldn't need this
-  // char padding[39];
-};
-
-Active_Set active_set_new(int max_length) {
-  struct AS_Entry *entries = malloc(sizeof *entries * max_length);
-  // N.B this is what sets was_present to false for every entry
-  memset(entries, 0,
-         sizeof *entries *
-             max_length); // not strictly necessary, but probably safer.
-  int length = 0;
-  Active_Set as = {entries, length, max_length, NULL};
-  return as;
-}
-
-void active_set_free(Active_Set as) {
-  for (int i = 0; i < as.length; i++) {
-    struct AS_Entry *e = &as.entries[i];
-    if (NULL != e->col.compressed_indices) {
-      free(e->col.compressed_indices);
-    }
-  }
-  free(as.entries);
-  if (NULL != as.permutation)
-    free(as.permutation);
-}
-
-void active_set_append(Active_Set *as, int value, int *col, int len) {
-  struct AS_Entry *e = &as->entries[value];
-  if (e->was_present) {
-    e->present = TRUE;
-  } else {
-    int i = as->length;
-    e->val = value;
-    e->present = TRUE;
-    e->was_present = TRUE;
-    g_assert_true(as->length < as->max_length);
-    // printf("new col has %d words, %d entries\n", s8bCol.nwords,
-    // s8bCol.nz); printf("adding col for effect %d\n", value);
-    e->col = col_to_s8b_col(len, col);
-  }
-}
-
-void active_set_remove(Active_Set *as, int index) {
-  as->entries[index].present = FALSE;
-}
-
-int active_set_get_index(Active_Set *as, int index) {
-  struct AS_Entry *e = &as->entries[index];
-  if (e->present) {
-    return e->val;
-  } else {
-    return -INT_MAX;
-  }
-}
 
 struct RawCol {
   int len;
@@ -1220,31 +1139,80 @@ static unsigned int *target_col_offsets;
 static float *target_sumn;
 static unsigned int *target_col_nz;
 
-void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
-  int n = Xc->n;
-  int p = Xc->p;
-  int p_int = p*(p+1)/2;
+//void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
+//  int n = Xc->n;
+//  int p = Xc->p;
+//  int p_int = p*(p+1)/2;
 
-  target_X = omp_target_alloc(Xc->total_entries * sizeof *target_X,
-                              omp_get_default_device());
-  target_size =
-      omp_target_alloc(p * sizeof *target_size, omp_get_default_device());
-  target_col_offsets = omp_target_alloc(p * sizeof *target_col_offsets,
-                                        omp_get_default_device());
-  //target_sumn =
-  //    omp_target_alloc(p_int * sizeof *target_sumn, omp_get_default_device());
-  //target_col_nz =
-  //    omp_target_alloc(p_int * sizeof *target_col_nz, omp_get_default_device());
-  printf("total entries: %d\n", Xc->total_entries);
-  unsigned int *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
-  unsigned int *temp_offset = malloc(p * sizeof *temp_offset);
-  unsigned int *temp_size = malloc(p * sizeof *temp_offset);
-  memset(temp_X, 0, Xc->total_entries * sizeof *temp_X);
-  long offset = 0;
+//  target_X = omp_target_alloc(Xc->total_entries * sizeof *target_X,
+//                              omp_get_default_device());
+//  target_size =
+//      omp_target_alloc(p * sizeof *target_size, omp_get_default_device());
+//  target_col_offsets = omp_target_alloc(p * sizeof *target_col_offsets,
+//                                        omp_get_default_device());
+//  //target_sumn =
+//  //    omp_target_alloc(p_int * sizeof *target_sumn, omp_get_default_device());
+//  //target_col_nz =
+//  //    omp_target_alloc(p_int * sizeof *target_col_nz, omp_get_default_device());
+//  printf("total entries: %d\n", Xc->total_entries);
+//  unsigned int *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
+//  unsigned int *temp_offset = malloc(p * sizeof *temp_offset);
+//  unsigned int *temp_size = malloc(p * sizeof *temp_offset);
+//  memset(temp_X, 0, Xc->total_entries * sizeof *temp_X);
+//  long offset = 0;
+//  for (int k = 0; k < p; k++) {
+//    temp_offset[k] = offset;
+//    temp_size[k] = Xc->cols[k].nz;
+//    int *col = &temp_X[offset];
+//    // read column
+//    {
+//      int col_entry_pos = 0;
+//      int entry = -1;
+//      for (int i = 0; i < Xc->cols[k].nwords; i++) {
+//        S8bWord word = Xc->cols[k].compressed_indices[i];
+//        unsigned long values = word.values;
+//        for (int j = 0; j <= group_size[word.selector]; j++) {
+//          int diff = values & masks[word.selector];
+//          if (diff != 0) {
+//            entry += diff;
+//            col[col_entry_pos] = entry;
+//            col_entry_pos++;
+//            offset++;
+//          }
+//          values >>= item_width[word.selector];
+//        }
+//      }
+//      // offset += col_entry_pos;
+//    }
+//  }
+//  // memcpy(target_size, Xc.col_nz, n * sizeof *target_size);
+//  omp_target_memcpy(target_size, temp_size, p * sizeof *target_size, 0, 0,
+//                    omp_get_default_device(), omp_get_initial_device());
+//  omp_target_memcpy(target_col_offsets, temp_offset, p * sizeof *temp_offset, 0,
+//                    0, omp_get_default_device(), omp_get_initial_device());
+//  omp_target_memcpy(target_X, temp_X, Xc->total_entries * sizeof *target_size,
+//                    0, 0, omp_get_default_device(), omp_get_initial_device());
+//  free(temp_X);
+//  // target_X = temp_X;
+//  free(temp_offset);
+//  free(temp_size);
+//  // target_col_offsets = temp_offset;
+//}
+
+struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
+  int* host_X = calloc(Xc->total_entries, sizeof(int));
+  int* host_col_nz = calloc(Xc->p, sizeof(int));;
+  int* host_col_offsets = calloc(Xc->p, sizeof(int));
+  int p = Xc->p;
+  int n = Xc->n;
+
+  // read through compressed matrix and construct continuous
+  // uncompressed matrix
+  size_t offset = 0;
   for (int k = 0; k < p; k++) {
-    temp_offset[k] = offset;
-    temp_size[k] = Xc->cols[k].nz;
-    int *col = &temp_X[offset];
+    host_col_offsets[k] = offset;
+    host_col_nz[k] = Xc->cols[k].nz;
+    int *col = &host_X[offset];
     // read column
     {
       int col_entry_pos = 0;
@@ -1263,248 +1231,17 @@ void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
           values >>= item_width[word.selector];
         }
       }
-      // offset += col_entry_pos;
     }
   }
-  // memcpy(target_size, Xc.col_nz, n * sizeof *target_size);
-  omp_target_memcpy(target_size, temp_size, p * sizeof *target_size, 0, 0,
-                    omp_get_default_device(), omp_get_initial_device());
-  omp_target_memcpy(target_col_offsets, temp_offset, p * sizeof *temp_offset, 0,
-                    0, omp_get_default_device(), omp_get_initial_device());
-  omp_target_memcpy(target_X, temp_X, Xc->total_entries * sizeof *target_size,
-                    0, 0, omp_get_default_device(), omp_get_initial_device());
-  free(temp_X);
-  // target_X = temp_X;
-  free(temp_offset);
-  free(temp_size);
-  // target_col_offsets = temp_offset;
-}
 
-/*
- * Returns true if and only if something was added to the active set.
- * TODO: for each branch, use set p booleans (bit-field in struct w/ accessor?)
- * to set whether they should be updated?
- * TODO: running to lambda 500 on bigger we spend more time in memcpy than
- * calculations.
- * - move calculation of dense main columns into own loop and only do it once.
- * - keep Xc (or more likely the decompressed version) on the gpu, don't copy it
- * back and forth.
- */
-char update_working_set(XMatrixSparse Xc, float *rowsum, int *wont_update,
-                        Active_Set *as, float *last_max, int p, int n,
-                        int_pair *precalc_get_num, float lambda, float *beta,
-                        Thread_Cache *thread_caches, XMatrixSparse X2c) {
-  char increased_set = FALSE;
-  long length_increase = 0;
-  int p_int = p * (p + 1) / 2;
-  int *append = malloc(p_int * sizeof *append);
-  int *remove = malloc(p_int * sizeof *remove);
-  memset(append, 0, p_int * sizeof *append);
-  memset(remove, 0, p_int * sizeof *remove);
 
-  struct AS_Entry *entries = as->entries;
-  int entries_length = as->length;
+  struct X_uncompressed Xu;
+  Xu.host_col_nz = host_col_nz;
+  Xu.host_col_offsets = host_col_offsets;
+  Xu.host_X = host_X;
+  Xu.total_size = offset;
 
-  //#pragma omp parallel for reduction(& : increased_set) shared(last_max) \
-//  schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, \
-//   length_increase)
-  printf("compressed_indices: %lx\n", Xc.compressed_indices);
-  printf("col_start: %lx\n", Xc.col_start);
-  printf("append: %lx\n", append);
-  printf("remove: %lx\n", remove);
-#pragma omp target teams distribute map(to : rowsum[:n], \
-    last_max[:p], beta                                                         \
-            [:p], wont_update                                                  \
-            [:p]) map(from                                                   \
-                      : append[:p_int], remove                                 \
-                              [:p_int]) reduction(+: length_increase) \
-                              is_device_ptr(target_X, target_size, target_col_offsets) collapse(1)
-
-  //#pragma omp parallel for reduction(& : increased_set) shared(last_max) \
-//  schedule(static) reduction(+: reused_col_time, main_col_time, int_col_time, \
-//   length_increase)
-  for (long main = 0; main < p; main++) {
-    // #pragma omp parallel for reduction(& : increased_set) reduction(+:
-    // length_increase) schedule(static, 1)
-    // #pragma omp parallel for schedule(static, 1)
-          float sumn = 0.0;
-          int col_nz = 0;
-          int j_pos = 0;
-    #pragma omp parallel for simd private(sumn, col_nz, j_pos) collapse(1) shared(remove)
-    for (long inter = 0; inter < p; inter++) {
-      //if (inter >= main) {
-      //  if (!wont_update[main] && !wont_update[inter]) {
-          // unsigned long offset = target_col_offsets[main];
-          // int *col_i_cache = &target_X[offset];
-          // int main_col_len = target_size[main];
-          // int inter_col_len = target_size[inter];
-          // int *col_j_cache = &target_X[target_col_offsets[inter]];
-          // int entry_j = -1;
-          // int pos = 0;
-          //// sum of rowsums for this column
-          // int j_w = 0;
-          //// This whole loop is a bit awkward, but what can you do.
-          // int entry_i = -2;
-          // TODO: paralellise over this too? we're still waiting a lot in the
-          // gpu, presumably for a few large interaction columns.
-          //#pragma omp parallel for
-          //for (int a = 0; a < 2; a++) {
-          //}
-          //#pragma omp nowait
-          // #pragma omp parallel for private(j_pos) reduction(+ : sumn, col_nz)
-          for (int i_pos = 0; i_pos < target_size[main]; i_pos++) {
-            if (i_pos == 0) {
-              sumn = 0.0;
-              col_nz = 0;
-              j_pos = 0;
-            }
-            if (inter >= main) {
-              if (!wont_update[main] && !wont_update[inter]) {
-                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
-                         (main - 1) * (main - 1) - (main - 1)) /
-                            2 +
-                        inter;
-                // int entry_i = col_i_cache[i_pos];
-                int entry_i = target_X[target_col_offsets[main] + i_pos];
-                // int entry_j = col_j_cache[j_pos];
-                int entry_j = target_X[target_col_offsets[inter] + j_pos];
-                if (entry_i == entry_j) {
-                  sumn += rowsum[entry_i];
-                  col_nz++;
-                }
-                // find correct position of j_pos;
-                // TODO: Not particularly efficient for the late chunks where
-                // i_pos is high.
-                while (target_X[target_col_offsets[inter] + j_pos] < entry_i &&
-                       j_pos < target_size[inter]) {
-                  j_pos++;
-                }
-              }
-            }
-          }
-          int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
-                   (main - 1) * (main - 1) - (main - 1)) /
-                      2 +
-                  inter;
-          sumn = fabs(sumn);
-          sumn += fabs(beta[k] * col_nz);
-          if (sumn > last_max[inter]) {
-            last_max[inter] = sumn;
-          }
-          if (sumn > lambda * n / 2) {
-            append[k] = TRUE;
-          } else {
-            remove[k] = TRUE;
-          }
-    }
-  }
-  printf("re-calculating working set columns\n");
-#pragma omp parallel for reduction(+ : length_increase)
-  for (int main = 0; main < p; main++) {
-    int main_col_len;
-    int *col_i_cache = thread_caches[omp_get_thread_num()].col_i;
-    int *col_j_cache = thread_caches[omp_get_thread_num()].col_j;
-    {
-      int *column_entries = col_i_cache;
-      long col_entry_pos = 0;
-      long entry = -1;
-      for (int r = 0; r < Xc.cols[main].nwords; r++) {
-        S8bWord word = Xc.cols[main].compressed_indices[r];
-        unsigned long values = word.values;
-        for (int j = 0; j <= group_size[word.selector]; j++) {
-          int diff = values & masks[word.selector];
-          if (diff != 0) {
-            entry += diff;
-            column_entries[col_entry_pos] = entry;
-            col_entry_pos++;
-          }
-          values >>= item_width[word.selector];
-        }
-      }
-      main_col_len = col_entry_pos;
-    }
-    for (int inter = main; inter < p; inter++) {
-      int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
-               (main - 1) * (main - 1) - (main - 1)) /
-                  2 +
-              inter;
-      if (append[k]) {
-        if (!entries[k].was_present) {
-          int col_nz = 0;
-          int i_pos = 0;
-          int entry_j = -1;
-          int pos = 0;
-          // sum of rowsums for this column
-          int j_w = 0;
-          S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
-          int j_wpos = 0;
-          unsigned long values_j = word_j.values;
-          int j_size = group_size[word_j.selector];
-          // This whole loop is a bit awkward, but what can you do.
-          int entry_i = -2;
-          while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
-          read2:
-            if (entry_i == entry_j) {
-              // update interaction and move to next entry of each word
-              col_j_cache[pos] = entry_i;
-              pos++;
-            }
-            while (entry_i <= entry_j && i_pos < main_col_len) {
-              entry_i = col_i_cache[i_pos];
-              i_pos++;
-              if (entry_i == entry_j) {
-                goto read2;
-              }
-            }
-            if (entry_j <= entry_i) {
-              // read through j until we hit the end, or reach or exceed
-              // i.
-              while (j_w <= Xc.cols[inter].nwords) {
-                // current word
-                while (j_wpos <= j_size) {
-                  int diff = values_j & masks[word_j.selector];
-                  j_wpos++;
-                  values_j >>= item_width[word_j.selector];
-                  if (diff != 0) {
-                    entry_j += diff;
-                    // we've found the next value of j
-                    // if it's equal we'll handle it earlier in the loop,
-                    // otherwise go to the j read loop.
-                    if (entry_j >= entry_i) {
-                      goto read2;
-                      // break;
-                    }
-                  }
-                }
-                // switch to the next word
-                j_w++;
-                if (j_w < Xc.cols[inter].nwords) {
-                  word_j = Xc.cols[inter].compressed_indices[j_w];
-                  values_j = word_j.values;
-                  j_size = group_size[word_j.selector];
-                  j_wpos = 0;
-                }
-              }
-            }
-          }
-          col_nz = pos;
-          g_assert_true(k < p_int);
-          active_set_append(as, k, col_j_cache, col_nz);
-        } else {
-          active_set_append(as, k, NULL, 0);
-        }
-        if (!as->entries[k].was_present) {
-          length_increase++;
-        }
-      } else if (remove[k]) {
-        active_set_remove(as, k);
-      }
-    }
-  }
-  free(append);
-  free(remove);
-  as->length += length_increase;
-  return increased_set;
+  return Xu;
 }
 
 static float pruning_time = 0.0;
@@ -1512,7 +1249,7 @@ static float working_set_update_time = 0.0;
 static float subproblem_time = 0.0;
 
 int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
-                            float *old_rowsum, Active_Set *active_set) {
+                            float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup) {
   XMatrixSparse Xc = vars->Xc;
   float **last_rowsum = vars->last_rowsum;
   Thread_Cache *thread_caches = vars->thread_caches;
@@ -1575,14 +1312,14 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     int total_notpresent = 0;
 // memset(max_int_delta, 0, sizeof *max_int_delta * p);
 // memset(last_max, 0, sizeof *last_max * p);
-#pragma omp parallel for schedule(static)
-    for (int i = 0; i < p; i++) {
-      max_int_delta[i] = 0;
-      last_max[i] = 0;
-    }
+//#pragma omp parallel for schedule(static)
+//    for (int i = 0; i < p; i++) {
+//      max_int_delta[i] = 0;
+//      last_max[i] = 0;
+//    }
 
     //********** Branch Pruning       *******************
-    printf("branch pruning. ");
+    printf("branch pruning.\n");
     long active_branches = 0;
     long new_active_branches = 0;
 
@@ -1601,12 +1338,16 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
 //      wont_update[0:n])
     for (int j = 0; j < p; j++) {
       int old_wont_update = wont_update[j];
+      if (j == interesting_col) {
+        printf("last_max[%d]: %f\n", j, last_max[j]);
+        printf("&last_max[%d]: %lx\n", j, &last_max[j]);
+      }
       wont_update[j] =
-          // wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
-          // rowsum,
-          //                   thread_caches[omp_get_thread_num()].col_j, beta);
-          wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum,
-                             NULL, beta);
+           wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
+           rowsum,
+                             thread_caches[omp_get_thread_num()].col_j, beta);
+          //wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum,
+          //                   NULL, beta);
       char new_active_branch = old_wont_update && !wont_update[j];
       if (new_active_branch)
         new_active_branches++;
@@ -1634,7 +1375,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     pruning_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                     (end.tv_sec - start.tv_sec);
-    printf("(%d active branches, %d new)\n", active_branches,
+    printf("(%ld active branches, %ld new)\n", active_branches,
            new_active_branches);
     if (active_branches == 0) {
       break;
@@ -1643,12 +1384,26 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     // TODO: is it worth constructing a new set with no 'blank'
     // elements?
     printf("updating working set.\n");
+    int count_may_update = 0;
+    int* updateable_items = calloc(p, sizeof *updateable_items); //TODO: keep between iters
+    char* append = calloc(p_int, sizeof(char));
+    for (int i = 0; i < p; i++) {
+        if (!wont_update[i]) {
+          updateable_items[count_may_update] = i;
+          count_may_update++;
+        }
+    }
+    printf("there were %d updateable items\n", count_may_update);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     char increased_set =
-        update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
-                           precalc_get_num, lambda, beta, thread_caches, X2c);
+        //update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
+        //                   precalc_get_num, lambda, beta, thread_caches, X2c);
+        // update_working_set_cpu(vars->Xu, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update);
+        update_working_set(vars->Xu, Xc, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, active_set, thread_caches, ocl_setup, last_max);
     // update_working_set(Xc, rowsum, new_active_branch, active_set, last_max,
     //                   p, n, precalc_get_num, lambda, beta, thread_caches);
+    free(updateable_items);
+    free(append);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     working_set_update_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
                                (end.tv_sec - start.tv_sec);
@@ -1821,8 +1576,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     for (int i = 0; i < n; i++)
       g_assert_true(last_rowsum[j][i] == 0.0);
 
-  float last_max[n];
-  memset(last_max, 0, sizeof(last_max));
+  // float last_max[n];
+  float *last_max = calloc(n, sizeof(float));
+  // printf("last_max: %lx\n", last_max);
+  memset(last_max, 0, sizeof(*last_max));
 
   // start running tests with decreasing lambda
   // float lambda_sequence[] = {10000,500, 400, 300, 200, 100, 50, 25,
@@ -1842,6 +1599,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
   float *max_int_delta = malloc(sizeof *max_int_delta * p);
   memset(max_int_delta, 0, sizeof *max_int_delta * p);
+  struct X_uncompressed Xu = construct_host_X(&Xc);
 
   Iter_Vars iter_vars_basic = {
       Xc,
@@ -1858,6 +1616,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       max_int_delta,
       fixture->precalc_get_num,
       iter_permutation,
+      Xu,
   };
   struct timespec start, end;
   float basic_cpu_time_used, pruned_cpu_time_used;
@@ -1908,6 +1667,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       max_int_delta,
       fixture->precalc_get_num,
       iter_permutation,
+      Xu,
   };
 
   printf("getting time for pruned version\n");
@@ -1915,9 +1675,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   for (int i = 0; i < n; i++) {
     p_rowsum[i] = -Y[i];
   }
-  target_setup(&Xc, &fixture->xmatrix);
+  //target_setup(&Xc, &fixture->xmatrix);
+  //TODO: setup OpenCL device.
+  struct OpenCL_Setup ocl_setup = setup_working_set_kernel(Xu, n, p);
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   Active_Set active_set = active_set_new(p_int);
   for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
     // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
@@ -1927,7 +1688,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     int last_iter_count = 0;
 
     run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-                            &active_set);
+                            &active_set, &ocl_setup);
   }
 
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -2010,7 +1771,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
          main_col_time, int_col_time, reused_col_time);
 
   printf("checking beta values come out the same\n");
-  // for (int k = 0; k < p_int; k++) {
   for (int k = 0; k < 10; k++) {
     float basic_beta = fabs(beta[k]);
     float pruned_beta = fabs(beta[k]);
@@ -2022,6 +1782,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
              beta_pruning[k], k);
     }
   }
+  opencl_cleanup(ocl_setup);
 }
 
 int main(int argc, char *argv[]) {

@@ -10,6 +10,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+
+#include <CL/opencl.h>
+#include <math.h>
+#include <omp.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 #include <config.h>
 #ifdef NOT_R
@@ -18,6 +26,10 @@
 #include <R.h>
 #endif
 
+typedef struct {
+  int *col_i;
+  int *col_j;
+} Thread_Cache;
 typedef struct {
   long val;
   // disable padding for now, pretty sure we don't need it.
@@ -36,14 +48,65 @@ enum LOG_LEVEL {
   NONE,
 };
 
+struct X_uncompressed {
+  int* host_X;
+  int* host_col_nz;
+  int* host_col_offsets;
+  size_t total_size;
+};
+struct AS_Properties {
+  int was_present : 1;
+  int present : 1;
+};
+
+struct OpenCL_Setup {
+    cl_context context;
+    cl_kernel kernel;
+    cl_command_queue command_queue;
+    cl_program program;
+    cl_mem target_X;
+    cl_mem target_col_nz;
+    cl_mem target_col_offsets;
+    cl_mem target_wont_update;
+    cl_mem target_rowsum;
+    cl_mem target_beta;
+    cl_mem target_updateable_items;
+    cl_mem target_append;
+    cl_mem target_last_max;
+};
+
+/*
+ * Fits 6 to a cache line. As long as schedule is static, this should be fine.
+ */
+
 #include "log.h"
 #include "s8b.h"
 #include "sparse_matrix.h"
+
+typedef struct {
+  // int *entries;
+  // struct AS_Properties *properties;
+  struct AS_Entry *entries;
+  int length;
+  int max_length;
+  gsl_permutation *permutation;
+  // S8bCol *compressed_cols;
+} Active_Set;
+
+struct AS_Entry {
+  long val : 62;
+  int was_present : 1;
+  int present : 1;
+  S8bCol col;
+  // TODO: shouldn't need this
+  // char padding[39];
+};
 
 #include "csv.h"
 #include "pruning.h"
 #include "queue.h"
 #include "regression.h"
+#include "update_working_set.h"
 
 int **X2_from_X(int **X, int n, int p);
 float *read_y_csv(char *fn, int n);
@@ -78,7 +141,6 @@ extern int skipped_updates_entries;
 extern int total_updates_entries;
 extern int zero_updates;
 extern int zero_updates_entries;
-extern int VERBOSE;
 extern int *colsum;
 extern float *col_ysum;
 extern int max_size_given_entries[61];

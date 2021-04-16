@@ -20,6 +20,7 @@ configure_file(output: 'config.h', configuration: conf_data)
 liblasso_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
+	dependency('OpenCL'),
 	#rt_dependency,
 ]
 
@@ -31,6 +32,7 @@ liblasso = shared_library('liblasso', 'liblasso.c', 'liblasso.h',
     'log.h', 'log.c',
     'csv.h', 'csv.c',
     'pruning.h', 'pruning.c',
+    'update_working_set.h', 'update_working_set.c',
 	include_directories: configuration_inc,
 	dependencies: liblasso_deps,
 	install: true
