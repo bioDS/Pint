@@ -1,4 +1,5 @@
 #include "liblasso.h"
+#include <gsl/gsl_complex.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -445,6 +446,8 @@ float *simple_coordinate_descent_lasso(
   return beta;
 }
 
+static int firstchanged = FALSE;
+
 Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
                                float *rowsum, int n, int p, float lambda,
                                float *beta, long k, float intercept,
@@ -479,6 +482,10 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
     }
   }
 
+  //if (k == interesting_col) {
+  //    printf("lambda * n / 2 = %f\n", lambda * n / 2);
+  //    printf("sumn: %f\n", sumn);
+  //}
   // if (k==4147) {
   //	printf("sumn: %f\n", sumn);
   //	printf("sumn -bk: %f\n", sumn - sumk*beta[k]);
@@ -494,6 +501,10 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
   Bk_diff = beta[k] - Bk_diff;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
+    if (!firstchanged) {
+      firstchanged = TRUE;
+      printf("first changed on col %ld (%d,%d), lambda %f ******************\n", k, precalc_get_num[k].i, precalc_get_num[k].j, lambda);
+    }
     for (int e = 0; e < xmatrix_sparse.cols[k].nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic

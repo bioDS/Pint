@@ -1,7 +1,7 @@
 #include "liblasso.h"
 #include <stdalign.h>
-#define verbose FALSE
-// #define verbose TRUE
+// #define verbose FALSE
+#define verbose TRUE
 
 // Force all paramaters for this function onto a single cache line.
 struct pe_params {
@@ -105,6 +105,9 @@ int wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
     printf("beta[%d] = %f\n", k, beta[k]);
     printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound,
            lambda * (X.n / 2));
+           if (upper_bound <= lambda * (X.n/2)) {
+             printf("may update %d\n", k);
+           }
   }
   free(cache);
   return upper_bound <= lambda * (X.n / 2);

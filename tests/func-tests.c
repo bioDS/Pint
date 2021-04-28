@@ -28,6 +28,12 @@
 struct timespec start, end;
 static float x2_conversion_time = 0.0;
 
+extern inline char update_working_set_device(
+    struct X_uncompressed Xu, char* host_append,
+    float* rowsum, int* wont_update, int p, int n,
+    float lambda, float* beta, int* updateable_items, int count_may_update, 
+    struct OpenCL_Setup* setup, float *host_last_max);
+
 // #pragma omp declare target
 // float fabs(float a) {
 //  if (-a > a)
@@ -1248,6 +1254,7 @@ static float pruning_time = 0.0;
 static float working_set_update_time = 0.0;
 static float subproblem_time = 0.0;
 
+
 int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
                             float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup) {
   XMatrixSparse Xc = vars->Xc;
@@ -1381,10 +1388,13 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     // elements?
     printf("updating working set.\n");
     int count_may_update = 0;
+    //int *updateable_items = NULL;
+    //char * append = NULL;
     int* updateable_items = calloc(p, sizeof *updateable_items); //TODO: keep between iters
     char* append = calloc(p_int, sizeof(char));
     for (int i = 0; i < p; i++) {
         if (!wont_update[i]) {
+        // if (TRUE) {
           updateable_items[count_may_update] = i;
           count_may_update++;
         }
@@ -1392,8 +1402,8 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     printf("there were %d updateable items\n", count_may_update);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     char increased_set =
-        //update_working_set(Xc, rowsum, wont_update, active_set, last_max, p, n,
-        //                   precalc_get_num, lambda, beta, thread_caches, X2c);
+      // update_working_set_local2(Xc, rowsum, wont_update, active_set, last_max, p, n, precalc_get_num, lambda, beta, thread_caches, X2c);
+        // update_working_set_cpu_old(Xc, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, active_set, thread_caches);
         // update_working_set_cpu(vars->Xu, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update);
         update_working_set(vars->Xu, Xc, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, active_set, thread_caches, ocl_setup, last_max);
     // update_working_set(Xc, rowsum, new_active_branch, active_set, last_max,

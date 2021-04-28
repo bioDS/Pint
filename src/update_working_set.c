@@ -96,7 +96,216 @@ int active_set_get_index(Active_Set* as, int index)
     }
 }
 
-char update_working_set_device(
+
+/*
+ * TODO: don't use thread_caches to store the result, or directly add things to as.
+  * We probably need to have an allocated buffer for things that could be added to the
+  * active set, and hope we don't have too many things.
+ */
+inline char update_working_set_cpu_old(
+    // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
+    struct XMatrixSparse Xc, char* host_append,
+    float* rowsum, int* wont_update, int p, int n,
+    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float *last_max, Active_Set *as, Thread_Cache *thread_caches) {
+//char update_working_set_old(XMatrixSparse Xc, char* host_append, double *rowsum, int *wont_update,
+//                        Active_Set *as, double *last_max, int p, int n,
+//                        int_pair *precalc_get_num, double lambda, double *beta,
+//                        Thread_Cache *thread_caches, XMatrixSparse X2c) {
+    int p_int = p*(p+1)/2;
+  memset(host_append, 0, p_int * sizeof(char));
+  char increased_set = FALSE;
+  long length_increase = 0;
+#pragma omp parallel for reduction(& : increased_set) shared(last_max) schedule(static) reduction(+: length_increase)
+  for (long main = 0; main < p; main++) {
+    Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
+    int *col_i_cache = thread_cache.col_i;
+    int *col_j_cache = thread_cache.col_j;
+    int main_col_len = 0;
+    if (!wont_update[main]) {
+      {
+        int *column_entries = col_i_cache;
+        long col_entry_pos = 0;
+        long entry = -1;
+        for (int r = 0; r < Xc.cols[main].nwords; r++) {
+          S8bWord word = Xc.cols[main].compressed_indices[r];
+          unsigned long values = word.values;
+          for (int j = 0; j <= group_size[word.selector]; j++) {
+            int diff = values & masks[word.selector];
+            if (diff != 0) {
+              entry += diff;
+              column_entries[col_entry_pos] = entry;
+              col_entry_pos++;
+            }
+            values >>= item_width[word.selector];
+          }
+        }
+        main_col_len = col_entry_pos;
+        // g_assert_true(main_col_len == Xc.cols[main].nz);
+      }
+      int read_loops = 0;
+      for (long inter = main; inter < p; inter++) {
+        // TODO: no need to re-read the main column when inter == main.
+        // worked out by hand as being equivalent to the offset we would have
+        // reached. sumb is the amount we would have reached w/o the limit -
+        // the amount that was actually covered by the limit.
+        int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) -
+                 (main - 1) * (main - 1) - (main - 1)) /
+                    2 +
+                inter;
+        float sumn = 0.0;
+        int col_nz = 0;
+        // g_assert_true(precalc_get_num[k].i == j);
+        // g_assert_true(k <= (Xc.p * (Xc.p + 1) / 2));
+        if (!wont_update[inter]) {
+
+          // we've already calculated the interaction, re-use it.
+          if (as->entries[k].was_present) {
+            // printf("re-using column %d\n", k);
+            S8bCol s8bCol = as->entries[k].col;
+            col_nz = s8bCol.nz;
+            int entry = -1;
+            int tmpCount = 0;
+            for (int i = 0; i < s8bCol.nwords; i++) {
+              S8bWord word = s8bCol.compressed_indices[i];
+              unsigned long values = word.values;
+              for (int j = 0; j <= group_size[word.selector]; j++) {
+                tmpCount++;
+                int diff = values & masks[word.selector];
+                if (diff != 0) {
+                  entry += diff;
+                  if (entry > Xc.n) {
+                    printf("entry: %d\n", entry);
+                    printf("col %d col_nz: %d, tmpCount: %d\n", k, col_nz,
+                           tmpCount);
+                  }
+                //   g_assert_true(entry < Xc.n);
+                  sumn += rowsum[entry];
+                }
+                values >>= item_width[word.selector];
+              }
+            }
+          } else {
+            // printf("calculating new column\n");
+            // this column has never been in the working set before, therefore
+            // its beta value is zero and so is sumn.
+            // calculate the interaction
+            // and maybe store it read columns i and j simultaneously
+            // int entry_i = -1;
+            int i_pos = 0;
+            int entry_j = -1;
+            int pos = 0;
+            // sum of rowsums for this column
+            // int i_w = 0;
+            int j_w = 0;
+            // S8bWord word_i = Xc.compressed_indices[i][i_w];
+            S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
+            // int i_wpos = 0;
+            int j_wpos = 0;
+            // unsigned long values_i = word_i.values;
+            unsigned long values_j = word_j.values;
+            // int i_size = group_size[word_i.selector];
+            int j_size = group_size[word_j.selector];
+            // This whole loop is a bit awkward, but what can you do.
+            // printf("interaction between %d (len %d) and %d (len %d)\n", i,
+            //  Xc.col_nz[i], j, Xc.col_nz[j]);
+            int entry_i = -2;
+            while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
+            read:
+              if (entry_i == entry_j) {
+                // update interaction and move to next entry of each word
+                sumn += rowsum[entry_i];
+                col_j_cache[pos] = entry_i;
+                pos++;
+                // g_assert_true(pos < Xc.n);
+              }
+              while (entry_i <= entry_j && i_pos < main_col_len) {
+                entry_i = col_i_cache[i_pos];
+                i_pos++;
+                if (entry_i == entry_j) {
+                  goto read;
+                }
+              }
+              if (entry_j <= entry_i) {
+                // read through j until we hit the end, or reach or exceed
+                // i.
+                while (j_w <= Xc.cols[inter].nwords) {
+                  // current word
+                  while (j_wpos <= j_size) {
+                    int diff = values_j & masks[word_j.selector];
+                    j_wpos++;
+                    values_j >>= item_width[word_j.selector];
+                    if (diff != 0) {
+                      entry_j += diff;
+                      // we've found the next value of j
+                      // if it's equal we'll handle it earlier in the loop,
+                      // otherwise go to the j read loop.
+                      if (entry_j >= entry_i) {
+                        goto read;
+                        // break;
+                      }
+                    }
+                  }
+                  // switch to the next word
+                  j_w++;
+                  if (j_w < Xc.cols[inter].nwords) {
+                    word_j = Xc.cols[inter].compressed_indices[j_w];
+                    values_j = word_j.values;
+                    j_size = group_size[word_j.selector];
+                    j_wpos = 0;
+                  }
+                }
+              }
+            }
+            col_nz = pos;
+            // g_assert_true(pos == X2c.nz[k]);
+            // N.B. putting everything we use in the active set, but marking it
+            // as inactive. this speeds up future checks quite significantly, at
+            // the cost of increased memory use. For a gpu implenentation we
+            // probably don't want this.
+            active_set_append(as, k, col_j_cache, col_nz);
+            length_increase++;
+            active_set_remove(as, k);
+          }
+          // if (k == 85)
+          //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
+          // either way, we now have sumn
+          sumn = fabs(sumn);
+          sumn += fabs(beta[k] * col_nz);
+          if (main == interesting_col && inter == interesting_col) {
+              printf("lambda * n / 2 = %f\n", lambda * n / 2);
+              printf("sumn: %f\n", sumn);
+              printf("last_max[%ld] = %f\n", main, last_max[main]);
+          }
+          if (sumn > last_max[main]) {
+            last_max[main] = sumn;
+            if (main == interesting_col && inter == interesting_col) {
+                printf("updating last_max[%ld] to %f\n", main, last_max[main]);
+            }
+          }
+          if (sumn > lambda * n / 2) {
+            // active_set_append(as, k, col_j_cache, col_nz);
+            // printf("appending %d***************\n", k);
+            host_append[k] = TRUE;
+            increased_set = TRUE;
+          } else {
+            active_set_remove(as, k);
+          }
+          // TODO: store column for re-use even if it's not really added to
+          // the active set?
+        } else {
+          // since we don't update any of this columns interactions, they
+          // shouldn't be in the working set
+          active_set_remove(as, k);
+        }
+      }
+    }
+  }
+  as->length += length_increase;
+  return increased_set;
+}
+
+inline char update_working_set_device(
     struct X_uncompressed Xu, char* host_append,
     float* rowsum, int* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, 
@@ -202,8 +411,11 @@ char update_working_set(
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;
-    //update_working_set_cpu(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
-    update_working_set_device(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, setup, last_max);
+    // char increased_set = TRUE;
+    // char increased_set = update_working_set_cpu(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+    char increased_set = update_working_set_cpu_old(Xc, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, as, thread_caches);
+    // return increased_set;
+    // update_working_set_device(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, setup, last_max);
     printf("re-calculating working set columns\n");
     struct AS_Entry *entries = as->entries;
     long length_increase = 0;
@@ -235,6 +447,7 @@ char update_working_set(
         for (int inter = main; inter < p; inter++) {
             int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
             if (host_append[k]) {
+            // if (TRUE) {
                 if (!entries[k].was_present) {
                     int col_nz = 0;
                     int i_pos = 0;
@@ -295,6 +508,7 @@ char update_working_set(
                     }
                     col_nz = pos;
                     // g_assert_true(k < p_int);
+                    // printf("appending %d\n", k);
                     active_set_append(as, k, col_j_cache, col_nz);
                 } else {
                     active_set_append(as, k, NULL, 0);
@@ -307,6 +521,7 @@ char update_working_set(
             }
         }
     }
+    return increased_set;
 }
 
 char update_working_set_cpu(
@@ -327,6 +542,7 @@ char update_working_set_cpu(
     // int* remove = (int*)calloc(p_int, sizeof(int));
     memset(append, 0, p_int * sizeof(char));
     // memset(remove, 0, p_int * sizeof *remove);
+    char *done = calloc(p_int, sizeof *done);
 
     int correct_k = 0;
 #pragma omp parallel for
@@ -336,6 +552,11 @@ char update_working_set_cpu(
         for (long inter_i = main_i; inter_i < count_may_update; inter_i++) {
             long inter = updateable_items[inter_i];
             int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+            if (done[k]) {
+                printf("repeating %k\n");
+            } else {
+                done[k] = TRUE;
+            }
             float sumn = 0.0;
             int col_nz = 0;
             int j_pos = 0;
@@ -358,18 +579,24 @@ char update_working_set_cpu(
             }
             sumn = fabs(sumn);
             sumn += fabs(beta[k] * col_nz);
-            //if (main == interesting_col) {
-            //    printf("sumn: %f\n", sumn);
-            //    printf("last_max[%ld] = %f\n", main, last_max[main]);
-            //}
-            last_max[main] = fmax(last_max[main], sumn);
-            last_max[inter] = fmax(last_max[inter], sumn);
+            if (main == interesting_col && main == inter) {
+                printf("lambda * n / 2 = %f\n", lambda * n / 2);
+                printf("sumn: %f\n", sumn);
+                printf("last_max[%ld] = %f\n", main, last_max[main]);
+            }
+            if (sumn > last_max[main]) {
+              last_max[main] = sumn;
+            }
+            //last_max[main] = fmax(last_max[main], sumn);
+            //last_max[inter] = fmax(last_max[inter], sumn);
             //if (main == interesting_col) {
             //    printf("sumn: %f\n", sumn);
             //    printf("last_max[%ld] = %f\n", main, last_max[main]);
             //    printf("&last_max[%ld] = %lx\n", main, &last_max[main]);
             //}
-            if (sumn > lambda * n / 2 && !wont_update[main] && !wont_update[inter]) {
+          if (sumn > lambda * n / 2) {
+            // if (sumn > lambda * n / 2 && !wont_update[main] && !wont_update[inter]) {
+                printf("appending %d\n", k);
                 total++;
                 append[k] = TRUE;
             } else {
@@ -378,6 +605,7 @@ char update_working_set_cpu(
             }
         }
     }
+    free(done);
     printf("total: %d, skipped %d\n", total, skipped);
     // free(remove);
     return increased_set;

@@ -1,5 +1,5 @@
 project('lasso', 'c',
-	default_options : ['c_std=gnu11'])
+	default_options : ['c_std=gnu11', 'b_lto=true'])
 
 
 add_project_arguments([

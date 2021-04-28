@@ -1,5 +1,5 @@
 // #define interesting_col 58
-#define interesting_col 59
+#define interesting_col 35
 // #define interesting_col 0
 #include <errno.h>
 #include <gsl/gsl_permutation.h>
