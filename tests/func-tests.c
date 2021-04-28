@@ -1393,7 +1393,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     int* updateable_items = calloc(p, sizeof *updateable_items); //TODO: keep between iters
     char* append = calloc(p_int, sizeof(char));
     for (int i = 0; i < p; i++) {
-        if (!wont_update[i]) {
+        if (!wont_update[i] && !active_set->entries[i].present) {
         // if (TRUE) {
           updateable_items[count_may_update] = i;
           count_may_update++;
@@ -1550,6 +1550,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *Y = fixture->Y;
   printf("test\n");
   const float LAMBDA_MIN = 5;
+  const int MAX_NZ_BETA = 1000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
   Thread_Cache thread_caches[NumCores];
@@ -1630,6 +1631,16 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+    long nz_beta = 0;
+    #pragma omp parallel for schedule(static) reduction(+:nz_beta)
+    for (int i = 0; i < p_int; i++) {
+      if (beta[i] != 0) {
+        nz_beta++;
+      }
+    }
+    if (nz_beta > MAX_NZ_BETA) {
+      break;
+    }
     // float lambda = lambda_sequence[lambda_ind];
     printf("lambda: %f\n", lambda);
     float dBMax;
@@ -1687,6 +1698,16 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   Active_Set active_set = active_set_new(p_int);
   for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+    long nz_beta = 0;
+    #pragma omp parallel for schedule(static) reduction(+:nz_beta)
+    for (int i = 0; i < p_int; i++) {
+      if (beta_pruning[i] != 0) {
+        nz_beta++;
+      }
+    }
+    if (nz_beta > MAX_NZ_BETA) {
+      break;
+    }
     // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
     // float lambda = lambda_sequence[lambda_ind];
     float dBMax;

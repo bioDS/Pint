@@ -596,7 +596,7 @@ char update_working_set_cpu(
             //}
           if (sumn > lambda * n / 2) {
             // if (sumn > lambda * n / 2 && !wont_update[main] && !wont_update[inter]) {
-                printf("appending %d\n", k);
+                // printf("appending %d\n", k);
                 total++;
                 append[k] = TRUE;
             } else {
