@@ -1,10 +1,8 @@
-#include "uthash/src/uthash.h"
 #include <stdlib.h>
-#include <glib-2.0/glib.h>
-// #include <gmodule.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
+#include "flat_hash_map.hpp"
 
 #define TRUE 1
 #define FALSE 0
@@ -548,10 +546,8 @@ char update_working_set_cpu(
     int total = 0, skipped = 0;
     int p_int = p * (p + 1) / 2;
     char* append = host_append;
-    // int* remove = (int*)calloc(p_int, sizeof(int));
+    //todo: hashset or just append in loop
     memset(append, 0, p_int * sizeof(char));
-    // memset(remove, 0, p_int * sizeof *remove);
-    // char *done = calloc(p_int, sizeof *done);
 
     long total_inter_cols = 0;
     int correct_k = 0;
@@ -559,17 +555,9 @@ char update_working_set_cpu(
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         long main = updateable_items[main_i];
         int inter_cols = 0;
-        //TODO: really we want hash sets here, this is quite a waste.
-        float *sum_with_col = calloc(p, sizeof *sum_with_col);
-        long *inters_found = calloc(p, sizeof *inters_found);
-        char *found_inter = calloc(p_int, sizeof *found_inter);
-        struct inter_entry *found_inter_hashset = NULL;
-        GHashTable *found_inter_hashset2 = g_hash_table_new(g_int_hash, g_int_equal);
-
-        //struct inter_entry test_entry;
-        //test_entry.val = 1;
-        // HASH_ADD_INT(found_inter_hashset, val, &test_entry);
-        // HASH_ADD(hh, found_inter_hashset, val, sizeof(long), &test_entry);
+        ska::flat_hash_set<long> inters_found;
+        ska::flat_hash_set<long> found_inter_hashset2;
+        ska::flat_hash_map<long, float> sum_with_col;
 
         // iterate through rows with an entry in main, check inverted list for interactions in this row.
         for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
@@ -579,45 +567,30 @@ char update_working_set_cpu(
                 long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
                 int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
                 sum_with_col[inter] += rowsum[row_main];
-                if (!found_inter[k]) {
-                    inters_found[inter_cols] = inter;
-                    inter_cols++;
-                    found_inter[k] = TRUE;
-                }
-                //struct inter_entry *check;
-                //HASH_FIND_INT(found_inter_hashset, &k, check);
-                //if (!g_hash_table_contains(found_inter_hashset2, &k)) {
-                //    inters_found[inter_cols] = inter;
-                //    inter_cols++;
-                //    g_hash_table_insert(found_inter_hashset2, &k, &k);
-                //}
-                // if (check == NULL) {
+                if (found_inter_hashset2.count(k) == 0) {
+                    found_inter_hashset2.insert(k);
                     // inters_found[inter_cols] = inter;
-                    // inter_cols++;
-                    // struct inter_entry *new_entry = malloc(sizeof(struct inter_entry));
-                    // new_entry->val = k;
-                    // HASH_ADD_INT(found_inter_hashset, val, new_entry);
-                // }
+                    inters_found.insert(inter);
+                    inter_cols++;
+                }
             }
         }
         total_inter_cols += inter_cols;
-        for (int i = 0; i < inter_cols; i++) {
-            long inter = inters_found[i];
+        auto curr_inter = inters_found.cbegin();
+        auto last_inter = inters_found.cend();
+        while (curr_inter != last_inter) {
+            long inter = curr_inter.current->value;
             if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
                 int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
                 append[k] = TRUE;
                 increased_set = TRUE;
                 total++;
             }
+            curr_inter++;
         }
-        struct inter_entry *current_inter, *tmp;
-        HASH_ITER(hh, found_inter_hashset, current_inter, tmp) {
-            HASH_DEL(found_inter_hashset, current_inter);  /* delete; users advances to next */
-            free(current_inter);             /* optional- if you want to free  */
-        }
-        free(sum_with_col);
-        free(inters_found);
-        free(found_inter);
+        found_inter_hashset2.clear();
+        sum_with_col.clear();
+        inters_found.clear();
     }
     printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
     // free(remove);
