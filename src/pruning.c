@@ -110,5 +110,5 @@ int wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
            }
   }
   free(cache);
-  return upper_bound <= lambda * (X.n * 1);
+  return upper_bound <= lambda * (X.n / 2);
 }

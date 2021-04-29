@@ -19,6 +19,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "uthash/src/uthash.h"
+
 #include <config.h>
 #ifdef NOT_R
 #define Rprintf(args...) printf(args);
