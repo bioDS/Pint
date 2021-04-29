@@ -1,14 +1,15 @@
-project('lasso', 'c',
-	default_options : ['c_std=gnu11', 'b_lto=true'])
+project('lasso', 'cpp',
+	default_options : ['b_lto=true'])
 
 
 add_project_arguments([
   '-I' + meson.build_root(),
   '-ffast-math',
   '-fno-stack-protector',
+  '-fpermissive',
   '-Ofast',
   '-g',
-], language: 'c')
+], language: 'cpp')
 
 subdir('src')
 subdir('tests')

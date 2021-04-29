@@ -21,7 +21,9 @@
 
 #include "uthash/src/uthash.h"
 
-#include <config.h>
+#define NOT_R
+
+#include "config.h"
 #ifdef NOT_R
 #define Rprintf(args...) printf(args);
 #else

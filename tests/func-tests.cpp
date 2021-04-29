@@ -8,6 +8,10 @@
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
 
+#include <algorithm>
+
+using namespace std;
+
 /* int **X2_from_X(int **X, int n, int p); */
 /* float *simple_coordinate_descent_lasso(int **X, float *Y, int n, int p,
  * float lambda, char *method); */
@@ -26,7 +30,7 @@
 // #define NumCores 4
 #define HALT_ERROR_DIFF 1.01
 
-struct timespec start, end;
+struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 
 extern inline char update_working_set_device(
@@ -231,7 +235,7 @@ static void test_update_beta_cyclic(UpdateFixture *fixture,
   update_beta_cyclic_old(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
                          fixture->n, fixture->p, fixture->lambda, fixture->beta,
                          fixture->k, fixture->intercept,
-                         fixture->precalc_get_num, fixture->column_caches);
+                         fixture->precalc_get_num, fixture->column_caches[0]);
   printf("beta[27]: %f\n", fixture->beta[27]);
   g_assert_true(fixture->beta[27] != 0.0);
   g_assert_true(fixture->beta[27] < -263.94);
@@ -869,15 +873,15 @@ static void pruning_fixture_set_up(UpdateFixture *fixture,
   printf("getting sparse X\n");
   XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
   printf("getting sparse X2\n");
-  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
   if (use_big < 2) {
     XMatrixSparse X2c =
         sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
     fixture->X2c = X2c;
   }
-  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  x2_conversion_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
-                       (end.tv_sec - start.tv_sec);
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+  x2_conversion_time = ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 +
+                       (end_time.tv_sec - start_time.tv_sec);
   fixture->Xc = Xc;
 }
 
@@ -992,7 +996,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
               X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0,
               fixture->precalc_get_num, column_cache);
           dBMax = changes.actual_diff;
-          float new = beta[k];
+          // float new = beta[k];
           if (!working_set[k] && fabs(changes.pre_lambda_diff) >
                                      fabs(max_int_delta[main_effect])) {
             max_int_delta[main_effect] = changes.pre_lambda_diff;
@@ -1360,7 +1364,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     long active_branches = 0;
     long new_active_branches = 0;
 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     // make a local copy of rowsum for each thread
     //#pragma omp parallel for
     //    for (int i = 0; i < NumCores; i++) {
@@ -1408,9 +1412,9 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
         }
       }
     }
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    pruning_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
-                    (end.tv_sec - start.tv_sec);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+    pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 +
+                    (end_time.tv_sec - start_time.tv_sec);
     printf("(%ld active branches, %ld new)\n", active_branches,
            new_active_branches);
     if (active_branches == 0) {
@@ -1433,7 +1437,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
         }
     }
     printf("there were %d updateable items\n", count_may_update);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     char increased_set =
       // update_working_set_local2(Xc, rowsum, wont_update, active_set, last_max, p, n, precalc_get_num, lambda, beta, thread_caches, X2c);
         // update_working_set_cpu_old(Xc, append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, active_set, thread_caches);
@@ -1443,9 +1447,10 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     //                   p, n, precalc_get_num, lambda, beta, thread_caches);
     free(updateable_items);
     free(append);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    working_set_update_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
-                               (end.tv_sec - start.tv_sec);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+    working_set_update_time +=
+        ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 +
+        (end_time.tv_sec - start_time.tv_sec);
     if (retests > 0 && !increased_set) {
       // there's no need to re-run on the same set. Nothing has changed
       // and the remaining retests will all do nothing.
@@ -1470,7 +1475,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     }
     //********** Solve subproblem     *******************
     printf("solving subproblem.\n");
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     int iter = 0;
     for (iter = 0; iter < 100; iter++) {
       float prev_error = error;
@@ -1546,9 +1551,9 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     // active_set->length, total_present, total_notpresent);
     // g_assert_true(total_present/iter+total_notpresent/iter ==
     // active_set->length-1);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    subproblem_time += ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 +
-                       (end.tv_sec - start.tv_sec);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+    subproblem_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 +
+                       (end_time.tv_sec - start_time.tv_sec);
     // printf("%.1f%% of active set updates didn't change\n",
     // (float)(total_changed*100)/(float)(total_changed+total_unchanged));
     // printf("%.1f%% of active set was blank\n",

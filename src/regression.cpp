@@ -3,6 +3,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
+
+using namespace std;
+
 // check a particular pair of betas in the adaptive calibration scheme
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
                                     Sparse_Betas beta_1, float lambda_2,
@@ -102,7 +106,7 @@ float *simple_coordinate_descent_lasso(
   precalc_get_num = malloc(p_int * sizeof(int_pair));
   int offset = 0;
   for (int i = 0; i < p; i++) {
-    for (int j = i; j < min(p, i + max_interaction_distance + 1); j++) {
+    for (int j = i; j < min((long)p, i + max_interaction_distance + 1); j++) {
       i = gsl_permutation_get(global_permutation_inverse, offset);
       j = gsl_permutation_get(global_permutation_inverse, offset);
       // printf("i,j: %d,%d\n", i, j);

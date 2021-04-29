@@ -1,4 +1,7 @@
 #include <liblasso.h>
+#include <algorithm>
+
+using namespace std;
 
 S8bWord to_s8b(int count, int *vals) {
   S8bWord word;

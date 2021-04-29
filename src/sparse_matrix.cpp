@@ -1,4 +1,7 @@
 #include "liblasso.h"
+#include <algorithm>
+
+using namespace std;
 
 XMatrixSparse sparsify_X(int **X, int n, int p) {
   return sparse_X2_from_X(X, n, p, 1, FALSE);
@@ -51,7 +54,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
 // TODO: iter_done isn't exactly being updated safely
 #pragma omp parallel for shared(X2, X, iter_done) private(length, val, colno) num_threads(NumCores) reduction(+:total_count, total_sum) schedule(static)
   for (long i = 0; i < p; i++) {
-    for (long j = i; j < min(i + max_interaction_distance, p); j++) {
+    for (long j = i; j < min(i + max_interaction_distance, (long)p); j++) {
       // GQueue *current_col = g_queue_new();
       // GQueue *current_col_actual = g_queue_new();
       Queue *current_col = queue_new();
@@ -59,10 +62,10 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
       // reached.
       long a = min(i, p - d); // number of iters limited by d.
       long b = max(i - (p - d),
-                   0); // number of iters of i limited by p rather than d.
+                   0l); // number of iters of i limited by p rather than d.
       // long tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
       long suma = a * (d - 1);
-      long k = max(p - d + b, 0);
+      long k = max(p - d + b, 0l);
       // sumb is the amount we would have reached w/o the limit - the amount
       // that was actually covered by the limit.
       long sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
@@ -188,7 +191,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   }
   X2.col_start = col_start;
   X2.compressed_indices = compressed_indices;
-  X2.col_nz = X2.compressed_indices;
+  // X2.col_nz = col_nz;
 
   gsl_rng *r;
   gsl_permutation *permutation = gsl_permutation_alloc(p_int);
