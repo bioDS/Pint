@@ -1,4 +1,7 @@
+#include "uthash/src/uthash.h"
 #include <stdlib.h>
+#include <glib-2.0/glib.h>
+// #include <gmodule.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
@@ -525,6 +528,11 @@ char update_working_set(
     return increased_set;
 }
 
+struct inter_entry {
+    long val;
+    UT_hash_handle hh;         /* makes this structure hashable */
+};
+
 char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct X_uncompressed Xu, char* host_append,
@@ -545,8 +553,9 @@ char update_working_set_cpu(
     // memset(remove, 0, p_int * sizeof *remove);
     // char *done = calloc(p_int, sizeof *done);
 
+    long total_inter_cols = 0;
     int correct_k = 0;
-#pragma omp parallel for
+#pragma omp parallel for reduction(+: total_inter_cols)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         long main = updateable_items[main_i];
         int inter_cols = 0;
@@ -554,6 +563,14 @@ char update_working_set_cpu(
         float *sum_with_col = calloc(p, sizeof *sum_with_col);
         long *inters_found = calloc(p, sizeof *inters_found);
         char *found_inter = calloc(p_int, sizeof *found_inter);
+        struct inter_entry *found_inter_hashset = NULL;
+        GHashTable *found_inter_hashset2 = g_hash_table_new(g_int_hash, g_int_equal);
+
+        //struct inter_entry test_entry;
+        //test_entry.val = 1;
+        // HASH_ADD_INT(found_inter_hashset, val, &test_entry);
+        // HASH_ADD(hh, found_inter_hashset, val, sizeof(long), &test_entry);
+
         // iterate through rows with an entry in main, check inverted list for interactions in this row.
         for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
             long row_main = host_X[host_col_offsets[main] + row_main_i];
@@ -567,8 +584,23 @@ char update_working_set_cpu(
                     inter_cols++;
                     found_inter[k] = TRUE;
                 }
+                //struct inter_entry *check;
+                //HASH_FIND_INT(found_inter_hashset, &k, check);
+                //if (!g_hash_table_contains(found_inter_hashset2, &k)) {
+                //    inters_found[inter_cols] = inter;
+                //    inter_cols++;
+                //    g_hash_table_insert(found_inter_hashset2, &k, &k);
+                //}
+                // if (check == NULL) {
+                    // inters_found[inter_cols] = inter;
+                    // inter_cols++;
+                    // struct inter_entry *new_entry = malloc(sizeof(struct inter_entry));
+                    // new_entry->val = k;
+                    // HASH_ADD_INT(found_inter_hashset, val, new_entry);
+                // }
             }
         }
+        total_inter_cols += inter_cols;
         for (int i = 0; i < inter_cols; i++) {
             long inter = inters_found[i];
             if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
@@ -578,11 +610,16 @@ char update_working_set_cpu(
                 total++;
             }
         }
+        struct inter_entry *current_inter, *tmp;
+        HASH_ITER(hh, found_inter_hashset, current_inter, tmp) {
+            HASH_DEL(found_inter_hashset, current_inter);  /* delete; users advances to next */
+            free(current_inter);             /* optional- if you want to free  */
+        }
         free(sum_with_col);
         free(inters_found);
         free(found_inter);
     }
-    printf("total: %d, skipped %d\n", total, skipped);
+    printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
     // free(remove);
     return increased_set;
 }

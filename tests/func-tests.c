@@ -1680,7 +1680,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
-    if (Xc.p <= 1000) {
+    if (Xc.p <= 100) {
       run_lambda_iters(&iter_vars_basic, lambda, rowsum);
     }
   }
