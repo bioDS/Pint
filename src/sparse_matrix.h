@@ -26,6 +26,10 @@ typedef struct XMatrixSparse {
   long total_words;
   long total_entries;
   S8bCol *cols;
+  // Also include row entries for update_working_set
+  //pad_int *row_nz;
+  //int *row_nwords;
+  //S8bWord *row_compressed_indices;
 } XMatrixSparse;
 
 void free_sparse_matrix(XMatrixSparse X);

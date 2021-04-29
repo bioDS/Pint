@@ -52,6 +52,9 @@ struct X_uncompressed {
   int* host_X;
   int* host_col_nz;
   int* host_col_offsets;
+  int* host_X_row;
+  int* host_row_nz;
+  int* host_row_offsets;
   size_t total_size;
 };
 struct AS_Properties {

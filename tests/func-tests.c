@@ -4,6 +4,7 @@
 #include <gsl/gsl_rng.h>
 #include <locale.h>
 #include <omp.h>
+#include <stdlib.h>
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
 
@@ -1205,12 +1206,19 @@ static unsigned int *target_col_nz;
 //  // target_col_offsets = temp_offset;
 //}
 
+// struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
 struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
   int* host_X = calloc(Xc->total_entries, sizeof(int));
   int* host_col_nz = calloc(Xc->p, sizeof(int));;
   int* host_col_offsets = calloc(Xc->p, sizeof(int));
+  int* host_X_row = calloc(Xc->total_entries, sizeof(int));
+  int* host_row_nz = calloc(Xc->n, sizeof(int));;
+  int* host_row_offsets = calloc(Xc->n, sizeof(int));
   int p = Xc->p;
   int n = Xc->n;
+
+  // row-major dense X, for creating row inverted lists.
+  char (*full_X)[p] = calloc(n * p, sizeof(char));
 
   // read through compressed matrix and construct continuous
   // uncompressed matrix
@@ -1233,11 +1241,28 @@ struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
             col[col_entry_pos] = entry;
             col_entry_pos++;
             offset++;
+            full_X[entry][k] = 1;
           }
           values >>= item_width[word.selector];
         }
       }
     }
+  }
+
+  // construct row-major indices.
+  offset = 0;
+  for (int row = 0; row < n; row++) {
+    host_row_offsets[row] = offset;
+    int *col = &host_X[offset];
+    int row_nz = 0;
+    for (int col = 0; col < p; col++) {
+      if (full_X[row][col] == 1) {
+        host_X_row[offset] = col;
+        row_nz++;
+        offset++;
+      }
+    }
+    host_row_nz[row] = row_nz;
   }
 
 
@@ -1246,6 +1271,9 @@ struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
   Xu.host_col_offsets = host_col_offsets;
   Xu.host_X = host_X;
   Xu.total_size = offset;
+  Xu.host_row_nz = host_row_nz;
+  Xu.host_row_offsets = host_row_offsets;
+  Xu.host_X_row = host_X_row;
 
   return Xu;
 }
@@ -1254,6 +1282,8 @@ static float pruning_time = 0.0;
 static float working_set_update_time = 0.0;
 static float subproblem_time = 0.0;
 
+static long used_branches = 0;
+static long pruned_branches = 0;
 
 int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
                             float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup) {
@@ -1364,7 +1394,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
 // printf("local_rowsum: %x\n");
 // memcpy(local_rowsum, rowsum, n * sizeof *rowsum);
 // TODO: parallelising this loop slows down numa updates.
-#pragma omp parallel for schedule(static) reduction(+ : active_branches)
+#pragma omp parallel for schedule(static) reduction(+ : active_branches, used_branches, pruned_branches)
       for (int j = 0; j < p; j++) {
         // if the branch hasn't been pruned then we'll get an accurate estimate
         // for this rowsum from update_working_set.
@@ -1372,6 +1402,9 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
           memcpy(last_rowsum[j], rowsum,
                  sizeof *rowsum * n); // TODO: probably overkill
           active_branches++;
+          used_branches++;
+        } else {
+          pruned_branches++;
         }
       }
     }
@@ -1549,7 +1582,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *beta = fixture->beta;
   float *Y = fixture->Y;
   printf("test\n");
-  const float LAMBDA_MIN = 5;
+  const float LAMBDA_MIN = 15;
   const int MAX_NZ_BETA = 1000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
@@ -1738,6 +1771,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("working set upates were: %.2f main effect col, %.2f int col, %.2f "
          "reused col\n",
          main_col_time, int_col_time, reused_col_time);
+
+  printf("used branches:   %d\n", used_branches);
+  printf("pruned branches: %d\n", pruned_branches);
+  printf("total branches:  %d\n", used_branches + pruned_branches);
 
   // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
   float *basic_rowsum = malloc(sizeof *basic_rowsum * n);

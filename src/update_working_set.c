@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
@@ -263,9 +264,9 @@ inline char update_working_set_cpu_old(
             // as inactive. this speeds up future checks quite significantly, at
             // the cost of increased memory use. For a gpu implenentation we
             // probably don't want this.
-            active_set_append(as, k, col_j_cache, col_nz);
-            length_increase++;
-            active_set_remove(as, k);
+            //active_set_append(as, k, col_j_cache, col_nz);
+            //length_increase++;
+            //active_set_remove(as, k);
           }
           // if (k == 85)
           //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
@@ -412,8 +413,8 @@ char update_working_set(
 {
     int p_int = p * (p + 1) / 2;
     // char increased_set = TRUE;
-    // char increased_set = update_working_set_cpu(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
-    char increased_set = update_working_set_cpu_old(Xc, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, as, thread_caches);
+    char increased_set = update_working_set_cpu(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+    // char increased_set = update_working_set_cpu_old(Xc, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, as, thread_caches);
     // return increased_set;
     // update_working_set_device(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, setup, last_max);
     printf("re-calculating working set columns\n");
@@ -542,70 +543,45 @@ char update_working_set_cpu(
     // int* remove = (int*)calloc(p_int, sizeof(int));
     memset(append, 0, p_int * sizeof(char));
     // memset(remove, 0, p_int * sizeof *remove);
-    char *done = calloc(p_int, sizeof *done);
+    // char *done = calloc(p_int, sizeof *done);
 
     int correct_k = 0;
 #pragma omp parallel for
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         long main = updateable_items[main_i];
-#pragma omp parallel for
-        for (long inter_i = main_i; inter_i < count_may_update; inter_i++) {
-            long inter = updateable_items[inter_i];
-            int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-            if (done[k]) {
-                printf("repeating %k\n");
-            } else {
-                done[k] = TRUE;
-            }
-            float sumn = 0.0;
-            int col_nz = 0;
-            int j_pos = 0;
-            correct_k++;
-            for (int i_pos = 0; i_pos < host_col_nz[main]; i_pos++) {
-                if (!wont_update[main] && !wont_update[inter]) {
-                    int entry_i = host_X[host_col_offsets[main] + i_pos];
-                    int entry_j = host_X[host_col_offsets[inter] + j_pos];
-                    if (entry_i == entry_j) {
-                        sumn += rowsum[entry_i];
-                        col_nz++;
-                    }
-                    // find correct position of j_pos
-                    // TODO: Not particularly efficient for the late chunks where
-                    // i_pos is high.
-                    while (host_X[host_col_offsets[inter] + j_pos] < entry_i && j_pos < host_col_nz[inter]) {
-                        j_pos++;
-                    }
+        int inter_cols = 0;
+        //TODO: really we want hash sets here, this is quite a waste.
+        float *sum_with_col = calloc(p, sizeof *sum_with_col);
+        long *inters_found = calloc(p, sizeof *inters_found);
+        char *found_inter = calloc(p_int, sizeof *found_inter);
+        // iterate through rows with an entry in main, check inverted list for interactions in this row.
+        for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
+            long row_main = host_X[host_col_offsets[main] + row_main_i];
+            // check inverted list for interactions along row_main
+            for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
+                long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
+                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                sum_with_col[inter] += rowsum[row_main];
+                if (!found_inter[k]) {
+                    inters_found[inter_cols] = inter;
+                    inter_cols++;
+                    found_inter[k] = TRUE;
                 }
             }
-            sumn = fabs(sumn);
-            sumn += fabs(beta[k] * col_nz);
-            if (main == interesting_col && main == inter) {
-                printf("lambda * n / 2 = %f\n", lambda * n / 2);
-                printf("sumn: %f\n", sumn);
-                printf("last_max[%ld] = %f\n", main, last_max[main]);
-            }
-            if (sumn > last_max[main]) {
-              last_max[main] = sumn;
-            }
-            //last_max[main] = fmax(last_max[main], sumn);
-            //last_max[inter] = fmax(last_max[inter], sumn);
-            //if (main == interesting_col) {
-            //    printf("sumn: %f\n", sumn);
-            //    printf("last_max[%ld] = %f\n", main, last_max[main]);
-            //    printf("&last_max[%ld] = %lx\n", main, &last_max[main]);
-            //}
-          if (sumn > lambda * n / 2) {
-            // if (sumn > lambda * n / 2 && !wont_update[main] && !wont_update[inter]) {
-                // printf("appending %d\n", k);
-                total++;
+        }
+        for (int i = 0; i < inter_cols; i++) {
+            long inter = inters_found[i];
+            if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
+                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
                 append[k] = TRUE;
-            } else {
-                skipped++;
-                // remove[k] = TRUE;
+                increased_set = TRUE;
+                total++;
             }
         }
+        free(sum_with_col);
+        free(inters_found);
+        free(found_inter);
     }
-    free(done);
     printf("total: %d, skipped %d\n", total, skipped);
     // free(remove);
     return increased_set;
