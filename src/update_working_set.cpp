@@ -526,11 +526,6 @@ char update_working_set(
     return increased_set;
 }
 
-struct inter_entry {
-    long val;
-    UT_hash_handle hh;         /* makes this structure hashable */
-};
-
 char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct X_uncompressed Xu, char* host_append,

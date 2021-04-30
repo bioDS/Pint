@@ -19,8 +19,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "uthash/src/uthash.h"
-
 #define NOT_R
 
 #include "config.h"
