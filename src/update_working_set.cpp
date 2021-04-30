@@ -405,19 +405,76 @@ inline char update_working_set_device(
     // gpu_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 }
 
-char update_working_set(
+static ska::flat_hash_set<long> *host_append_sets;
+
+char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
-    struct X_uncompressed Xu, XMatrixSparse Xc, char* host_append,
-    float* rowsum, int* wont_update, int p, int n,
+    struct X_uncompressed Xu, float* rowsum, int* wont_update, int p, int n,
+    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float *last_max)
+{
+    int* host_X = Xu.host_X;
+    int* host_col_nz = Xu.host_col_nz;
+    int* host_col_offsets = Xu.host_col_offsets;
+    char increased_set = FALSE;
+    long length_increase = 0;
+    int total = 0, skipped = 0;
+    int p_int = p * (p + 1) / 2;
+
+    long total_inter_cols = 0;
+    int correct_k = 0;
+#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) shared(host_append_sets)
+    for (long main_i = 0; main_i < count_may_update; main_i++) {
+        long main = updateable_items[main_i];
+        int inter_cols = 0;
+        ska::flat_hash_set<long> inters_found;
+        ska::flat_hash_set<long> found_inter_hashset2;
+        ska::flat_hash_map<long, float> sum_with_col;
+
+        // iterate through rows with an entry in main, check inverted list for interactions in this row.
+        for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
+            long row_main = host_X[host_col_offsets[main] + row_main_i];
+            // check inverted list for interactions along row_main
+            for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
+                long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
+                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                sum_with_col[inter] += rowsum[row_main];
+                inters_found.insert(inter);
+            }
+        }
+        inter_cols = inters_found.size();
+        total_inter_cols += inter_cols;
+        auto curr_inter = inters_found.cbegin();
+        auto last_inter = inters_found.cend();
+        while (curr_inter != last_inter) {
+            long inter = curr_inter.current->value;
+            // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
+            if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
+                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                host_append_sets[omp_get_thread_num()].insert(k);
+                increased_set = TRUE;
+                total++;
+            }
+            curr_inter++;
+        }
+        found_inter_hashset2.clear();
+        sum_with_col.clear();
+        inters_found.clear();
+    }
+    
+    printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
+    // free(remove);
+    return increased_set;
+}
+
+char update_working_set(
+    struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, int* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, Active_Set* as,
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;
-    // char increased_set = TRUE;
-    char increased_set = update_working_set_cpu(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
-    // char increased_set = update_working_set_cpu_old(Xc, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, as, thread_caches);
-    // return increased_set;
-    // update_working_set_device(Xu, host_append, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, setup, last_max);
+    char increased_set = update_working_set_cpu(Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+
     printf("re-calculating working set columns\n");
     struct AS_Entry *entries = as->entries;
     long length_increase = 0;
@@ -448,7 +505,8 @@ char update_working_set(
         }
         for (int inter = main; inter < p; inter++) {
             int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-            if (host_append[k]) {
+            if (host_append_sets[omp_get_thread_num()].count(k) > 0) {
+            // if (host_append[k]) {
             // if (TRUE) {
                 if (!entries[k].was_present) {
                     int col_nz = 0;
@@ -526,76 +584,13 @@ char update_working_set(
     return increased_set;
 }
 
-char update_working_set_cpu(
-    // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
-    struct X_uncompressed Xu, char* host_append,
-    float* rowsum, int* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update,
-    float *last_max)
-{
-    int* host_X = Xu.host_X;
-    int* host_col_nz = Xu.host_col_nz;
-    int* host_col_offsets = Xu.host_col_offsets;
-    char increased_set = FALSE;
-    long length_increase = 0;
-    int total = 0, skipped = 0;
-    int p_int = p * (p + 1) / 2;
-    char* append = host_append;
-    //todo: hashset or just append in loop
-    memset(append, 0, p_int * sizeof(char));
 
-    long total_inter_cols = 0;
-    int correct_k = 0;
-#pragma omp parallel for reduction(+: total_inter_cols)
-    for (long main_i = 0; main_i < count_may_update; main_i++) {
-        long main = updateable_items[main_i];
-        int inter_cols = 0;
-        ska::flat_hash_set<long> inters_found;
-        ska::flat_hash_set<long> found_inter_hashset2;
-        ska::flat_hash_map<long, float> sum_with_col;
-
-        // iterate through rows with an entry in main, check inverted list for interactions in this row.
-        for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
-            long row_main = host_X[host_col_offsets[main] + row_main_i];
-            // check inverted list for interactions along row_main
-            for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
-                long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
-                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                sum_with_col[inter] += rowsum[row_main];
-                if (found_inter_hashset2.count(k) == 0) {
-                    found_inter_hashset2.insert(k);
-                    // inters_found[inter_cols] = inter;
-                    inters_found.insert(inter);
-                    inter_cols++;
-                }
-            }
-        }
-        total_inter_cols += inter_cols;
-        auto curr_inter = inters_found.cbegin();
-        auto last_inter = inters_found.cend();
-        while (curr_inter != last_inter) {
-            long inter = curr_inter.current->value;
-            if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
-                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                append[k] = TRUE;
-                increased_set = TRUE;
-                total++;
-            }
-            curr_inter++;
-        }
-        found_inter_hashset2.clear();
-        sum_with_col.clear();
-        inters_found.clear();
-    }
-    printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
-    // free(remove);
-    return increased_set;
-}
 
 
 struct OpenCL_Setup setup_working_set_kernel(
     struct X_uncompressed Xu, int n, int p)
 {
+    host_append_sets = new ska::flat_hash_set<long>[omp_get_max_threads()];
     int *host_X = Xu.host_X;
     int *host_col_nz = Xu.host_col_nz;
     int *host_col_offsets = Xu.host_col_offsets;
@@ -743,132 +738,3 @@ void opencl_cleanup(struct OpenCL_Setup setup)
 
 static struct timespec start, end;
 static float gpu_time = 0.0;
-
-
-//int working_set_main()
-//{
-//
-//    int* host_X;
-//    int* host_col_nz;
-//    int* host_col_offsets;
-//    int* host_append;
-//    // working set test;
-//    int n = 1000;
-//    int p = 10000;
-//    printf("using p = %d\n", p);
-//
-//    int *col_offsets, *X, *col_nz;
-//    int* wont_update;
-//    float *rowsum, *beta;
-//
-//    int p_int = p * (p + 1) / 2;
-//
-//    X = (int*)calloc(n * p, sizeof(int));
-//    col_nz = (int*)calloc(p, sizeof(int));
-//    col_offsets = (int*)calloc(p, sizeof(int));
-//    wont_update = (int*)calloc(p, sizeof(int));
-//    rowsum = (float*)calloc(n, sizeof(float));
-//    beta = (float*)calloc(p_int, sizeof(int));
-//    memset(col_nz, 0, p * sizeof(int));
-//    int offset = 0;
-//    for (int i = 0; i < n; i++) {
-//        rowsum[i] = 0;
-//    }
-//    for (int i = 0; i < p; i++) {
-//        wont_update[i] = ((i + 173) % 4) == 0;
-//    }
-//    for (int i = 0; i < p_int; i++) {
-//        beta[i] = 1.273 * (i % 7) + (i % 3);
-//    }
-//    for (int j = 0; j < p; j++) {
-//        int size = (j + 273) % n;
-//        col_nz[j] = size;
-//        col_offsets[j] = offset;
-//        for (int i = 0; i < size; i++) {
-//            X[offset] = i * (n / size) % n;
-//            rowsum[X[offset]] += beta[j];
-//            offset++;
-//        }
-//    }
-//    beta[0] = 1.2;
-//
-//    // create a list of only the columns that might update.
-//    Queue* q = queue_new();
-//    int count_may_update = 0;
-//    for (int i = 0; i < p; i++) {
-//        if (!wont_update[i]) {
-//            count_may_update++;
-//            queue_push_tail(q, (void*)(long)i);
-//            //printf("%d may update\n", i);
-//        }
-//    }
-//    printf("there were %d updateable items\n", count_may_update);
-//    //int* updateable_items = malloc(sizeof *updateable_items * count_may_update);
-//    int* updateable_items = malloc(sizeof *updateable_items * p);
-//    for (int i = 0; i < count_may_update; i++) {
-//        updateable_items[i] = (long)queue_pop_head(q);
-//    }
-//    queue_free(q);
-//
-//    host_X = X;
-//    host_col_nz = col_nz;
-//    host_col_offsets = col_offsets;
-//
-//    host_append = (int*)calloc(p_int, sizeof(int));
-//    memset(host_append, 0, p_int * sizeof(int));
-//
-//    float lambda = 0.96;
-//
-//    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-//    update_working_set_cpu(host_X, host_col_nz, host_col_offsets, host_append,
-//        rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update);
-//    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-//    float cpu_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
-//
-//    int total_appended = 0;
-//    for (int i = 0; i < p_int; i++) {
-//        if (host_append[i]) {
-//            total_appended++;
-//        }
-//    }
-//    printf("\n");
-//    // TODO: record cpu/gpu running times.
-//    printf("host appended   %d in total \n", total_appended);
-//
-//    struct OpenCL_Setup ocl_working_set = setup_working_set_kernel(host_X, host_col_nz, host_col_offsets, host_append, n, p);
-//
-//    int* tmp_append = (int*)calloc(p_int, sizeof(int));
-//    update_working_set_device(host_X, host_col_nz, host_col_offsets, host_append,
-//        rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, ocl_working_set, tmp_append);
-//
-//    total_appended = 0;
-//    int total_diff = 0;
-//    for (int i = 0; i < p_int; i++) {
-//        if (host_append[i] && !tmp_append[i]) {
-//           //printf("host appended %d but device didn't\n", i);
-//           total_diff++;
-//        } else if (!host_append[i] && tmp_append[i]) {
-//           //printf("device appended %d but host didn't\n", i);
-//           total_diff++;
-//        }
-//        if (tmp_append[i]) {
-//            total_appended++;
-//        }
-//    }
-//    printf("device appended %d in total \n", total_appended);
-//    printf("total disagreements: %d\n", total_diff);
-//
-//    printf("cpu time: %.4f, gpu time %.4f\n", cpu_time, gpu_time);
-//    printf("relative speedup: %.4f x\n", cpu_time / gpu_time);
-//
-//    free(host_append);
-//    free(host_X);
-//    free(host_col_nz);
-//    free(host_col_offsets);
-//    free(beta);
-//
-//    return 0;
-//
-//    // clean up
-//    opencl_cleanup(ocl_working_set);
-//}
