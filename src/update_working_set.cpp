@@ -451,12 +451,27 @@ char update_working_set_cpu(
                 int row_main = entry;
                 // Do thing per entry here:
                 // check inverted list for interactions along row_main
-                for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
-                    long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
-                    if (inter < main)
-                        continue;
-                    sum_with_col[inter] += rowsum[row_main];
+                long inter_entry = -1;
+                for (int r = 0; r < Xc.rows[row_main].nwords; r++) {
+                  S8bWord word = Xc.rows[row_main].compressed_indices[r];
+                  unsigned long values = word.values;
+                  for (int j = 0; j <= group_size[word.selector]; j++) {
+                    int diff = values & masks[word.selector];
+                    if (diff != 0) {
+                        inter_entry += diff;
+
+                        if (inter_entry >= main)
+                            sum_with_col[inter_entry] += rowsum[row_main];
+                    }
+                    values >>= item_width[word.selector];
+                  }
                 }
+                //for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
+                //    long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
+                //    if (inter < main)
+                //        continue;
+                //    sum_with_col[inter] += rowsum[row_main];
+                //}
 
                 column_entries[col_entry_pos] = entry;
                 col_entry_pos++;
