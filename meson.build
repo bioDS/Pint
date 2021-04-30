@@ -7,8 +7,10 @@ add_project_arguments([
   '-ffast-math',
   '-fno-stack-protector',
   '-fpermissive',
-  '-Ofast',
+ '-Ofast',
   '-g',
+  # '-Os',
+  # '-fno-inline',
 ], language: 'cpp')
 
 subdir('src')

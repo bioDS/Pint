@@ -1,3 +1,4 @@
+#include <omp.h>
 #include <stdlib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
@@ -104,7 +105,7 @@ int active_set_get_index(Active_Set* as, int index)
   * We probably need to have an allocated buffer for things that could be added to the
   * active set, and hope we don't have too many things.
  */
-inline char update_working_set_cpu_old(
+char update_working_set_cpu_old(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct XMatrixSparse Xc, char* host_append,
     float* rowsum, int* wont_update, int p, int n,
@@ -409,6 +410,7 @@ static ska::flat_hash_set<long> *host_append_sets;
 
 char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
+    struct XMatrixSparse Xc, Thread_Cache *thread_caches, Active_Set *as,
     struct X_uncompressed Xu, float* rowsum, int* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update,
     float *last_max)
@@ -423,46 +425,143 @@ char update_working_set_cpu(
 
     long total_inter_cols = 0;
     int correct_k = 0;
-#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) shared(host_append_sets)
+#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) shared(host_append_sets) schedule(static)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
+        // use Xc to read main effect
+        Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
+        int *col_i_cache = thread_cache.col_i;
+        int *col_j_cache = thread_cache.col_j;
         long main = updateable_items[main_i];
         int inter_cols = 0;
-        ska::flat_hash_set<long> inters_found;
-        ska::flat_hash_set<long> found_inter_hashset2;
+        // ska::flat_hash_set<long> inters_found;
         ska::flat_hash_map<long, float> sum_with_col;
+        int main_col_len = 0;
+
+        int *column_entries = col_i_cache;
+        long col_entry_pos = 0;
+        long entry = -1;
+        for (int r = 0; r < Xc.cols[main].nwords; r++) {
+          S8bWord word = Xc.cols[main].compressed_indices[r];
+          unsigned long values = word.values;
+          for (int j = 0; j <= group_size[word.selector]; j++) {
+            int diff = values & masks[word.selector];
+            if (diff != 0) {
+                entry += diff;
+
+                int row_main = entry;
+                // Do thing per entry here:
+                // check inverted list for interactions along row_main
+                for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
+                    long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
+                    if (inter < main)
+                        continue;
+                    sum_with_col[inter] += rowsum[row_main];
+                }
+
+                column_entries[col_entry_pos] = entry;
+                col_entry_pos++;
+            }
+            values >>= item_width[word.selector];
+          }
+        }
+        main_col_len = col_entry_pos;
+
 
         // iterate through rows with an entry in main, check inverted list for interactions in this row.
-        for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
-            long row_main = host_X[host_col_offsets[main] + row_main_i];
-            // check inverted list for interactions along row_main
-            for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
-                long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
-                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                sum_with_col[inter] += rowsum[row_main];
-                inters_found.insert(inter);
-            }
-        }
-        inter_cols = inters_found.size();
+        //for (long row_main_i = 0; row_main_i < Xu.host_col_nz[main]; row_main_i++) {
+        //    long row_main = host_X[host_col_offsets[main] + row_main_i];
+        //    // check inverted list for interactions along row_main
+        //    for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
+        //        long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
+        //        int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+        //        sum_with_col[inter] += rowsum[row_main];
+        //        inters_found.insert(inter);
+        //    }
+        //}
+        inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
-        auto curr_inter = inters_found.cbegin();
-        auto last_inter = inters_found.cend();
+        auto curr_inter = sum_with_col.cbegin();
+        auto last_inter = sum_with_col.cend();
         while (curr_inter != last_inter) {
-            long inter = curr_inter.current->value;
+            // long inter = curr_inter.current->value;
+            auto pair = curr_inter.current->value;
+            long inter = pair.first;
+            float sum = pair.second;
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
-            if (sum_with_col[inter] > 0 && sum_with_col[inter] > lambda * n / 2) {
+            if (sum > lambda * n / 2) {
                 int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                host_append_sets[omp_get_thread_num()].insert(k);
+
+                // host_append_sets[omp_get_thread_num()].insert(k);
+
+                // calc inter col and add to active_set.
+                int i_pos = 0;
+                int entry_j = -1;
+                int pos = 0;
+                int j_w = 0;
+                S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
+                int j_wpos = 0;
+                unsigned long values_j = word_j.values;
+                int j_size = group_size[word_j.selector];
+                int entry_i = -2;
+                while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
+                read:
+                  if (entry_i == entry_j) {
+                    // update interaction and move to next entry of each word
+                    col_j_cache[pos] = entry_i;
+                    pos++;
+                    // g_assert_true(pos < Xc.n);
+                  }
+                  while (entry_i <= entry_j && i_pos < main_col_len) {
+                    entry_i = col_i_cache[i_pos];
+                    i_pos++;
+                    if (entry_i == entry_j) {
+                      goto read;
+                    }
+                  }
+                  if (entry_j <= entry_i) {
+                    // read through j until we hit the end, or reach or exceed
+                    // i.
+                    while (j_w <= Xc.cols[inter].nwords) {
+                      // current word
+                      while (j_wpos <= j_size) {
+                        int diff = values_j & masks[word_j.selector];
+                        j_wpos++;
+                        values_j >>= item_width[word_j.selector];
+                        if (diff != 0) {
+                          entry_j += diff;
+                          // we've found the next value of j
+                          // if it's equal we'll handle it earlier in the loop,
+                          // otherwise go to the j read loop.
+                          if (entry_j >= entry_i) {
+                            goto read;
+                            // break;
+                          }
+                        }
+                      }
+                      // switch to the next word
+                      j_w++;
+                      if (j_w < Xc.cols[inter].nwords) {
+                        word_j = Xc.cols[inter].compressed_indices[j_w];
+                        values_j = word_j.values;
+                        j_size = group_size[word_j.selector];
+                        j_wpos = 0;
+                      }
+                    }
+                  }
+                }
+                long inter_len = pos;
+
+                active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
                 total++;
             }
             curr_inter++;
         }
-        found_inter_hashset2.clear();
         sum_with_col.clear();
-        inters_found.clear();
+        // inters_found.clear();
     }
     
-    printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
+    // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
     // free(remove);
     return increased_set;
 }
@@ -473,115 +572,121 @@ char update_working_set(
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;
-    char increased_set = update_working_set_cpu(Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+    char increased_set = update_working_set_cpu(Xc, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
 
-    printf("re-calculating working set columns\n");
-    struct AS_Entry *entries = as->entries;
-    long length_increase = 0;
-#pragma omp parallel for reduction(+ \
-                                   : length_increase)
-    for (int main = 0; main < p; main++) {
-        int main_col_len;
-        int* col_i_cache = thread_caches[omp_get_thread_num()].col_i;
-        int* col_j_cache = thread_caches[omp_get_thread_num()].col_j;
-        {
-            int* column_entries = col_i_cache;
-            long col_entry_pos = 0;
-            long entry = -1;
-            for (int r = 0; r < Xc.cols[main].nwords; r++) {
-                S8bWord word = Xc.cols[main].compressed_indices[r];
-                unsigned long values = word.values;
-                for (int j = 0; j <= group_size[word.selector]; j++) {
-                    int diff = values & masks[word.selector];
-                    if (diff != 0) {
-                        entry += diff;
-                        column_entries[col_entry_pos] = entry;
-                        col_entry_pos++;
-                    }
-                    values >>= item_width[word.selector];
-                }
-            }
-            main_col_len = col_entry_pos;
-        }
-        for (int inter = main; inter < p; inter++) {
-            int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-            if (host_append_sets[omp_get_thread_num()].count(k) > 0) {
-            // if (host_append[k]) {
-            // if (TRUE) {
-                if (!entries[k].was_present) {
-                    int col_nz = 0;
-                    int i_pos = 0;
-                    int entry_j = -1;
-                    int pos = 0;
-                    // sum of rowsums for this column
-                    int j_w = 0;
-                    S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
-                    int j_wpos = 0;
-                    unsigned long values_j = word_j.values;
-                    int j_size = group_size[word_j.selector];
-                    // This whole loop is a bit awkward, but what can you do.
-                    int entry_i = -2;
-                    while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
-                    read2:
-                        if (entry_i == entry_j) {
-                            // update interaction and move to next entry of each word
-                            col_j_cache[pos] = entry_i;
-                            pos++;
-                        }
-                        while (entry_i <= entry_j && i_pos < main_col_len) {
-                            entry_i = col_i_cache[i_pos];
-                            i_pos++;
-                            if (entry_i == entry_j) {
-                                goto read2;
-                            }
-                        }
-                        if (entry_j <= entry_i) {
-                            // read through j until we hit the end, or reach or exceed
-                            // i.
-                            while (j_w <= Xc.cols[inter].nwords) {
-                                // current word
-                                while (j_wpos <= j_size) {
-                                    int diff = values_j & masks[word_j.selector];
-                                    j_wpos++;
-                                    values_j >>= item_width[word_j.selector];
-                                    if (diff != 0) {
-                                        entry_j += diff;
-                                        // we've found the next value of j
-                                        // if it's equal we'll handle it earlier in the loop,
-                                        // otherwise go to the j read loop.
-                                        if (entry_j >= entry_i) {
-                                            goto read2;
-                                            // break;
-                                        }
-                                    }
-                                }
-                                // switch to the next word
-                                j_w++;
-                                if (j_w < Xc.cols[inter].nwords) {
-                                    word_j = Xc.cols[inter].compressed_indices[j_w];
-                                    values_j = word_j.values;
-                                    j_size = group_size[word_j.selector];
-                                    j_wpos = 0;
-                                }
-                            }
-                        }
-                    }
-                    col_nz = pos;
-                    // g_assert_true(k < p_int);
-                    // printf("appending %d\n", k);
-                    active_set_append(as, k, col_j_cache, col_nz);
-                } else {
-                    active_set_append(as, k, NULL, 0);
-                }
-                if (!as->entries[k].was_present) {
-                    length_increase++;
-                }
-            //} else if (remove[k]) {
-            //    active_set_remove(as, k);
-            }
-        }
-    }
     return increased_set;
+    //printf("re-calculating working set columns\n");
+    //struct AS_Entry *entries = as->entries;
+    //long length_increase = 0;
+//#pragma omp parallel for reduction(+ \
+    //                               : length_increase) schedule(static)
+    //for (int main = 0; main < p; main++) {
+    //    int main_col_len;
+    //    int* col_i_cache = thread_caches[omp_get_thread_num()].col_i;
+    //    int* col_j_cache = thread_caches[omp_get_thread_num()].col_j;
+    //    {
+    //        int* column_entries = col_i_cache;
+    //        long col_entry_pos = 0;
+    //        long entry = -1;
+    //        for (int r = 0; r < Xc.cols[main].nwords; r++) {
+    //            S8bWord word = Xc.cols[main].compressed_indices[r];
+    //            unsigned long values = word.values;
+    //            for (int j = 0; j <= group_size[word.selector]; j++) {
+    //                int diff = values & masks[word.selector];
+    //                if (diff != 0) {
+    //                    entry += diff;
+    //                    column_entries[col_entry_pos] = entry;
+    //                    col_entry_pos++;
+    //                }
+    //                values >>= item_width[word.selector];
+    //            }
+    //        }
+    //        main_col_len = col_entry_pos;
+    //    }
+    //    for (int inter = main; inter < p; inter++) {
+    //        int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+    //        //TODO: fix this. it doesn't work to just check the current thread's one, at least not in the current implementation.
+    //        if (host_append_sets[omp_get_thread_num()].count(k) > 0
+    //        || host_append_sets[(omp_get_thread_num() + 1) % omp_get_max_threads()].count(k) > 0
+    //        || host_append_sets[(omp_get_thread_num() + 2) % omp_get_max_threads()].count(k) > 0
+    //        || host_append_sets[(omp_get_thread_num() + 3) % omp_get_max_threads()].count(k) > 0
+    //        ) {
+    //        // if (host_append[k]) {
+    //        // if (TRUE) {
+    //            if (!entries[k].was_present) {
+    //                int col_nz = 0;
+    //                int i_pos = 0;
+    //                int entry_j = -1;
+    //                int pos = 0;
+    //                // sum of rowsums for this column
+    //                int j_w = 0;
+    //                S8bWord word_j = Xc.cols[inter].compressed_indices[j_w];
+    //                int j_wpos = 0;
+    //                unsigned long values_j = word_j.values;
+    //                int j_size = group_size[word_j.selector];
+    //                // This whole loop is a bit awkward, but what can you do.
+    //                int entry_i = -2;
+    //                while (i_pos < main_col_len && j_w <= Xc.cols[inter].nwords) {
+    //                read2:
+    //                    if (entry_i == entry_j) {
+    //                        // update interaction and move to next entry of each word
+    //                        col_j_cache[pos] = entry_i;
+    //                        pos++;
+    //                    }
+    //                    while (entry_i <= entry_j && i_pos < main_col_len) {
+    //                        entry_i = col_i_cache[i_pos];
+    //                        i_pos++;
+    //                        if (entry_i == entry_j) {
+    //                            goto read2;
+    //                        }
+    //                    }
+    //                    if (entry_j <= entry_i) {
+    //                        // read through j until we hit the end, or reach or exceed
+    //                        // i.
+    //                        while (j_w <= Xc.cols[inter].nwords) {
+    //                            // current word
+    //                            while (j_wpos <= j_size) {
+    //                                int diff = values_j & masks[word_j.selector];
+    //                                j_wpos++;
+    //                                values_j >>= item_width[word_j.selector];
+    //                                if (diff != 0) {
+    //                                    entry_j += diff;
+    //                                    // we've found the next value of j
+    //                                    // if it's equal we'll handle it earlier in the loop,
+    //                                    // otherwise go to the j read loop.
+    //                                    if (entry_j >= entry_i) {
+    //                                        goto read2;
+    //                                        // break;
+    //                                    }
+    //                                }
+    //                            }
+    //                            // switch to the next word
+    //                            j_w++;
+    //                            if (j_w < Xc.cols[inter].nwords) {
+    //                                word_j = Xc.cols[inter].compressed_indices[j_w];
+    //                                values_j = word_j.values;
+    //                                j_size = group_size[word_j.selector];
+    //                                j_wpos = 0;
+    //                            }
+    //                        }
+    //                    }
+    //                }
+    //                col_nz = pos;
+    //                // g_assert_true(k < p_int);
+    //                // printf("appending %d\n", k);
+    //                active_set_append(as, k, col_j_cache, col_nz);
+    //            } else {
+    //                active_set_append(as, k, NULL, 0);
+    //            }
+    //            if (!as->entries[k].was_present) {
+    //                length_increase++;
+    //            }
+    //        //} else if (remove[k]) {
+    //        //    active_set_remove(as, k);
+    //        }
+    //    }
+    //}
+    //return increased_set;
 }
 
 
