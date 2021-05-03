@@ -10,6 +10,6 @@ char update_working_set(
     float lambda, float* beta, int* updateable_items, int count_may_update, Active_Set* as,
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max);
 
-struct OpenCL_Setup setup_working_set_kernel(
-  struct X_uncompressed Xu, int n, int p);
-void opencl_cleanup(struct OpenCL_Setup setup);
+//struct OpenCL_Setup setup_working_set_kernel(
+//  struct X_uncompressed Xu, int n, int p);
+//void opencl_cleanup(struct OpenCL_Setup setup);

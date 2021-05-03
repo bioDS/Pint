@@ -1,6 +1,6 @@
 #include <omp.h>
 #include <stdlib.h>
-#include <glib-2.0/glib.h>
+// #include <glib-2.0/glib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
@@ -83,11 +83,13 @@ void active_set_append(Active_Set* as, int value, int* col, int len)
         e->was_present = TRUE;
         e->col = col_to_s8b_col(len, col);
     }
+    as->length++;
 }
 
 void active_set_remove(Active_Set* as, int index)
 {
     as->entries[index].present = FALSE;
+    as->length--;
 }
 
 int active_set_get_index(Active_Set* as, int index)
@@ -309,105 +311,105 @@ char update_working_set_cpu_old(
   return increased_set;
 }
 
-inline char update_working_set_device(
-    struct X_uncompressed Xu, char* host_append,
-    float* rowsum, bool* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update, 
-    struct OpenCL_Setup* setup, float *host_last_max)
-{
-    int *host_X = Xu.host_X;
-    int* host_col_nz = Xu.host_col_nz;
-    int* host_col_offsets = Xu.host_col_offsets;
-    cl_int ret = 0;
-    int p_int = p * (p + 1) / 2;
-    printf("p_int=%d\n", p_int);
-    cl_kernel kernel = setup->kernel;
-    cl_command_queue command_queue = setup->command_queue;
+//inline char update_working_set_device(
+//    struct X_uncompressed Xu, char* host_append,
+//    float* rowsum, bool* wont_update, int p, int n,
+//    float lambda, float* beta, int* updateable_items, int count_may_update, 
+//    struct OpenCL_Setup* setup, float *host_last_max)
+//{
+//    int *host_X = Xu.host_X;
+//    int* host_col_nz = Xu.host_col_nz;
+//    int* host_col_offsets = Xu.host_col_offsets;
+//    cl_int ret = 0;
+//    int p_int = p * (p + 1) / 2;
+//    printf("p_int=%d\n", p_int);
+//    cl_kernel kernel = setup->kernel;
+//    cl_command_queue command_queue = setup->command_queue;
+//
+//    ret = clEnqueueWriteBuffer(command_queue, setup->target_wont_update, CL_TRUE, 0,
+//        sizeof(int) * p, wont_update, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//    ret = clEnqueueWriteBuffer(command_queue, setup->target_rowsum, CL_TRUE, 0,
+//        sizeof(int) * n, rowsum, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//    ret = clEnqueueWriteBuffer(command_queue, setup->target_beta, CL_TRUE, 0,
+//        sizeof(float) * p_int, beta, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device beta buffer, %d\n", ret);
+//    }
+//    ret = clEnqueueWriteBuffer(command_queue, setup->target_updateable_items, CL_TRUE, 0,
+//        sizeof(int) * p, updateable_items, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//
+//    float device_beta_test = -1.0;
+//    clEnqueueReadBuffer(command_queue, setup->target_beta, CL_TRUE, 0,
+//        sizeof(float), &device_beta_test, 0, NULL, NULL);
+//
+//    //host_append = (int*)calloc(p_int, sizeof(int));
+//    //memset(host_append, 0, p_int * sizeof(int));
+//
+//    // clear the append list
+//    int fill = 0;
+//    clEnqueueFillBuffer(command_queue, setup->target_append, &fill, sizeof(int), 0, sizeof(int) * p_int, 0, NULL, NULL);
+//
+//    // Set the arguments of the kernel
+//    ret = clSetKernelArg(kernel, 0, sizeof(cl_mem),
+//        (void*)&setup->target_rowsum);
+//    ret = clSetKernelArg(kernel, 1, sizeof(cl_mem),
+//        (void*)&setup->target_wont_update);
+//    ret = clSetKernelArg(kernel, 2, sizeof(int), (void*)&p);
+//    ret = clSetKernelArg(kernel, 3, sizeof(int), (void*)&n);
+//    ret = clSetKernelArg(kernel, 4, sizeof(float),
+//        (void*)&lambda);
+//    ret = clSetKernelArg(kernel, 5, sizeof(cl_mem),
+//        (void*)&setup->target_beta);
+//    ret = clSetKernelArg(kernel, 6, sizeof(cl_mem),
+//        (void*)&setup->target_append);
+//    ret = clSetKernelArg(kernel, 7, sizeof(cl_mem),
+//        (void*)&setup->target_col_nz);
+//    ret = clSetKernelArg(kernel, 8, sizeof(cl_mem),
+//        (void*)&setup->target_X);
+//    ret = clSetKernelArg(kernel, 9, sizeof(cl_mem),
+//        (void*)&setup->target_col_offsets);
+//    ret = clSetKernelArg(kernel, 10, sizeof(cl_mem),
+//        (void*)&setup->target_updateable_items);
+//    ret = clSetKernelArg(kernel, 11, sizeof(int),
+//        (void*)&count_may_update);
+//    ret = clSetKernelArg(kernel, 12, sizeof(cl_mem),
+//        (void*)&setup->target_last_max);
+//
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to set arguments, %d\n", ret);
+//    }
+//    // local_item_size = 128; //Null is generally pretty good.
+//    size_t global_item_size = p;
+//    //if (p % local_item_size > 0)
+//    //    global_item_size += (local_item_size - p % local_item_size);
+//    // int* tmp_append = (int*)malloc(p_int * sizeof(int));
+//    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+//    ret = clEnqueueNDRangeKernel(command_queue, setup->kernel, 1,
+//        // NULL, &global_item_size, &local_item_size, 0,
+//        NULL, &global_item_size, NULL, 0,
+//        NULL, NULL);
+//
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "something went wrong %d\n", ret);
+//    }
+//    clEnqueueReadBuffer(command_queue, setup->target_append, CL_TRUE, 0,
+//        sizeof(*host_append) * p_int, host_append, 0, NULL, NULL);
+//    clEnqueueReadBuffer(command_queue, setup->target_last_max, CL_TRUE, 0,
+//        sizeof(float) * p, host_last_max, 0, NULL, NULL);
+//    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+//    // gpu_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
+//}
 
-    ret = clEnqueueWriteBuffer(command_queue, setup->target_wont_update, CL_TRUE, 0,
-        sizeof(int) * p, wont_update, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-    ret = clEnqueueWriteBuffer(command_queue, setup->target_rowsum, CL_TRUE, 0,
-        sizeof(int) * n, rowsum, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-    ret = clEnqueueWriteBuffer(command_queue, setup->target_beta, CL_TRUE, 0,
-        sizeof(float) * p_int, beta, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device beta buffer, %d\n", ret);
-    }
-    ret = clEnqueueWriteBuffer(command_queue, setup->target_updateable_items, CL_TRUE, 0,
-        sizeof(int) * p, updateable_items, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-
-    float device_beta_test = -1.0;
-    clEnqueueReadBuffer(command_queue, setup->target_beta, CL_TRUE, 0,
-        sizeof(float), &device_beta_test, 0, NULL, NULL);
-
-    //host_append = (int*)calloc(p_int, sizeof(int));
-    //memset(host_append, 0, p_int * sizeof(int));
-
-    // clear the append list
-    int fill = 0;
-    clEnqueueFillBuffer(command_queue, setup->target_append, &fill, sizeof(int), 0, sizeof(int) * p_int, 0, NULL, NULL);
-
-    // Set the arguments of the kernel
-    ret = clSetKernelArg(kernel, 0, sizeof(cl_mem),
-        (void*)&setup->target_rowsum);
-    ret = clSetKernelArg(kernel, 1, sizeof(cl_mem),
-        (void*)&setup->target_wont_update);
-    ret = clSetKernelArg(kernel, 2, sizeof(int), (void*)&p);
-    ret = clSetKernelArg(kernel, 3, sizeof(int), (void*)&n);
-    ret = clSetKernelArg(kernel, 4, sizeof(float),
-        (void*)&lambda);
-    ret = clSetKernelArg(kernel, 5, sizeof(cl_mem),
-        (void*)&setup->target_beta);
-    ret = clSetKernelArg(kernel, 6, sizeof(cl_mem),
-        (void*)&setup->target_append);
-    ret = clSetKernelArg(kernel, 7, sizeof(cl_mem),
-        (void*)&setup->target_col_nz);
-    ret = clSetKernelArg(kernel, 8, sizeof(cl_mem),
-        (void*)&setup->target_X);
-    ret = clSetKernelArg(kernel, 9, sizeof(cl_mem),
-        (void*)&setup->target_col_offsets);
-    ret = clSetKernelArg(kernel, 10, sizeof(cl_mem),
-        (void*)&setup->target_updateable_items);
-    ret = clSetKernelArg(kernel, 11, sizeof(int),
-        (void*)&count_may_update);
-    ret = clSetKernelArg(kernel, 12, sizeof(cl_mem),
-        (void*)&setup->target_last_max);
-
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to set arguments, %d\n", ret);
-    }
-    // local_item_size = 128; //Null is generally pretty good.
-    size_t global_item_size = p;
-    //if (p % local_item_size > 0)
-    //    global_item_size += (local_item_size - p % local_item_size);
-    // int* tmp_append = (int*)malloc(p_int * sizeof(int));
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    ret = clEnqueueNDRangeKernel(command_queue, setup->kernel, 1,
-        // NULL, &global_item_size, &local_item_size, 0,
-        NULL, &global_item_size, NULL, 0,
-        NULL, NULL);
-
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "something went wrong %d\n", ret);
-    }
-    clEnqueueReadBuffer(command_queue, setup->target_append, CL_TRUE, 0,
-        sizeof(*host_append) * p_int, host_append, 0, NULL, NULL);
-    clEnqueueReadBuffer(command_queue, setup->target_last_max, CL_TRUE, 0,
-        sizeof(float) * p, host_last_max, 0, NULL, NULL);
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    // gpu_time = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
-}
-
-static ska::flat_hash_set<long> *host_append_sets;
+// static ska::flat_hash_set<long> *host_append_sets;
 
 // probably worth constructing an Xc containing only the columns we want.
 char update_working_set_cpu(
@@ -427,7 +429,7 @@ char update_working_set_cpu(
 
     long total_inter_cols = 0;
     int correct_k = 0;
-#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) shared(host_append_sets) schedule(static)
+#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) schedule(static)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
@@ -753,154 +755,154 @@ char update_working_set(
 
 
 
-struct OpenCL_Setup setup_working_set_kernel(
-    struct X_uncompressed Xu, int n, int p)
-{
-    host_append_sets = new ska::flat_hash_set<long>[omp_get_max_threads()];
-    int *host_X = Xu.host_X;
-    int *host_col_nz = Xu.host_col_nz;
-    int *host_col_offsets = Xu.host_col_offsets;
-    // Create a program from the kernel source file
-    // Creates the program
-    cl_int ret = 0;
-    int p_int = p * (p + 1) / 2;
-    //TODO: don't rely on file location like this.
-    struct CL_Source source = read_file("../src/update_working_set_kernel.cl");
+//struct OpenCL_Setup setup_working_set_kernel(
+//    struct X_uncompressed Xu, int n, int p)
+//{
+//    host_append_sets = new ska::flat_hash_set<long>[omp_get_max_threads()];
+//    int *host_X = Xu.host_X;
+//    int *host_col_nz = Xu.host_col_nz;
+//    int *host_col_offsets = Xu.host_col_offsets;
+//    // Create a program from the kernel source file
+//    // Creates the program
+//    cl_int ret = 0;
+//    int p_int = p * (p + 1) / 2;
+//    //TODO: don't rely on file location like this.
+//    struct CL_Source source = read_file("../src/update_working_set_kernel.cl");
+//
+//    cl_platform_id platform_id = NULL;
+//    cl_device_id device_id = NULL;
+//    cl_uint ret_num_devices;
+//    cl_uint ret_num_platforms;
+//    ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to get OpenCL platform, err %d\n", ret);
+//    }
+//    ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id,
+//        &ret_num_devices);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to get OpenCL device, err %d\n", ret);
+//    }
+//    cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create OpenCL context, err %d\n", ret);
+//    }
+//    cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+//
+//    cl_program program = clCreateProgramWithSource(context, 1, &source.buffer, &source.len, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to build program, err %d\n", ret);
+//    }
+//
+//    //const char *cl_build_options = "-cl-opt-disable";
+//    const char* cl_build_options = "-cl-fast-relaxed-math -cl-no-signed-zeros -cl-mad-enable";
+//    // Build the program
+//    ret = clBuildProgram(program, 1, &device_id, cl_build_options, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to build program, err %d\n", ret);
+//    }
+//
+//    // Create the OpenCL kernel
+//    cl_kernel kernel = clCreateKernel(program, "update_working_set", &ret);
+//
+//    // setup target memory
+//    cl_mem target_X = clCreateBuffer(context, CL_MEM_READ_ONLY,
+//        sizeof(int) * n * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_col_nz = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_col_offsets = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_wont_update = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_rowsum = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * n, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_beta = clCreateBuffer(context, CL_MEM_READ_ONLY,
+//        sizeof(float) * p_int, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device beta buffer, %d\n", ret);
+//    }
+//    cl_mem target_updateable_items = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_append = clCreateBuffer(context, CL_MEM_READ_WRITE,
+//        sizeof(char) * p_int, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//    cl_mem target_last_max = clCreateBuffer(context, CL_MEM_READ_WRITE,
+//        sizeof(float) * p, NULL, &ret);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//    }
+//
+//    // zero everything in target memory
+//    int fill = 0;
+//    clEnqueueFillBuffer(command_queue, target_append, &fill, sizeof(char), 0, sizeof(char) * p_int, 0, NULL, NULL);
+//    clEnqueueFillBuffer(command_queue, target_last_max, &fill, sizeof(int), 0, sizeof(float) * p, 0, NULL, NULL);
+//
+//    ret = clEnqueueWriteBuffer(command_queue, target_X, CL_TRUE, 0,
+//        sizeof(int) * Xu.total_size, host_X, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//    ret = clEnqueueWriteBuffer(command_queue, target_col_nz, CL_TRUE, 0,
+//        sizeof(int) * p, host_col_nz, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//    ret = clEnqueueWriteBuffer(command_queue, target_col_offsets, CL_TRUE, 0,
+//        sizeof(int) * p, host_col_offsets, 0, NULL, NULL);
+//    if (ret != CL_SUCCESS) {
+//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//    }
+//
+//    struct OpenCL_Setup setup;
+//    setup.context = context;
+//    setup.kernel = kernel;
+//    setup.command_queue = command_queue;
+//    setup.program = program;
+//    setup.target_X = target_X;
+//    setup.target_col_nz = target_col_nz;
+//    setup.target_col_offsets = target_col_offsets;
+//    setup.target_wont_update = target_wont_update;
+//    setup.target_rowsum = target_rowsum;
+//    setup.target_beta = target_beta;
+//    setup.target_updateable_items = target_updateable_items;
+//    setup.target_append = target_append;
+//    setup.target_last_max = target_last_max;
+//    return setup;
+//}
 
-    cl_platform_id platform_id = NULL;
-    cl_device_id device_id = NULL;
-    cl_uint ret_num_devices;
-    cl_uint ret_num_platforms;
-    ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to get OpenCL platform, err %d\n", ret);
-    }
-    ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id,
-        &ret_num_devices);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to get OpenCL device, err %d\n", ret);
-    }
-    cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create OpenCL context, err %d\n", ret);
-    }
-    cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
-
-    cl_program program = clCreateProgramWithSource(context, 1, &source.buffer, &source.len, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to build program, err %d\n", ret);
-    }
-
-    //const char *cl_build_options = "-cl-opt-disable";
-    const char* cl_build_options = "-cl-fast-relaxed-math -cl-no-signed-zeros -cl-mad-enable";
-    // Build the program
-    ret = clBuildProgram(program, 1, &device_id, cl_build_options, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to build program, err %d\n", ret);
-    }
-
-    // Create the OpenCL kernel
-    cl_kernel kernel = clCreateKernel(program, "update_working_set", &ret);
-
-    // setup target memory
-    cl_mem target_X = clCreateBuffer(context, CL_MEM_READ_ONLY,
-        sizeof(int) * n * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_col_nz = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_col_offsets = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_wont_update = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_rowsum = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * n, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_beta = clCreateBuffer(context, CL_MEM_READ_ONLY,
-        sizeof(float) * p_int, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device beta buffer, %d\n", ret);
-    }
-    cl_mem target_updateable_items = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_append = clCreateBuffer(context, CL_MEM_READ_WRITE,
-        sizeof(char) * p_int, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-    cl_mem target_last_max = clCreateBuffer(context, CL_MEM_READ_WRITE,
-        sizeof(float) * p, NULL, &ret);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to create device buffer, %d\n", ret);
-    }
-
-    // zero everything in target memory
-    int fill = 0;
-    clEnqueueFillBuffer(command_queue, target_append, &fill, sizeof(char), 0, sizeof(char) * p_int, 0, NULL, NULL);
-    clEnqueueFillBuffer(command_queue, target_last_max, &fill, sizeof(int), 0, sizeof(float) * p, 0, NULL, NULL);
-
-    ret = clEnqueueWriteBuffer(command_queue, target_X, CL_TRUE, 0,
-        sizeof(int) * Xu.total_size, host_X, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-    ret = clEnqueueWriteBuffer(command_queue, target_col_nz, CL_TRUE, 0,
-        sizeof(int) * p, host_col_nz, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-    ret = clEnqueueWriteBuffer(command_queue, target_col_offsets, CL_TRUE, 0,
-        sizeof(int) * p, host_col_offsets, 0, NULL, NULL);
-    if (ret != CL_SUCCESS) {
-        fprintf(stderr, "failed to write device buffers, %d\n", ret);
-    }
-
-    struct OpenCL_Setup setup;
-    setup.context = context;
-    setup.kernel = kernel;
-    setup.command_queue = command_queue;
-    setup.program = program;
-    setup.target_X = target_X;
-    setup.target_col_nz = target_col_nz;
-    setup.target_col_offsets = target_col_offsets;
-    setup.target_wont_update = target_wont_update;
-    setup.target_rowsum = target_rowsum;
-    setup.target_beta = target_beta;
-    setup.target_updateable_items = target_updateable_items;
-    setup.target_append = target_append;
-    setup.target_last_max = target_last_max;
-    return setup;
-}
-
-void opencl_cleanup(struct OpenCL_Setup setup)
-{
-    // clean up
-    cl_int ret = 0;
-    ret = clFlush(setup.command_queue);
-    ret = clFinish(setup.command_queue);
-    ret = clReleaseKernel(setup.kernel);
-    ret = clReleaseProgram(setup.program);
-    ret = clReleaseMemObject(setup.target_X);
-    ret = clReleaseMemObject(setup.target_col_nz);
-    ret = clReleaseMemObject(setup.target_col_offsets);
-    ret = clReleaseMemObject(setup.target_wont_update);
-    ret = clReleaseMemObject(setup.target_rowsum);
-    ret = clReleaseMemObject(setup.target_beta);
-    ret = clReleaseMemObject(setup.target_updateable_items);
-    ret = clReleaseMemObject(setup.target_append);
-    ret = clReleaseCommandQueue(setup.command_queue);
-    ret = clReleaseContext(setup.context);
-}
+//void opencl_cleanup(struct OpenCL_Setup setup)
+//{
+//    // clean up
+//    cl_int ret = 0;
+//    ret = clFlush(setup.command_queue);
+//    ret = clFinish(setup.command_queue);
+//    ret = clReleaseKernel(setup.kernel);
+//    ret = clReleaseProgram(setup.program);
+//    ret = clReleaseMemObject(setup.target_X);
+//    ret = clReleaseMemObject(setup.target_col_nz);
+//    ret = clReleaseMemObject(setup.target_col_offsets);
+//    ret = clReleaseMemObject(setup.target_wont_update);
+//    ret = clReleaseMemObject(setup.target_rowsum);
+//    ret = clReleaseMemObject(setup.target_beta);
+//    ret = clReleaseMemObject(setup.target_updateable_items);
+//    ret = clReleaseMemObject(setup.target_append);
+//    ret = clReleaseCommandQueue(setup.command_queue);
+//    ret = clReleaseContext(setup.context);
+//}
 
 static struct timespec start, end;
 static float gpu_time = 0.0;

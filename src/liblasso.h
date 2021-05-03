@@ -13,7 +13,7 @@
 #include <string.h>
 #include <limits.h>
 
-#include <CL/opencl.h>
+// #include <CL/opencl.h>
 #include <math.h>
 #include <omp.h>
 #include <stdio.h>
@@ -22,11 +22,13 @@
 
 #define NOT_R
 
-#include "config.h"
+// #include "config.h"
 #ifdef NOT_R
 #define Rprintf(args...) printf(args);
 #else
+extern "C" {
 #include <R.h>
+}
 #endif
 
 typedef struct {
@@ -67,20 +69,22 @@ struct AS_Properties {
 };
 
 struct OpenCL_Setup {
-    cl_context context;
-    cl_kernel kernel;
-    cl_command_queue command_queue;
-    cl_program program;
-    cl_mem target_X;
-    cl_mem target_col_nz;
-    cl_mem target_col_offsets;
-    cl_mem target_wont_update;
-    cl_mem target_rowsum;
-    cl_mem target_beta;
-    cl_mem target_updateable_items;
-    cl_mem target_append;
-    cl_mem target_last_max;
 };
+//struct OpenCL_Setup {
+//    cl_context context;
+//    cl_kernel kernel;
+//    cl_command_queue command_queue;
+//    cl_program program;
+//    cl_mem target_X;
+//    cl_mem target_col_nz;
+//    cl_mem target_col_offsets;
+//    cl_mem target_wont_update;
+//    cl_mem target_rowsum;
+//    cl_mem target_beta;
+//    cl_mem target_updateable_items;
+//    cl_mem target_append;
+//    cl_mem target_last_max;
+//};
 
 /*
  * Fits 6 to a cache line. As long as schedule is static, this should be fine.
@@ -109,11 +113,36 @@ struct AS_Entry {
   // char padding[39];
 };
 
+typedef struct {
+  XMatrixSparse Xc;
+  float **last_rowsum;
+  Thread_Cache *thread_caches;
+  int n;
+  float *beta;
+  float *last_max;
+  bool *wont_update;
+  int p;
+  long p_int;
+  XMatrixSparse X2c;
+  float *Y;
+  float *max_int_delta;
+  int_pair *precalc_get_num;
+  gsl_permutation *iter_permutation;
+  struct X_uncompressed Xu;
+} Iter_Vars;
+
 #include "csv.h"
 #include "pruning.h"
 #include "queue.h"
 #include "regression.h"
 #include "update_working_set.h"
+
+static float pruning_time = 0.0;
+static float working_set_update_time = 0.0;
+static float subproblem_time = 0.0;
+
+static long used_branches = 0;
+static long pruned_branches = 0;
 
 int **X2_from_X(int **X, int n, int p);
 float *read_y_csv(char *fn, int n);

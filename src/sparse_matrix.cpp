@@ -1,7 +1,6 @@
 #include "liblasso.h"
 #include <algorithm>
 #include <cstdlib>
-#include <glib-2.0/glib.h>
 #include <omp.h>
 
 using namespace std;
@@ -173,7 +172,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
             max_bits = max_size_given_entries[1];
           }
           // things for the next iter
-          g_assert_true(count < 60);
+          // g_assert_true(count < 60);
           col_entries[count] = diff;
           count++;
           if (used > largest_entry)
@@ -208,7 +207,8 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
     }
     iter_done++;
     if (p >= 100 && iter_done % (p / 100) == 0) {
-      printf("create interaction matrix, %d\%\n", done_percent);
+      if (VERBOSE)
+        printf("create interaction matrix, %d\%\n", done_percent);
       done_percent++;
     }
   }
@@ -256,7 +256,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
             max_bits = max_size_given_entries[1];
           }
           // things for the next iter
-          g_assert_true(count < 60);
+          // g_assert_true(count < 60);
           row_entries[count] = diff;
           count++;
           if (used > largest_entry)
@@ -331,7 +331,7 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   // X2.col_nz = col_nz;
 
   gsl_rng *r;
-  gsl_permutation *permutation = gsl_permutation_alloc(p_int);
+  gsl_permutation *permutation = gsl_permutation_alloc(p*(p+1)/2); //TODO: N.B. not necessarily correct size. Don't use any more.
   gsl_permutation_init(permutation);
   gsl_rng_env_setup();
   // permutation_splits is the number of splits excluding the final (smaller)
@@ -368,4 +368,75 @@ XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
   X2.p = p_int;
 
   return X2;
+}
+
+struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
+  int* host_X = calloc(Xc->total_entries, sizeof(int));
+  int* host_col_nz = calloc(Xc->p, sizeof(int));;
+  int* host_col_offsets = calloc(Xc->p, sizeof(int));
+  int* host_X_row = calloc(Xc->total_entries, sizeof(int));
+  int* host_row_nz = calloc(Xc->n, sizeof(int));;
+  int* host_row_offsets = calloc(Xc->n, sizeof(int));
+  int p = Xc->p;
+  int n = Xc->n;
+
+  // row-major dense X, for creating row inverted lists.
+  char (*full_X)[p] = calloc(n * p, sizeof(char));
+
+  // read through compressed matrix and construct continuous
+  // uncompressed matrix
+  size_t offset = 0;
+  for (int k = 0; k < p; k++) {
+    host_col_offsets[k] = offset;
+    host_col_nz[k] = Xc->cols[k].nz;
+    int *col = &host_X[offset];
+    // read column
+    {
+      int col_entry_pos = 0;
+      int entry = -1;
+      for (int i = 0; i < Xc->cols[k].nwords; i++) {
+        S8bWord word = Xc->cols[k].compressed_indices[i];
+        unsigned long values = word.values;
+        for (int j = 0; j <= group_size[word.selector]; j++) {
+          int diff = values & masks[word.selector];
+          if (diff != 0) {
+            entry += diff;
+            col[col_entry_pos] = entry;
+            col_entry_pos++;
+            offset++;
+            full_X[entry][k] = 1;
+          }
+          values >>= item_width[word.selector];
+        }
+      }
+    }
+  }
+
+  // construct row-major indices.
+  offset = 0;
+  for (int row = 0; row < n; row++) {
+    host_row_offsets[row] = offset;
+    int *col = &host_X[offset];
+    int row_nz = 0;
+    for (int col = 0; col < p; col++) {
+      if (full_X[row][col] == 1) {
+        host_X_row[offset] = col;
+        row_nz++;
+        offset++;
+      }
+    }
+    host_row_nz[row] = row_nz;
+  }
+
+
+  struct X_uncompressed Xu;
+  Xu.host_col_nz = host_col_nz;
+  Xu.host_col_offsets = host_col_offsets;
+  Xu.host_X = host_X;
+  Xu.total_size = offset;
+  Xu.host_row_nz = host_row_nz;
+  Xu.host_row_offsets = host_row_offsets;
+  Xu.host_X_row = host_X_row;
+
+  return Xu;
 }

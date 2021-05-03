@@ -16,7 +16,8 @@ int main(int argc, char** argv) {
 
 
 	char *scale = argv[3];
-	char *verbose = argv[2];
+	char *verbose = argv[4];
+	printf("verbose: %s\n", verbose);
 	char *output_filename = argv[10];
 	FILE *output_file = NULL;
 
@@ -35,8 +36,10 @@ int main(int argc, char** argv) {
 
 
 	VERBOSE = 0;
-	if (strcmp(verbose, "T") == 0)
+	if (strcmp(verbose, "T") == 0) {
+		printf("verbose\n");
 		VERBOSE = 1;
+	}
 
 	float lambda;
 
@@ -87,7 +90,7 @@ int main(int argc, char** argv) {
 
 	printf("begginning coordinate descent\n");
 	float *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
-			0.04, lambda, 10000, VERBOSE, overlap, 1.0001, log_level, argv, argc, FALSE, 50);
+			0.04, lambda, 300, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1);
 	int nbeta_int = nbeta;
 	nbeta_int = get_p_int(nbeta, max_interaction_distance);
 	if (beta == NULL) {

@@ -55,10 +55,10 @@ void initialise_static_resources() {
 }
 
 void free_static_resources() {
-  if (global_permutation != NULL)
-    gsl_permutation_free(global_permutation);
-  if (global_permutation_inverse != NULL)
-    gsl_permutation_free(global_permutation_inverse);
+  //if (global_permutation != NULL)
+  //  gsl_permutation_free(global_permutation);
+  //if (global_permutation_inverse != NULL)
+  //  gsl_permutation_free(global_permutation_inverse);
   if (cached_nums != NULL)
     free(cached_nums);
   for (int i = 0; i < NumCores; i++)
@@ -163,8 +163,8 @@ float get_sump(int p, int k, int i, float *beta, int **X) {
 }
 
 int_pair get_num(long num, long p) {
-  size_t num_post_permutation = gsl_permutation_get(global_permutation, num);
-  return cached_nums[num_post_permutation];
+  // size_t num_post_permutation = gsl_permutation_get(global_permutation, num);
+  return cached_nums[num];
 }
 
 int_pair *get_all_nums(int p, int max_interaction_distance) {
