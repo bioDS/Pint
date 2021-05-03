@@ -95,7 +95,7 @@ float l2_combined_estimate(XMatrixSparse X, float lambda, int k,
  * somewhere convenient for this thread.
  */
 // TODO: should beta[k] be in here?
-int wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
+bool wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
                        float *last_rowsum, float *rowsum, int *column_cache,
                        float *beta) {
   int *cache = malloc(X.n * sizeof *column_cache);

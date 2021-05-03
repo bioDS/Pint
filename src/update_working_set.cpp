@@ -1,5 +1,6 @@
 #include <omp.h>
 #include <stdlib.h>
+#include <glib-2.0/glib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
@@ -108,7 +109,7 @@ int active_set_get_index(Active_Set* as, int index)
 char update_working_set_cpu_old(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct XMatrixSparse Xc, char* host_append,
-    float* rowsum, int* wont_update, int p, int n,
+    float* rowsum, bool* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update,
     float *last_max, Active_Set *as, Thread_Cache *thread_caches) {
 //char update_working_set_old(XMatrixSparse Xc, char* host_append, double *rowsum, int *wont_update,
@@ -310,7 +311,7 @@ char update_working_set_cpu_old(
 
 inline char update_working_set_device(
     struct X_uncompressed Xu, char* host_append,
-    float* rowsum, int* wont_update, int p, int n,
+    float* rowsum, bool* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, 
     struct OpenCL_Setup* setup, float *host_last_max)
 {
@@ -408,10 +409,11 @@ inline char update_working_set_device(
 
 static ska::flat_hash_set<long> *host_append_sets;
 
+// probably worth constructing an Xc containing only the columns we want.
 char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
-    struct XMatrixSparse Xc, Thread_Cache *thread_caches, Active_Set *as,
-    struct X_uncompressed Xu, float* rowsum, int* wont_update, int p, int n,
+    struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache *thread_caches, Active_Set *as,
+    struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update,
     float *last_max)
 {
@@ -434,7 +436,8 @@ char update_working_set_cpu(
         long main = updateable_items[main_i];
         int inter_cols = 0;
         // ska::flat_hash_set<long> inters_found;
-        ska::flat_hash_map<long, float> sum_with_col;
+        // ska::flat_hash_map<long, float> sum_with_col;
+        ska::flat_hash_map<long, float> sum_with_col = thread_cache.lf_map;
         int main_col_len = 0;
 
         int *column_entries = col_i_cache;
@@ -449,23 +452,29 @@ char update_working_set_cpu(
                 entry += diff;
 
                 int row_main = entry;
+                float rowsum_diff = rowsum[row_main];
                 // Do thing per entry here:
-                // check inverted list for interactions along row_main
-                long inter_entry = -1;
-                for (int r = 0; r < Xc.rows[row_main].nwords; r++) {
-                  S8bWord word = Xc.rows[row_main].compressed_indices[r];
-                  unsigned long values = word.values;
-                  for (int j = 0; j <= group_size[word.selector]; j++) {
-                    int diff = values & masks[word.selector];
-                    if (diff != 0) {
-                        inter_entry += diff;
-
-                        if (inter_entry >= main)
-                            sum_with_col[inter_entry] += rowsum[row_main];
-                    }
-                    values >>= item_width[word.selector];
-                  }
+                for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                  int inter = relevant_row_set.rows[row_main][ri];
+                  if (inter >= main)
+                    sum_with_col[inter] += rowsum_diff;
                 }
+                // check inverted list for interactions along row_main
+                //long inter_entry = -1;
+                //for (int r = 0; r < Xc.rows[row_main].nwords; r++) {
+                //  S8bWord word = Xc.rows[row_main].compressed_indices[r];
+                //  unsigned long values = word.values;
+                //  for (int j = 0; j <= group_size[word.selector]; j++) {
+                //    int diff = values & masks[word.selector];
+                //    if (diff != 0) {
+                //        inter_entry += diff;
+
+                //        if (inter_entry >= main)
+                //            sum_with_col[inter_entry] += rowsum[row_main];
+                //    }
+                //    values >>= item_width[word.selector];
+                //  }
+                //}
                 //for (long inter_i = 0; inter_i < Xu.host_row_nz[row_main]; inter_i++) {
                 //    long inter = Xu.host_X_row[Xu.host_row_offsets[row_main] + inter_i];
                 //    if (inter < main)
@@ -581,13 +590,50 @@ char update_working_set_cpu(
     return increased_set;
 }
 
+char update_working_set_cpu_row_version(
+    // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
+    struct XMatrixSparse Xc, Thread_Cache *thread_caches, Active_Set *as,
+    struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
+    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float *last_max)
+{
+  char increased_set = FALSE;
+
+  // for each row
+    // for every pairwise combination that is in updateable items
+      // add rowsum
+
+
+  return increased_set;
+}
+
 char update_working_set(
-    struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, int* wont_update, int p, int n,
+    struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, bool* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, Active_Set* as,
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;
-    char increased_set = update_working_set_cpu(Xc, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+
+    // construct small Xc containing only the relevant columns.
+    // in particular, we want the row index with no columns outside the updateable_items set.
+
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    // quick test:
+    //for (int row = 0; row < n; row++) {
+    //  for (long inter_i = 0; inter_i < Xu.host_row_nz[row]; inter_i++) {
+    //      long col = Xu.host_X_row[Xu.host_row_offsets[row] + inter_i];
+    //      if (new_row_set.rows[row][inter_i] != col) {
+    //        printf("%d,%ld : %d != %ld\n", row, inter_i, new_row_set.rows[row][inter_i], col);
+    //      }
+    //      g_assert_true(new_row_set.rows[row][inter_i] == col);
+    //  }
+    //}
+    char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+    for (int i = 0; i < n; i++) {
+      free(new_row_set.rows[i]);
+    }
+    free(new_row_set.rows);
+    free(new_row_set.row_lengths);
 
     return increased_set;
     //printf("re-calculating working set columns\n");

@@ -1,6 +1,8 @@
 #include "liblasso.h"
 #include <algorithm>
+#include <cstdlib>
 #include <glib-2.0/glib.h>
+#include <omp.h>
 
 using namespace std;
 
@@ -14,6 +16,61 @@ void free_sparse_matrix(XMatrixSparse X) {
   }
   free(X.cols);
   gsl_permutation_free(X.permutation);
+}
+
+/**
+ * present: true if column should remain, false if it should be removed.
+ */
+struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool *remove, Thread_Cache *thread_caches) {
+  int p = Xc.p;
+  int n = Xc.n;
+  struct row_set rs;
+  int **new_rows = (int**)calloc(n, sizeof(int*));
+  int *row_lengths = (int*)calloc(n, sizeof (int));
+
+  #pragma omp parallel for
+  for (int row = 0; row < n; row++) {
+    Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
+    int *row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
+    // check inverted list for interactions along row_main
+    // int *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
+    int row_pos = 0;
+    for (int i = 0; i < Xu.host_row_nz[row]; i++) {
+      long col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
+      // int col = X_row[i];
+      if (!remove[col]) {
+        row_cache[row_pos] = col;
+        row_pos++;
+      }
+    }
+    //long entry = -1;
+    //int row_pos = 0;
+    //for (int r = 0; r < Xc.rows[row].nwords; r++) {
+    //  S8bWord word = Xc.rows[row].compressed_indices[r];
+    //  unsigned long values = word.values;
+    //  row_pos = 0;
+    //  for (int j = 0; j <= group_size[word.selector]; j++) {
+    //    int diff = values & masks[word.selector];
+    //    if (diff != 0) {
+    //        entry += diff;
+    //        
+    //        // per-entry action here
+    //        // if (!remove[entry]) {
+    //          row_cache[row_pos] = entry;
+    //          row_pos++;
+    //        // }
+    //    }
+    //    values >>= item_width[word.selector];
+    //  }
+    //}
+    row_lengths[row] = row_pos;
+    new_rows[row] = (int*)malloc(row_pos * sizeof(int));
+    memcpy(new_rows[row], row_cache, row_pos * sizeof(int));
+  }
+
+  rs.rows = new_rows;
+  rs.row_lengths = row_lengths;
+  return rs;
 }
 
 /**

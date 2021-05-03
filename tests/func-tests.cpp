@@ -834,7 +834,7 @@ static void check_permutation() {
   gsl_permutation_free(perm);
 }
 
-int check_didnt_update(int p, int p_int, int *wont_update, float *beta) {
+int check_didnt_update(int p, int p_int, bool *wont_update, float *beta) {
   int no_disagreeing = 0;
   for (int i = 0; i < p_int; i++) {
     // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -887,11 +887,11 @@ static void pruning_fixture_tear_down(UpdateFixture *fixture,
   test_simple_coordinate_descent_tear_down(fixture, NULL);
 }
 
-int get_wont_update(char *working_set, int *wont_update, int p,
+bool get_wont_update(char *working_set, bool *wont_update, int p,
                     XMatrixSparse Xc, float lambda, float *last_max,
                     float **last_rowsum, float *rowsum, int *column_cache,
                     int n, float *beta) {
-  int ruled_out = 0;
+  bool ruled_out = false;
   for (int j = 0; j < p; j++) {
     float sum = 0.0;
     wont_update[j] = wont_update_effect(
@@ -931,7 +931,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   XMatrixSparse X2c = fixture->X2c;
   int column_cache[n];
 
-  int wont_update[p];
+  bool wont_update[p];
   for (int j = 0; j < p; j++)
     wont_update[j] = 0;
 
@@ -956,7 +956,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
                              10,    5,   2,   1,   0.5, 0.2, 0.1};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
   float lambda = lambda_sequence[0];
-  int ruled_out = 0;
+  bool ruled_out = 0;
   float *old_rowsum = malloc(sizeof *old_rowsum * n);
 
   float error = 0.0;
@@ -1044,7 +1044,7 @@ typedef struct {
   int n;
   float *beta;
   float *last_max;
-  int *wont_update;
+  bool *wont_update;
   int p;
   int p_int;
   XMatrixSparse X2c;
@@ -1064,7 +1064,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   int n = vars->n;
   float *beta = vars->beta;
   float *last_max = vars->last_max;
-  int *wont_update = vars->wont_update;
+  bool *wont_update = vars->wont_update;
   int p = vars->p;
   int p_int = vars->p_int;
   XMatrixSparse X2c = vars->X2c;
@@ -1291,7 +1291,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
   int n = vars->n;
   float *beta = vars->beta;
   float *last_max = vars->last_max;
-  int *wont_update = vars->wont_update;
+  bool *wont_update = vars->wont_update;
   int p = vars->p;
   int p_int = vars->p_int;
   XMatrixSparse X2c = vars->X2c;
@@ -1372,7 +1372,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
 //      last_max[0:p], last_rowsum[0:p][0:n], rowsum[0:n], beta) map(from: \
 //      wont_update[0:n])
     for (int j = 0; j < p; j++) {
-      int old_wont_update = wont_update[j];
+      bool old_wont_update = wont_update[j];
       wont_update[j] =
            wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
            rowsum,
@@ -1578,14 +1578,14 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   Thread_Cache thread_caches[NumCores];
 
   for (int i = 0; i < NumCores; i++) {
-    thread_caches[i].col_i = malloc(sizeof(int) * n);
+    thread_caches[i].col_i = malloc(sizeof(int) * max(n,p));
     thread_caches[i].col_j = malloc(sizeof(int) * n);
   }
 
   XMatrixSparse Xc = fixture->Xc;
   XMatrixSparse X2c = fixture->X2c;
 
-  int *wont_update = malloc(sizeof *wont_update * p);
+  bool *wont_update = malloc(sizeof *wont_update * p);
 #pragma omp parallel for schedule(static)
   for (int j = 0; j < p; j++)
     wont_update[j] = 0;

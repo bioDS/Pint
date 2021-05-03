@@ -6,7 +6,7 @@ int active_set_get_index(Active_Set *as, int index);
 
 char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc,
-    float* rowsum, int* wont_update, int p, int n,
+    float* rowsum, bool* wont_update, int p, int n,
     float lambda, float* beta, int* updateable_items, int count_may_update, Active_Set* as,
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max);
 

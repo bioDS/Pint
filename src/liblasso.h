@@ -1,4 +1,5 @@
 // #define interesting_col 58
+#include "flat_hash_map.hpp"
 #define interesting_col 35
 // #define interesting_col 0
 #include <errno.h>
@@ -31,6 +32,7 @@
 typedef struct {
   int *col_i;
   int *col_j;
+  ska::flat_hash_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
   long val;

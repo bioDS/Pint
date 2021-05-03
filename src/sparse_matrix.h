@@ -13,6 +13,11 @@ typedef struct Column_Set {
   ColEntry *cols;
 } Column_Set;
 
+struct row_set {
+  int **rows;
+  int *row_lengths;
+};
+
 typedef struct XMatrixSparse {
   pad_int *col_nz;
   int *col_nwords;
@@ -42,3 +47,5 @@ typedef struct XMatrix_sparse_row {
 XMatrixSparse sparse_X2_from_X(int **X, int n, int p,
                                long max_interaction_distance, int shuffle);
 XMatrixSparse sparsify_X(int **X, int n, int p);
+
+struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool *remove, Thread_Cache *thread_caches);
