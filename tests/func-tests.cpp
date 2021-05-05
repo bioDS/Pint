@@ -1219,7 +1219,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
-  const float LAMBDA_MIN = 1;
+  const float LAMBDA_MIN = 15;
   const int MAX_NZ_BETA = 2000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
