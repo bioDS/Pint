@@ -12,10 +12,6 @@ install_headers('liblasso.h')
 #    endif
 #endif
 
-configuration_inc = include_directories('.')
-conf_data = configuration_data()
-conf_data.set('NOT_R', true)
-configure_file(output: 'config.h', configuration: conf_data)
 
 liblasso_deps = [
 	dependency('gsl'),
