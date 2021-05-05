@@ -11,7 +11,6 @@ add_project_arguments([
   '-ffast-math',
   '-fno-stack-protector',
   '-fpermissive',
-  '-fsanitize=address',
  '-Ofast',
   '-g',
   # '-Os',
