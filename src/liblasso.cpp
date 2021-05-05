@@ -30,6 +30,13 @@ float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 gsl_permutation *global_permutation;
 gsl_permutation *global_permutation_inverse;
 
+double pruning_time = 0.0;
+double working_set_update_time = 0.0;
+double subproblem_time = 0.0;
+
+long used_branches = 0;
+long pruned_branches = 0;
+
 int min(int a, int b) {
   if (a < b)
     return a;

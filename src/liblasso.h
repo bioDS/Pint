@@ -137,12 +137,6 @@ typedef struct {
 #include "regression.h"
 #include "update_working_set.h"
 
-static float pruning_time = 0.0;
-static float working_set_update_time = 0.0;
-static float subproblem_time = 0.0;
-
-static long used_branches = 0;
-static long pruned_branches = 0;
 
 int **X2_from_X(int **X, int n, int p);
 float *read_y_csv(char *fn, int n);
@@ -165,6 +159,13 @@ int_pair *get_all_nums(int p, int max_interaction_distance);
 
 // pad by an entire cache line, just to be safe.
 #define PADDING 64
+
+extern double pruning_time;
+extern double working_set_update_time;
+extern double subproblem_time;
+
+extern long used_branches;
+extern long pruned_branches;
 
 extern int NumCores;
 extern long permutation_splits;

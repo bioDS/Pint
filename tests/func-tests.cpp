@@ -1219,7 +1219,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
-  const float LAMBDA_MIN = 15;
+  const float LAMBDA_MIN = 1;
   const int MAX_NZ_BETA = 2000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
@@ -1466,10 +1466,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("basic had %ld nz beta, pruning had %ld\n", nz_beta_basic, nz_beta_pruning);
 
   printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
-  printf("pruning time is composed of %.2f pruning, %.2f working set "
-         "updates, "
-         "and %.2f subproblem time\n",
-         pruning_time, working_set_update_time, subproblem_time);
+  //printf("pruning time is composed of %.2f pruning, %.2f working set "
+  //       "updates, "
+  //       "and %.2f subproblem time\n",
+  //       pruning_time, working_set_update_time, subproblem_time);
   g_assert_true(
       fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
 
