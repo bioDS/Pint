@@ -1,2 +1,2 @@
-PKG_CXXFLAGS = @PKG_CFLAGS@ -fopenmp -fpermissive -Ofast -ffast-math -I./
+PKG_CXXFLAGS = @PKG_CFLAGS@ -fopenmp -fpermissive -Ofast -ffast-math -flto -I./
 PKG_LIBS = @PKG_LIBS@ -lgomp

@@ -36,8 +36,10 @@ int adaptive_calibration_check_beta(float c_bar, float lambda_1,
     }
   }
 
-  adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
+  // adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
+  adjusted_max_diff = (double)max_diff / (((double)lambda_1 + (double)lambda_2));
 
+  // printf("adjusted_max_diff: %f\n", adjusted_max_diff);
   if (adjusted_max_diff <= c_bar) {
     return 1;
   }
@@ -209,7 +211,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     if (VERBOSE)
       printf("(%ld active branches, %ld new)\n", active_branches,
             new_active_branches);
-    if (active_branches == 0) {
+    if (new_active_branches == 0) {
       break;
     }
     //********** Identify Working Set *******************
@@ -422,8 +424,8 @@ float *simple_coordinate_descent_lasso(
   for (int i = 0; i < n; i++)
     rowsum[i] = -Y[i];
 
-  colsum = malloc(p_int * sizeof(float));
-  memset(colsum, 0, p_int * sizeof(float));
+  //colsum = malloc(p_int * sizeof(float));
+  //memset(colsum, 0, p_int * sizeof(float));
 
   //col_ysum = malloc(p_int * sizeof(float));
   //memset(col_ysum, 0, p_int * sizeof(float));
@@ -470,10 +472,10 @@ float *simple_coordinate_descent_lasso(
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
   gsl_rng *iter_rng;
   gsl_permutation_init(iter_permutation);
-  gsl_rng_env_setup();
-  const gsl_rng_type *T = gsl_rng_default;
-  parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
-                   permutation_splits);
+  //gsl_rng_env_setup();
+  //const gsl_rng_type *T = gsl_rng_default;
+  //parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
+  //                 permutation_splits);
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   float final_lambda = lambda_min;
   int max_lambda_count = max_iter;
@@ -548,8 +550,8 @@ float *simple_coordinate_descent_lasso(
     beta_sequence.vec_length = p_int;
     beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
     beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
-    beta_cache = malloc(p_int * sizeof(float));
-    index_cache = malloc(p_int * sizeof(int));
+    beta_cache = (float*)malloc(p_int * sizeof(float));
+    index_cache = (int*)malloc(p_int * sizeof(int));
   }
 
 
@@ -609,7 +611,7 @@ float *simple_coordinate_descent_lasso(
   // lambda = 100;
   // final_lambda = lambda - 1; //TODO: only for testing
   // for (; lambda > final_lambda && iter < max_iter; iter++) {
-  while (lambda > final_lambda) {
+  while (lambda > final_lambda && iter < max_lambda_count) {
     //#pragma omp parallel for schedule(static) reduction(+:nz_beta)
     //for (int i = 0; i < p_int; i++) {
     //  if (beta[i] != 0) {
@@ -633,8 +635,7 @@ float *simple_coordinate_descent_lasso(
     double prev_error = error;
     error = calculate_error(n, p_int, Y, X, beta, p, intercept, rowsum);
     printf("lambda %d = %f, error %.1f, nz_beta %ld\n", iter, lambda, error, nz_beta);
-    if (use_adaptive_calibration) {
-      if (nz_beta > 0) {
+    if (use_adaptive_calibration && nz_beta > 0) {
         Sparse_Betas sparse_betas;
         int count = 0;
         for (int b = 0; b < p_int; b++) {
@@ -644,22 +645,28 @@ float *simple_coordinate_descent_lasso(
             count++;
           }
         }
-        sparse_betas.betas = malloc(count * sizeof(float));
-        sparse_betas.indices = malloc(count * sizeof(int));
+        if (count != nz_beta) {
+         printf("count (%d) or nz_beta (%d) is wrong\n", count, nz_beta);
+        }
+        sparse_betas.betas = (float*)malloc(count * sizeof(float));
+        sparse_betas.indices = (int*)malloc(count * sizeof(int));
         memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
         memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
 
         sparse_betas.count = count;
 
+        if (beta_sequence.count >= max_lambda_count) {
+          printf("allocated too many beta sequences for adaptive calibration, things will now break. ***************************************\n");
+        }
         beta_sequence.lambdas[beta_sequence.count] = lambda;
         beta_sequence.betas[beta_sequence.count] = sparse_betas;
         beta_sequence.count++;
 
+        printf("checking adaptive cal\n");
         if (check_adaptive_calibration(0.75, beta_sequence, n)) {
-          printf("Halting as reccommended by adaptive calibration\n");
-          final_lambda = lambda;
+         printf("Halting as reccommended by adaptive calibration\n");
+         final_lambda = lambda;
         }
-      }
     }
     lambda *= 0.95;
     if (nz_beta > 0) {

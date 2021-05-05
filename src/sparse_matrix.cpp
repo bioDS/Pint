@@ -27,7 +27,7 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
   int **new_rows = (int**)calloc(n, sizeof(int*));
   int *row_lengths = (int*)calloc(n, sizeof (int));
 
-  #pragma omp parallel for
+  // #pragma omp parallel for
   for (int row = 0; row < n; row++) {
     Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
     int *row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p

@@ -1,6 +1,6 @@
 // #define interesting_col 58
 #include "flat_hash_map.hpp"
-#define interesting_col 35
+#define interesting_col 54
 // #define interesting_col 0
 #include <errno.h>
 #include <gsl/gsl_permutation.h>
@@ -20,9 +20,9 @@
 #include <string.h>
 #include <time.h>
 
-#define NOT_R
+// #define NOT_R
 
-// #include "config.h"
+#include <config.h>
 #ifdef NOT_R
 #define Rprintf(args...) printf(args);
 #else

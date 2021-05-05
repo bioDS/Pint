@@ -74,6 +74,8 @@ void active_set_free(Active_Set as)
 void active_set_append(Active_Set* as, int value, int* col, int len)
 {
     struct AS_Entry* e = &as->entries[value];
+    if (e->present)
+      return;
     if (e->was_present) {
         e->present = TRUE;
     } else {
@@ -436,6 +438,7 @@ char update_working_set_cpu(
         int *col_i_cache = thread_cache.col_i;
         int *col_j_cache = thread_cache.col_j;
         long main = updateable_items[main_i];
+        float max_inter_val = 0;
         int inter_cols = 0;
         // ska::flat_hash_set<long> inters_found;
         // ska::flat_hash_map<long, float> sum_with_col;
@@ -504,6 +507,9 @@ char update_working_set_cpu(
         //        inters_found.insert(inter);
         //    }
         //}
+        if (main == interesting_col) {
+          printf("interesting column sum (%ld,%d): %f\n", main, interesting_col, sum_with_col[interesting_col]);
+        }
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
         auto curr_inter = sum_with_col.cbegin();
@@ -512,7 +518,8 @@ char update_working_set_cpu(
             // long inter = curr_inter.current->value;
             auto pair = curr_inter.current->value;
             long inter = pair.first;
-            float sum = pair.second;
+            float sum = std::abs(pair.second);
+            max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
             if (sum > lambda * n / 2) {
                 int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
@@ -583,6 +590,9 @@ char update_working_set_cpu(
             }
             curr_inter++;
         }
+        if (main == interesting_col)
+          printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
+        last_max[main] = max_inter_val;
         sum_with_col.clear();
         // inters_found.clear();
     }

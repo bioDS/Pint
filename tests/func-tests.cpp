@@ -404,18 +404,26 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     fixture->p = 5000;
     xfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv";
     yfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv";
+    //fixture->n = 8000;
+    //fixture->p = 4000;
+    //xfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/X.csv";
+    //yfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/Y.csv";
   } else if (use_big == 1) {
     printf("\nusing large test case\n");
     fixture->n = 10000;
     fixture->p = 1000;
     xfile = "../X_nlethals50_v15803.csv";
     yfile = "../Y_nlethals50_v15803.csv";
+    //xfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/X.csv";
+    //yfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/Y.csv";
   } else if (use_big == 0) {
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
-    xfile = "../testX.csv";
-    yfile = "../testY.csv";
+    //xfile = "../testX.csv";
+    //yfile = "../testY.csv";
+    xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
+    yfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/Y.csv";
   }
   printf("reading X from %s\n", xfile);
   fixture->xmatrix = read_x_csv(xfile, fixture->n, fixture->p);
@@ -1211,7 +1219,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
-  const float LAMBDA_MIN = 1;
+  const float LAMBDA_MIN = 15;
   const int MAX_NZ_BETA = 2000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
@@ -1292,7 +1300,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("getting time for un-pruned version\n");
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
     #pragma omp parallel for schedule(static) reduction(+:nz_beta)
     for (int i = 0; i < p_int; i++) {
@@ -1331,6 +1339,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   for (int i = 0; i < p_int; i++) {
     beta_pruning[i] = 0;
   }
+  XMatrixSparse X2c_fake;
   Iter_Vars iter_vars_pruned = {
       Xc,
       last_rowsum,
@@ -1341,7 +1350,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       wont_update,
       p,
       p_int,
-      X2c,
+      X2c_fake,
       fixture->Y,
       max_int_delta,
       fixture->precalc_get_num,
@@ -1360,7 +1369,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   struct OpenCL_Setup ocl_setup; //TODO: remove this
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   Active_Set active_set = active_set_new(p_int);
-  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.95) {
+  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
     #pragma omp parallel for schedule(static) reduction(+:nz_beta)
     for (int i = 0; i < p_int; i++) {
@@ -1368,6 +1377,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
         nz_beta++;
       }
     }
+    printf("%d nz beta\n");
     if (nz_beta > MAX_NZ_BETA) {
       break;
     }
@@ -1416,6 +1426,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   if (Xc.p > 1000) {
     return;
   }
+  long nz_beta_basic = 0;
+  long nz_beta_pruning = 0;
   for (int k = 0; k < p_int; k++) {
     int entry = -1;
     for (int i = 0; i < X2c.cols[k].nwords; i++) {
@@ -1428,6 +1440,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
           // do whatever we need here with the index below:
           basic_rowsum[entry] += beta[k];
+          nz_beta_basic += beta[k] != 0.0;
+          nz_beta_pruning += beta_pruning[k] != 0.0;
           pruned_rowsum[entry] += beta_pruning[k];
           if (basic_rowsum[entry] > 1e20) {
             printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
@@ -1448,6 +1462,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   }
   basic_error = sqrt(basic_error);
   pruned_error = sqrt(pruned_error);
+
+  printf("basic had %ld nz beta, pruning had %ld\n", nz_beta_basic, nz_beta_pruning);
 
   printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
   printf("pruning time is composed of %.2f pruning, %.2f working set "
