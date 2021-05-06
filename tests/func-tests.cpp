@@ -400,6 +400,7 @@ static void test_X2_from_X() {
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
                                                   gconstpointer use_big) {
+  halt_error_diff = HALT_ERROR_DIFF;
   char *xfile, *yfile;
   if (use_big == 2) {
     printf("\nusing huge test case\n");
@@ -423,7 +424,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
-    LAMBDA_MIN = 2;
+    LAMBDA_MIN = 1;
     //xfile = "../testX.csv";
     //yfile = "../testY.csv";
     xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";

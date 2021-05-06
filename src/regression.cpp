@@ -338,7 +338,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       }
       error = sqrt(error);
       if (prev_error / error < halt_error_diff) {
-        // printf("done after %d iters\n", lambda, iter+1);
+        printf("done after %d iters\n", lambda, iter+1);
         break;
       }
     }
@@ -375,6 +375,7 @@ float *simple_coordinate_descent_lasso(
     enum LOG_LEVEL log_level, char **job_args, int job_args_num,
     int use_adaptive_calibration, int max_nz_beta) {
   halt_error_diff = hed;
+  printf("using halt_error_diff of %f\n", halt_error_diff);
   long num_nz_beta = 0;
   long became_zero = 0;
   float lambda = lambda_max;
