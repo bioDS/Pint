@@ -181,6 +181,8 @@ extern int zero_updates_entries;
 extern int *colsum;
 extern float *col_ysum;
 extern int max_size_given_entries[61];
+extern long total_beta_updates;
+extern long total_beta_nz_updates;
 
 #define NUM_MAX_ROWSUMS 1
 extern float max_rowsums[NUM_MAX_ROWSUMS];

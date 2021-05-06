@@ -8,6 +8,8 @@
 using namespace std;
 
 struct timespec start_time, end_time;
+long total_beta_updates = 0;
+long total_beta_nz_updates = 0;
 
 // check a particular pair of betas in the adaptive calibration scheme
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
@@ -276,7 +278,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       //}
       // parallel_shuffle(iter_permutation, permutation_split_size,
       //                 final_split_size, permutation_splits);
-#pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta)
+#pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
       for (int i = 0; i < p; i++) {
         for (int j = i; j < p; j++) {
           //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
@@ -291,12 +293,14 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
             if (beta[k] == 0.0) {
               was_zero = TRUE;
             }
+            total_beta_updates++;
             Changes changes = update_beta_cyclic(
                 active_set->entries[k].col, Y, rowsum, n, p, lambda, beta, k, 0,
                 precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
             if (changes.actual_diff == 0.0) {
               total_unchanged++;
             } else {
+              total_beta_nz_updates++;
               total_changed++;
             }
             if (was_zero && changes.actual_diff != 0) {
@@ -310,6 +314,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
           }
         }
       }
+      //printf("total beta updates: %ld\n", total_beta_updates);
       // for (int ki = 0; ki < active_set->length; ki++) {
       //  int k = active_set->entries[perm->data[ki]];
       //  if (active_set->properties[k].present) {

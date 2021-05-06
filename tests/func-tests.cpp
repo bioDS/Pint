@@ -34,6 +34,9 @@ struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
                             float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup);
+static long total_basic_beta_updates = 0;
+static long total_basic_beta_nz_updates = 0;
+static float LAMBDA_MIN = 15;
 
 // #pragma omp declare target
 // float fabs(float a) {
@@ -420,6 +423,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
+    LAMBDA_MIN = 2;
     //xfile = "../testX.csv";
     //yfile = "../testY.csv";
     xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
@@ -1082,13 +1086,17 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
     parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
                      permutation_splits);
 #pragma omp parallel for num_threads(NumCores)                                 \
-    shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static)
+    shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static) reduction(+:total_basic_beta_updates, total_basic_beta_nz_updates)
     for (int k = 0; k < p_int; k++) {
       // for (int main_effect = 0; main_effect < p; main_effect++) {
       // for (int interaction = main_effect; interaction < p; interaction++) {
+      total_basic_beta_updates++;
       Changes changes = update_beta_cyclic_old(
           X2c, Y, rowsum, n, p, lambda, beta, k, 0, precalc_get_num,
           thread_caches[omp_get_thread_num()].col_i);
+      if (changes.actual_diff != 0.0) {
+          total_basic_beta_nz_updates++;
+      }
       // k++;
       // }
     }
@@ -1219,7 +1227,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
-  const float LAMBDA_MIN = 15;
   const int MAX_NZ_BETA = 2000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
@@ -1377,7 +1384,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
         nz_beta++;
       }
     }
-    printf("%d nz beta\n");
     if (nz_beta > MAX_NZ_BETA) {
       break;
     }
@@ -1403,6 +1409,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
          basic_cpu_time_used + x2_conversion_time, x2_conversion_time,
          pruned_cpu_time_used);
+  printf("basic updates: %ld, [%ld nz], pruned_updates: %ld [%ld nz]\n", total_basic_beta_updates, total_basic_beta_nz_updates, total_beta_updates, total_beta_nz_updates);
   printf("pruning time is composed of %.2f pruning, %.2f working set "
          "updates, "
          "and %.2f subproblem time\n",
