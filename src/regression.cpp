@@ -137,7 +137,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
    */
   // TODO: with multiple iters, many branches are added on the second iter. This
   // doesn't seem right.
-  for (int retests = 0; retests < 100; retests++) {
+  for (int retests = 0; retests < 1; retests++) {
     if (VERBOSE)
       printf("test %d\n", retests + 1);
     long total_changed = 0;
