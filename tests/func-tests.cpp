@@ -573,7 +573,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
 // will fail if Y has been normalised
 static void test_read_y_csv() {
   int n = 1000;
-  float *Y = read_y_csv("/home/kieran/work/lasso_testing/testYSmall.csv", n);
+  float *Y = read_y_csv("../testYSmall.csv", n);
   printf("%f\n", Y[0]);
   g_assert_true(Y[0] >= -133.351709197933 - 0.0001);
   g_assert_true(Y[0] <= -133.351709197933 + 0.0001);
@@ -601,7 +601,7 @@ static void check_X2_encoding() {
   int p = 35;
   int p_int = p * (p + 1) / 2;
   XMatrix xmatrix =
-      read_x_csv("/home/kieran/work/lasso_testing/testXSmall.csv", n, p);
+      read_x_csv("../testXSmall.csv", n, p);
   XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
   XMatrixSparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE);
 
@@ -915,7 +915,7 @@ bool get_wont_update(char *working_set, bool *wont_update, int p,
     wont_update[j] = wont_update_effect(
         Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache, beta);
     if (wont_update[j])
-      ruled_out++;
+      ruled_out = true;
   }
 
   // for (int i = 0; i < p; i++) {
