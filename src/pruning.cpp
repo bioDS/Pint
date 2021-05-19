@@ -97,7 +97,7 @@ float l2_combined_estimate(XMatrixSparse X, float lambda, int k,
 // TODO: should beta[k] be in here?
 bool wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
                        float *last_rowsum, float *rowsum, int *column_cache,
-                       float *beta) {
+                       ska::flat_hash_map<long, float> beta) {
   int *cache = malloc(X.n * sizeof *column_cache);
   float upper_bound =
       l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, cache);

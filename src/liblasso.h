@@ -34,7 +34,7 @@ extern "C" {
 typedef struct {
   int *col_i;
   int *col_j;
-  ska::flat_hash_map<long, float> lf_map;
+  // ska::flat_hash_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
   long val;
@@ -93,11 +93,13 @@ struct OpenCL_Setup {
 #include "log.h"
 #include "s8b.h"
 #include "sparse_matrix.h"
+#include "tuple_val.h"
 
 typedef struct {
   // int *entries;
   // struct AS_Properties *properties;
-  struct AS_Entry *entries;
+  // struct AS_Entry *entries;
+  ska::flat_hash_map<long, struct AS_Entry> entries;
   int length;
   int max_length;
   gsl_permutation *permutation;
@@ -105,7 +107,7 @@ typedef struct {
 } Active_Set;
 
 struct AS_Entry {
-  long val : 62;
+  long val : 62; //TODO: change this to a tuple.
   int was_present : 1;
   int present : 1;
   S8bCol col;
@@ -118,7 +120,7 @@ typedef struct {
   float **last_rowsum;
   Thread_Cache *thread_caches;
   int n;
-  float *beta;
+  ska::flat_hash_map<long, float> beta;
   float *last_max;
   bool *wont_update;
   int p;

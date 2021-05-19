@@ -52,7 +52,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
   Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
 
-  float *beta = simple_coordinate_descent_lasso(
+  ska::flat_hash_map<long, float> beta = simple_coordinate_descent_lasso(
       xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
       asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed, halt_error_diff,
       log_level, NULL, 0, use_adaptive_calibration, max_nz_beta);
@@ -60,7 +60,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
   int total_main_count = 0, total_int_count = 0;
 
   for (int i = 0; i < p_int; i++) {
-    if (beta[i] != 0) {
+    if ( beta[i] != 0) {
       int_pair ip = get_num(i, p);
       if (ip.i == ip.j) {
         total_main_count++;
@@ -77,7 +77,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
   SEXP all_effects = PROTECT(allocVector(VECSXP, 5));
   // int protected = 6;
   for (long i = 0; i < p_int; i++) {
-    if (beta[i] != 0) {
+    if ( beta[i] != 0) {
       int_pair ip = get_num(i, p);
       if (ip.i == ip.j) {
         REAL(main_i)[main_count] = ip.i + 1;

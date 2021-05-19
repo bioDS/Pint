@@ -22,6 +22,7 @@ liblasso_deps = [
 	dependency('openmp'),
 	dependency('OpenCL'),
     dependency('glib-2.0'),
+    dependency('boost'),
 	#rt_dependency,
 ]
 
@@ -33,6 +34,7 @@ liblasso = shared_library('liblasso', 'liblasso.cpp', 'liblasso.h',
     'log.h', 'log.cpp',
     'csv.h', 'csv.cpp',
     'pruning.h', 'pruning.cpp',
+    'tuple_val.h', 'tuple_val.cpp',
     'update_working_set.h', 'update_working_set.cpp',
 	include_directories: configuration_inc,
 	dependencies: liblasso_deps,

@@ -49,26 +49,42 @@ struct CL_Source read_file(char* filename)
 
 Active_Set active_set_new(int max_length)
 {
-    struct AS_Entry* entries = malloc(sizeof *entries * max_length);
-    // N.B this is what sets was_present to false for every entry
-    memset(entries, 0,
-        sizeof *entries * max_length); // not strictly necessary, but probably safer.
-    int length = 0;
-    Active_Set as = { entries, length, max_length, NULL };
+    // ska::flat_hash_map<long, struct AS_Entry> entries;
+    //struct AS_Entry* entries = malloc(sizeof *entries * max_length);
+    //// N.B this is what sets was_present to false for every entry
+    //memset(entries, 0,
+    //    sizeof *entries * max_length); // not strictly necessary, but probably safer.
+    // int length = 0;
+    // Active_Set as = { entries, length, max_length, NULL };
+    Active_Set as;
+    as.length = 0;
+    as.max_length = max_length;
+    as.permutation = NULL;
     return as;
 }
 
 void active_set_free(Active_Set as)
 {
-    for (int i = 0; i < as.length; i++) {
-        struct AS_Entry* e = &as.entries[i];
-        if (NULL != e->col.compressed_indices) {
-            free(e->col.compressed_indices);
-        }
+    auto c = as.entries.begin();
+    auto e = as.entries.end();
+    for (; c != e; c++) {
+      struct AS_Entry e = c->second;
+      if (NULL != e.col.compressed_indices) {
+          free(e.col.compressed_indices);
+      }
     }
-    free(as.entries);
+    //for (int i = 0; i < as.length; i++) {
+    //  if (as.entries.count(i) > 0) {
+    //    struct AS_Entry e = as.entries[i];
+    //    if (NULL != e.col.compressed_indices) {
+    //        free(e.col.compressed_indices);
+    //    }
+    //  }
+    //}
+    // free(as.entries);
+    as.entries.clear();
     if (NULL != as.permutation)
-        free(as.permutation);
+        gsl_permutation_free(as.permutation);
 }
 
 void active_set_append(Active_Set* as, int value, int* col, int len)
@@ -114,11 +130,11 @@ char update_working_set_cpu_old(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct XMatrixSparse Xc, char* host_append,
     float* rowsum, bool* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float lambda, ska::flat_hash_map<long, float> beta, int* updateable_items, int count_may_update,
     float *last_max, Active_Set *as, Thread_Cache *thread_caches) {
 //char update_working_set_old(XMatrixSparse Xc, char* host_append, double *rowsum, int *wont_update,
 //                        Active_Set *as, double *last_max, int p, int n,
-//                        int_pair *precalc_get_num, double lambda, double *beta,
+//                        int_pair *precalc_get_num, double lambda, double beta,
 //                        Thread_Cache *thread_caches, XMatrixSparse X2c) {
     int p_int = p*(p+1)/2;
   memset(host_append, 0, p_int * sizeof(char));
@@ -279,7 +295,7 @@ char update_working_set_cpu_old(
           //  printf("interaction contains %d cols, sumn: %f\n", col_nz, sumn);
           // either way, we now have sumn
           sumn = fabs(sumn);
-          sumn += fabs(beta[k] * col_nz);
+          sumn += fabs( beta[k] * col_nz);
           if (main == interesting_col && inter == interesting_col) {
               printf("lambda * n / 2 = %f\n", lambda * n / 2);
               printf("sumn: %f\n", sumn);
@@ -316,7 +332,7 @@ char update_working_set_cpu_old(
 //inline char update_working_set_device(
 //    struct X_uncompressed Xu, char* host_append,
 //    float* rowsum, bool* wont_update, int p, int n,
-//    float lambda, float* beta, int* updateable_items, int count_may_update, 
+//    float lambda, ska::flat_hash_map<long, float> beta, int* updateable_items, int count_may_update, 
 //    struct OpenCL_Setup* setup, float *host_last_max)
 //{
 //    int *host_X = Xu.host_X;
@@ -418,7 +434,7 @@ char update_working_set_cpu(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache *thread_caches, Active_Set *as,
     struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float lambda, ska::flat_hash_map<long, float> beta, int* updateable_items, int count_may_update,
     float *last_max)
 {
     int* host_X = Xu.host_X;
@@ -441,8 +457,9 @@ char update_working_set_cpu(
         float max_inter_val = 0;
         int inter_cols = 0;
         // ska::flat_hash_set<long> inters_found;
-        // ska::flat_hash_map<long, float> sum_with_col;
-        ska::flat_hash_map<long, float> sum_with_col = thread_cache.lf_map;
+        ska::flat_hash_map<long, float> sum_with_col;
+        // ska::flat_hash_map<long, float> sum_with_col = thread_cache.lf_map;
+        //ska::flat_hash_map<std::pair<long, long>, float> sum_with_col2;
         int main_col_len = 0;
 
         int *column_entries = col_i_cache;
@@ -459,11 +476,28 @@ char update_working_set_cpu(
                 int row_main = entry;
                 float rowsum_diff = rowsum[row_main];
                 // Do thing per entry here:
+                // Iterate through remaining entries, checking pairwise interactions.
                 for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
                   int inter = relevant_row_set.rows[row_main][ri];
-                  if (inter >= main)
-                    sum_with_col[inter] += rowsum_diff;
+                  if (inter >= main) {
+                    long inter_ind = pair_to_val(std::make_tuple(inter, inter), p);
+                    sum_with_col[inter_ind] += rowsum_diff;
+                  }
                 }
+
+                // Iterate through matrix of remaining pairs, checking three-way interactions.
+                //for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                //  int inter = relevant_row_set.rows[row_main][ri];
+                //  if (inter >= main) {
+                //    for (int ri2 = 0; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
+                //      int inter2 = relevant_row_set.rows[row_main][ri];
+
+                //      sum_with_col2[std::make_pair(inter, inter2)] += rowsum_diff;
+                // }
+                //}
+
+
+
                 // check inverted list for interactions along row_main
                 //long inter_entry = -1;
                 //for (int r = 0; r < Xc.rows[row_main].nwords; r++) {
@@ -517,12 +551,17 @@ char update_working_set_cpu(
         while (curr_inter != last_inter) {
             // long inter = curr_inter.current->value;
             auto pair = curr_inter.current->value;
-            long inter = pair.first;
+            // long inter = get_num(pair.first, p).i;
+            long tuple_val = pair.first;
             float sum = std::abs(pair.second);
             max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
             if (sum > lambda * n / 2) {
-                int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                // long inter = get_num(pair.first, p).i;
+                std::tuple<long,long> inter_pair = val_to_pair(tuple_val, p);
+                long inter = std::get<0>(inter_pair);
+                // int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                int k = triplet_to_val(std::make_tuple(main, std::get<0>(inter_pair), std::get<1>(inter_pair)), p);
 
                 // host_append_sets[omp_get_thread_num()].insert(k);
 
@@ -606,7 +645,7 @@ char update_working_set_cpu_row_version(
     // int* host_X, int* host_col_nz, int* host_col_offsets, int* host_append,
     struct XMatrixSparse Xc, Thread_Cache *thread_caches, Active_Set *as,
     struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update,
+    float lambda, ska::flat_hash_map<long, float> beta, int* updateable_items, int count_may_update,
     float *last_max)
 {
   char increased_set = FALSE;
@@ -621,7 +660,7 @@ char update_working_set_cpu_row_version(
 
 char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, bool* wont_update, int p, int n,
-    float lambda, float* beta, int* updateable_items, int count_may_update, Active_Set* as,
+    float lambda, ska::flat_hash_map<long, float> beta, int* updateable_items, int count_may_update, Active_Set* as,
     Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;

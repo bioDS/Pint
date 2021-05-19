@@ -89,14 +89,14 @@ int main(int argc, char** argv) {
 	}
 
 	printf("begginning coordinate descent\n");
-	float *beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
+	ska::flat_hash_map<long, float> beta = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
 			100, lambda, 300, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1);
 	int nbeta_int = nbeta;
 	nbeta_int = get_p_int(nbeta, max_interaction_distance);
-	if (beta == NULL) {
-		fprintf(stderr, "failed to estimate beta values\n");
-		return 1;
-	}
+	//if (beta == NULL) {
+	//	fprintf(stderr, "failed to estimate beta values\n");
+	//	return 1;
+	//}
 	//for (int i = 0; i < nbeta_int; i++) {
 	//	printf("%f ", beta[i]);
 	//}
@@ -117,14 +117,14 @@ int main(int argc, char** argv) {
 	switch(output_mode){
 		case terminal:
 			for (int i = 0; i < nbeta_int && printed < 100; i++) {
-				if (fabs(beta[i]) > 0) {
+				if (fabs((beta)[i]) > 0) {
 					printed++;
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
 					if (ip.i == ip.j)
-						printf("main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
+						printf("main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
 					else
-						printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+						printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
 				}
 			}
 		break;
@@ -135,9 +135,9 @@ int main(int argc, char** argv) {
 					sig_beta_count++;
 					int_pair ip = get_num(i, nbeta);
 					if (ip.i == ip.j)
-						fprintf(output_file, "main: %d (%d):     %f\n", i, ip.i + 1, beta[i]);
+						fprintf(output_file, "main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
 					else
-						fprintf(output_file, "int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, beta[i]);
+						fprintf(output_file, "int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
 				}
 			}
 			fclose(output_file);
@@ -148,7 +148,8 @@ int main(int argc, char** argv) {
 	if (output_mode == terminal) {
 	}
 	//endwin();
-	free(beta);
+	// free(beta);
+	beta.clear();
 	free_static_resources();
 	return 0;
 }

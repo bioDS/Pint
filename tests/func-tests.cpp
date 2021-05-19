@@ -7,22 +7,28 @@
 #include <stdlib.h>
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
+#include <boost/tuple/tuple.hpp>
+#include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
+#include <iostream>
+
 
 #include <algorithm>
 
 using namespace std;
+//using namespace boost;
 
 /* int **X2_from_X(int **X, int n, int p); */
 /* float *simple_coordinate_descent_lasso(int **X, float *Y, int n, int p,
  * float lambda, char *method); */
 /* float update_beta_greedy_l1(int **X, float *Y, int n, int p, float lambda,
- * float *beta, int k, float dBMax); */
+ * ska::flat_hash_map<long, float> beta, int k, float dBMax); */
 /* float update_intercept_cyclic(float intercept, int **X, float *Y, float
- * *beta, int n, int p); */
+ * beta, int n, int p); */
 /* float update_beta_cyclic(int **X, float *Y, int n, int p, float lambda,
- * float *beta, int k, float dBMax, float intercept); */
+ * ska::flat_hash_map<long, float> beta, int k, float dBMax, float intercept); */
 /* float update_beta_glmnet(int **X, float *Y, int n, int p, float lambda,
- * float *beta, int k, float dBMax, float intercept); */
+ * ska::flat_hash_map<long, float> beta, int k, float dBMax, float intercept); */
 /* float soft_threshold(float z, float gamma); */
 /* float *read_y_csv(char *fn, int n); */
 /* XMatrix read_x_csv(char *fn, int n, int p); */
@@ -54,7 +60,7 @@ typedef struct {
   float *Y;
   float *rowsum;
   float lambda;
-  float *beta;
+  ska::flat_hash_map<long, float> beta;
   int k;
   float dBMax;
   float intercept;
@@ -184,16 +190,16 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture,
   fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
   fixture->X = fixture->xmatrix.X;
   fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
-  fixture->rowsum = malloc(fixture->n * sizeof(float));
+  fixture->rowsum = (float*)malloc(fixture->n * sizeof(float));
   fixture->lambda = 6.46;
-  fixture->beta = malloc(fixture->p * sizeof(float));
-  memset(fixture->beta, 0, fixture->p * sizeof(float));
+  // fixture->beta = (float*)malloc(fixture->p * sizeof(float));
+  // memset(fixture->beta, 0, fixture->p * sizeof(float));
   fixture->k = 27;
   fixture->dBMax = 0;
   fixture->intercept = 0;
   printf("%d\n", fixture->X[1][0]);
   int p_int = (fixture->p * (fixture->p + 1)) / 2;
-  int_pair *precalc_get_num = malloc(p_int * sizeof(int_pair));
+  int_pair *precalc_get_num = (int_pair*)malloc(p_int * sizeof(int_pair));
   int offset = 0;
   for (int i = 0; i < fixture->p; i++) {
     for (int j = i; j < fixture->p; j++) {
@@ -204,9 +210,9 @@ static void update_beta_fixture_set_up(UpdateFixture *fixture,
   }
   fixture->precalc_get_num = precalc_get_num;
 
-  int **thread_column_caches = malloc(NumCores * sizeof(int *));
+  int **thread_column_caches = (int**)malloc(NumCores * sizeof(int *));
   for (int i = 0; i < NumCores; i++) {
-    thread_column_caches[i] = malloc(fixture->n * sizeof(int));
+    thread_column_caches[i] = (int*)malloc(fixture->n * sizeof(int));
   }
   fixture->column_caches = thread_column_caches;
 }
@@ -218,7 +224,8 @@ static void update_beta_fixture_tear_down(UpdateFixture *fixture,
   }
   free(fixture->Y);
   free(fixture->rowsum);
-  free(fixture->beta);
+  // free(fixture->beta);
+  fixture->beta.clear();
   free(fixture->precalc_get_num);
   for (int i = 0; i < NumCores; i++) {
     free(fixture->column_caches[i]);
@@ -269,7 +276,7 @@ static void test_compressed_main_X() {
   g_assert_true(Xs.n == n);
   g_assert_true(Xs.p == p);
 
-  int *column_entries[n];
+  int column_entries[n];
 
   long agreed_on = 0;
   for (int k = 0; k < p; k++) {
@@ -283,7 +290,7 @@ static void test_compressed_main_X() {
         int diff = values & masks[word.selector];
         if (diff != 0) {
           entry += diff;
-          column_entries[col_entry_pos] = entry;
+          column_entries[col_entry_pos] = (int)entry;
           col_entry_pos++;
         }
         values >>= item_width[word.selector];
@@ -354,7 +361,7 @@ static void test_X2_from_X() {
   //  printf("\n");
   //}
 
-  int *column_entries[n];
+  int column_entries[n];
 
   for (int k = 0; k < p_int; k++) {
     if (k == 2905) {
@@ -402,7 +409,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
                                                   gconstpointer use_big) {
   halt_error_diff = HALT_ERROR_DIFF;
   char *xfile, *yfile;
-  if (use_big == 2) {
+  if ((long)use_big == 2) {
     printf("\nusing huge test case\n");
     fixture->n = 10000;
     fixture->p = 5000;
@@ -412,7 +419,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     //fixture->p = 4000;
     //xfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/X.csv";
     //yfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/Y.csv";
-  } else if (use_big == 1) {
+  } else if ((long)use_big == 1) {
     printf("\nusing large test case\n");
     fixture->n = 10000;
     fixture->p = 1000;
@@ -435,15 +442,15 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
   fixture->X = fixture->xmatrix.X;
   printf("reading Y from %s\n", yfile);
   fixture->Y = read_y_csv(yfile, fixture->n);
-  fixture->rowsum = malloc(fixture->n * sizeof(float));
+  fixture->rowsum = (float*)malloc(fixture->n * sizeof(float));
   fixture->lambda = 20;
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  fixture->beta = malloc(p_int * sizeof(float));
-  memset(fixture->beta, 0, p_int * sizeof(float));
+  // fixture->beta = (float*)malloc(p_int * sizeof(float));
+  // memset(fixture->beta, 0, p_int * sizeof(float));
   fixture->k = 27;
   fixture->dBMax = 0;
   fixture->intercept = 0;
-  int_pair *precalc_get_num = malloc(p_int * sizeof(int_pair));
+  int_pair *precalc_get_num = (int_pair*)malloc(p_int * sizeof(int_pair));
   int offset = 0;
   for (int i = 0; i < fixture->p; i++) {
     for (int j = i; j < fixture->p; j++) {
@@ -460,9 +467,9 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     fixture->rowsum[i] = -fixture->Y[i];
 
   int max_num_threads = omp_get_max_threads();
-  int **thread_column_caches = malloc(max_num_threads * sizeof(int *));
+  int **thread_column_caches = (int**)malloc(max_num_threads * sizeof(int *));
   for (int i = 0; i < max_num_threads; i++) {
-    thread_column_caches[i] = malloc(fixture->n * sizeof(int));
+    thread_column_caches[i] = (int*)malloc(fixture->n * sizeof(int));
   }
   fixture->column_caches = thread_column_caches;
   printf("done test init\n");
@@ -476,7 +483,7 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture *fixture,
   free(fixture->xmatrix.X);
   free(fixture->Y);
   free(fixture->rowsum);
-  free(fixture->beta);
+  // free(fixture->beta);
   free(fixture->precalc_get_num);
   free_sparse_matrix(fixture->xmatrix_sparse);
 }
@@ -486,7 +493,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
   // are we running the shuffle test, or sequential?
   float acceptable_diff = 0.1;
   int shuffle = FALSE;
-  if (user_data == TRUE) {
+  if ((long)user_data == TRUE) {
     printf("\nrunning shuffle test!\n");
     acceptable_diff = 10;
     shuffle = TRUE;
@@ -500,7 +507,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  float *beta = fixture->beta;
+  ska::flat_hash_map<long, float> beta = fixture->beta;
 
   float dBMax;
   for (int j = 0; j < 10; j++)
@@ -522,8 +529,8 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
     printf("testing beta[%d] (%f) ~ %f [", i, beta[i],
            small_X2_correct_beta[k]);
 
-    if ((beta[i] < small_X2_correct_beta[k] + acceptable_diff) &&
-        (beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
+    if (( beta[i] < small_X2_correct_beta[k] + acceptable_diff) &&
+        ( beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
       no_agreeing++;
       printf("x]\n");
     } else {
@@ -546,7 +553,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  float *beta = fixture->beta;
+  ska::flat_hash_map<long, float> beta = fixture->beta;
 
   beta = simple_coordinate_descent_lasso(
       fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
@@ -558,8 +565,8 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
     int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
     printf("testing beta[%d] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
 
-    if ((beta[k] < glmnet_beta[i] + acceptable_diff) &&
-        (beta[k] > glmnet_beta[i] - acceptable_diff)) {
+    if (( beta[k] < glmnet_beta[i] + acceptable_diff) &&
+        ( beta[k] > glmnet_beta[i] - acceptable_diff)) {
       no_agreeing++;
       printf("x]\n");
     } else {
@@ -852,7 +859,7 @@ static void check_permutation() {
   gsl_permutation_free(perm);
 }
 
-int check_didnt_update(int p, int p_int, bool *wont_update, float *beta) {
+int check_didnt_update(int p, int p_int, bool *wont_update, ska::flat_hash_map<long, float> beta) {
   int no_disagreeing = 0;
   for (int i = 0; i < p_int; i++) {
     // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -864,7 +871,7 @@ int check_didnt_update(int p, int p_int, bool *wont_update, float *beta) {
     // this needs to be udpated
     if (wont_update[ip.i] || wont_update[ip.j]) {
       // printf("checking interaction %d,%d is zero\n", ip.i, ip.j);
-      if (beta[k] != 0.0) {
+      if ( beta[k] != 0.0) {
         printf("beta %d (interaction %d,%d) should be zero according to "
                "will_update_effect(), but is in fact %f\n",
                k, ip.i, ip.j, beta[k]);
@@ -908,7 +915,7 @@ static void pruning_fixture_tear_down(UpdateFixture *fixture,
 bool get_wont_update(char *working_set, bool *wont_update, int p,
                     XMatrixSparse Xc, float lambda, float *last_max,
                     float **last_rowsum, float *rowsum, int *column_cache,
-                    int n, float *beta) {
+                    int n, ska::flat_hash_map<long, float> beta) {
   bool ruled_out = false;
   for (int j = 0; j < p; j++) {
     float sum = 0.0;
@@ -941,7 +948,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   // fixture->p);
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  float *beta = fixture->beta;
+  ska::flat_hash_map<long, float> beta = fixture->beta;
   char *working_set = malloc(sizeof *working_set * p_int);
   memset(working_set, 0, sizeof *working_set * p_int);
 
@@ -1063,7 +1070,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   // int **thread_column_caches = vars->thread_column_caches;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  float *beta = vars->beta;
+  ska::flat_hash_map<long, float> beta = vars->beta;
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -1224,7 +1231,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("starting interaction test\n");
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  float *beta = fixture->beta;
+  ska::flat_hash_map<long, float> beta = fixture->beta;
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
@@ -1312,7 +1319,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     long nz_beta = 0;
     #pragma omp parallel for schedule(static) reduction(+:nz_beta)
     for (int i = 0; i < p_int; i++) {
-      if (beta[i] != 0) {
+      if ( beta[i] != 0) {
         nz_beta++;
       }
     }
@@ -1334,7 +1341,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
                         (end.tv_sec - start.tv_sec);
   printf("time: %f s\n", basic_cpu_time_used);
 
-  float *beta_pruning = malloc(sizeof *beta_pruning * p_int);
+  ska::flat_hash_map<long, float> beta_pruning;
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
@@ -1487,8 +1494,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
   printf("checking beta values come out the same\n");
   for (int k = 0; k < 10; k++) {
-    float basic_beta = fabs(beta[k]);
-    float pruned_beta = fabs(beta[k]);
+    float basic_beta = fabs( beta[k]);
+    float pruned_beta = fabs( beta[k]);
     float max = fmax(basic_beta, pruned_beta);
     float min = fmin(basic_beta, pruned_beta);
 
@@ -1498,6 +1505,136 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     }
   }
   // opencl_cleanup(ocl_setup);
+}
+
+// borrowed from https://stackoverflow.com/a/47762456
+#include <tuple>      // std::tuple
+#include <functional> // std::invoke
+
+template <
+    size_t Index = 0, // start iteration at 0 index
+    typename TTuple,  // the tuple type
+    size_t Size =
+        std::tuple_size_v<
+            std::remove_reference_t<TTuple>>, // tuple size
+    typename TCallable, // the callable to bo invoked for each tuple item
+    typename... TArgs   // other arguments to be passed to the callable 
+>
+void for_each(TTuple&& tuple, TCallable&& callable, TArgs&&... args)
+{
+    if constexpr (Index < Size)
+    {
+        std::invoke(callable, args..., std::get<Index>(tuple));
+
+        if constexpr (Index + 1 < Size)
+            for_each<Index + 1>(
+                std::forward<TTuple>(tuple),
+                std::forward<TCallable>(callable),
+                std::forward<TArgs>(args)...);
+    }
+}
+
+void trivial_3way_test() {
+  int n = 5, p = 5;
+  const int xm_a[n][p] = {
+    {1, 0, 0, 0, 0},
+    {0, 1, 0, 1, 0},
+    {0, 0, 0, 0, 1},
+    {1, 1, 0, 0, 0},
+    {1, 1, 1, 0, 0},
+  };
+  int **xm = new int*[p];
+  for (int j = 0; j < p; j++) {
+    xm[j] = new int[n];
+  }
+  for (int i = 0; i < n; i++)
+    for (int j = 0; j < p; j++) {
+      xm[i][j] = xm_a[i][j];
+    }
+
+  boost::unordered::unordered_map<long, float> correct_beta1;
+  boost::unordered::unordered_map<std::pair<long,long>, float> correct_beta2;
+  boost::unordered::unordered_map<std::tuple<long,long,long>, float> correct_beta3;
+
+
+  correct_beta1[0] = 2.3;
+  correct_beta2[std::pair(0,1)] = -5;
+  correct_beta3[std::make_tuple(0,1,2)] = 4.6;
+
+  float Y[n];
+  for (int i = 0; i < n; i++) {
+    Y[i] = 0.0;
+  }
+  auto beta_sets = std::tuple(correct_beta1, correct_beta2, correct_beta3);
+
+  std::apply([](auto beta_set ...) {
+
+  }, beta_sets);
+
+  for_each(beta_sets, [](auto& beta_set) {
+    auto curr_inter = beta_set.cbegin();
+    auto last_inter = beta_set.cend();
+    while (curr_inter != last_inter) {
+      std::tuple ind = curr_inter->first;
+      for_each(ind, [](auto& val){
+        cout << val << ", ";
+      });
+      cout << ": ";
+      float effect = curr_inter->second;
+      std::cout << effect << "\n";
+      curr_inter++;
+    }
+  });
+
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < p; j++) {
+      if (xm[i][j] != 0) {
+        for (int j2 = j; j2 < p; j2++) {
+          if (xm[i][j2] != 0) {
+            for (int j3 = j2; j3 < p; j3++) {
+              if (xm[i][j3] != 0) {
+                //if (j == 0 && j2 == 1 && j3 == 2) {
+                //  cout << "b3[0,1,2]: " << correct_beta3[std::tuple{j,j2,j3}] << "\n";
+                //}
+                Y[i] += correct_beta3[std::tuple{j,j2,j3}];
+              }
+            }
+            Y[i] += correct_beta2[std::pair{j,j2}];
+          }
+        }
+        Y[i] += correct_beta1[j];
+      }
+    }
+  }
+
+  cout << "Y:\n";
+  for (int i = 0; i < n; i++) {
+    cout << i << ": " << Y[i] << "\n";
+  }
+
+  XMatrix X;
+  X.X = xm;
+  X.actual_cols = p;
+  
+  XMatrixSparse Xc = sparsify_X(xm, n, p);
+
+  ska::flat_hash_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
+    -1, 0.01, 100,
+    100, FALSE, -1, 1.01,
+    NONE, NULL, 0, FALSE,
+    -1);
+  
+  printf("Beta values found:\n");
+  for (int i = 0; i < p*(p+1)/2; i++) {
+    if ( beta[i] != 0.0) {
+      printf("%d: %f\n", i, (beta)[i]);
+    }
+  }
+
+  for (int i = 0; i < p; i++) {
+    free(xm[i]);
+  }
+  free(xm);
 }
 
 int main(int argc, char *argv[]) {
@@ -1541,6 +1678,7 @@ int main(int argc, char *argv[]) {
   g_test_add("/func/test-branch-pruning-faster-bigger", UpdateFixture, 2,
              pruning_fixture_set_up, check_branch_pruning_faster,
              pruning_fixture_tear_down);
+  g_test_add_func("/func/trivial-3way", trivial_3way_test);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
   // test_simple_coordinate_descent_set_up,
   // test_simple_coordinate_descent_int,

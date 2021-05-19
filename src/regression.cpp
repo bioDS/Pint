@@ -31,7 +31,7 @@ int adaptive_calibration_check_beta(float c_bar, float lambda_1,
       b2_ind++;
     if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
         beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
-      float diff = fabs(beta_1.betas[b1_ind] - beta_2.betas[b2_ind]);
+      float diff = fabs(beta_1.betas[b1_ind] - (beta_2.betas)[b2_ind]);
       if (diff > max_diff)
         max_diff = diff;
       b1_ind++;
@@ -69,7 +69,7 @@ int check_adaptive_calibration(float c_bar, Beta_Sequence beta_sequence,
 
 
 float calculate_error(int n, long p_int, float *Y, int **X,
-                       float *beta, float p, float intercept,
+                       ska::flat_hash_map<long, float> beta, float p, float intercept,
                        float *rowsum) {
   float error = 0.0;
   for (int row = 0; row < n; row++) {
@@ -87,7 +87,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
   float **last_rowsum = vars->last_rowsum;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  float *beta = vars->beta;
+  ska::flat_hash_map<long, float> beta = vars->beta;
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -282,15 +282,16 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       for (int i = 0; i < p; i++) {
         for (int j = i; j < p; j++) {
           //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
-          int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
-                   (i - 1)) /
-                      2 +
-                  j;
-          if (active_set->entries[k].present) {
+          //int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
+          //         (i - 1)) /
+          //            2 +
+          //        j;
+          int k = pair_to_val(std::make_tuple(i, j), p);
+          if (active_set->entries.count(k) > 0 && active_set->entries[k].present) {
             // TODO: apply permutation here.
             total_present++;
             int was_zero = FALSE;
-            if (beta[k] == 0.0) {
+            if ( beta[k] == 0.0) {
               was_zero = TRUE;
             }
             total_beta_updates++;
@@ -368,7 +369,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
   return new_nz_beta;
 }
 
-float *simple_coordinate_descent_lasso(
+ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
     XMatrix xmatrix, float *Y, int n, int p, long max_interaction_distance,
     float lambda_min, float lambda_max, int max_iter, int verbose,
     float frac_overlap_allowed, float hed,
@@ -400,9 +401,9 @@ float *simple_coordinate_descent_lasso(
   }
   if (max_nz_beta < 0)
     max_nz_beta = p_int;
-  float *beta;
-  beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
-  memset(beta, 0, p_int * sizeof(float));
+  ska::flat_hash_map<long, float> beta;
+  //beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
+  //memset(beta, 0, p_int * sizeof(float));
 
   precalc_get_num = malloc(p_int * sizeof(int_pair));
   int offset = 0;
@@ -548,16 +549,16 @@ float *simple_coordinate_descent_lasso(
     log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
   // set-up beta_sequence struct
-  float *beta_cache = NULL;
+  ska::flat_hash_map<long, float> beta_cache;
   int *index_cache = NULL;
   Beta_Sequence beta_sequence;
   if (use_adaptive_calibration) {
     Rprintf("Using Adaptive Calibration\n");
     beta_sequence.count = 0;
     beta_sequence.vec_length = p_int;
-    beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
-    beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
-    beta_cache = (float*)malloc(p_int * sizeof(float));
+    // beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
+    // beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
+    // beta_cache = (float*)malloc(p_int * sizeof(float));
     index_cache = (int*)malloc(p_int * sizeof(int));
   }
 
@@ -573,6 +574,9 @@ float *simple_coordinate_descent_lasso(
   for (int i = 0; i < NumCores; i++) {
     thread_caches[i].col_i = (int*)malloc(sizeof(int) * max(n,p));
     thread_caches[i].col_j = (int*)malloc(sizeof(int) * n);
+    // ska::flat_hash_map<long, float> tmp;
+
+    // thread_caches[i].lf_map = tmp; 
   }
 
   float *last_max = new float[n];
@@ -621,7 +625,7 @@ float *simple_coordinate_descent_lasso(
   while (lambda > final_lambda && iter < max_lambda_count) {
     //#pragma omp parallel for schedule(static) reduction(+:nz_beta)
     //for (int i = 0; i < p_int; i++) {
-    //  if (beta[i] != 0) {
+    //  if ( beta[i] != 0) {
     //    nz_beta++;
     //  }
     //}
@@ -645,20 +649,25 @@ float *simple_coordinate_descent_lasso(
     if (use_adaptive_calibration && nz_beta > 0) {
         Sparse_Betas sparse_betas;
         int count = 0;
-        for (int b = 0; b < p_int; b++) {
-          if (beta[b] != 0) {
-            beta_cache[count] = beta[b];
-            index_cache[count] = b;
-            count++;
-          }
+        //TODO: it should be possible to do something more like memcpy here
+        for (auto c = beta.begin(); c != beta.end(); c++) {
+          (sparse_betas.betas)[c->first] = c->second;
         }
+        //for (int b = 0; b < p_int; b++) {
+        //  if ( beta[b] != 0) {
+        //    beta_cache[count] = beta[b];
+        //    index_cache[count] = b;
+        //    count++;
+        //  }
+        //}
         if (count != nz_beta) {
          printf("count (%d) or nz_beta (%d) is wrong\n", count, nz_beta);
         }
-        sparse_betas.betas = (float*)malloc(count * sizeof(float));
-        sparse_betas.indices = (int*)malloc(count * sizeof(int));
-        memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
-        memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
+        // sparse_betas.betas = (float*)malloc(count * sizeof(float));
+        // sparse_betas.indices = (int*)malloc(count * sizeof(int));
+        // memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
+        // memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
+        // sparse_betas.betas.
 
         sparse_betas.count = count;
 
@@ -707,7 +716,7 @@ float *simple_coordinate_descent_lasso(
   //    // TODO: in principle this is a problem if beta is ever set back to zero,
   //    // but that rarely/never happens.
   //    int was_zero = FALSE;
-  //    if (beta[k] == 0.0) {
+  //    if ( beta[k] == 0.0) {
   //      was_zero = TRUE;
   //    }
   //    Changes changes = update_beta_cyclic_old(
@@ -777,7 +786,7 @@ float *simple_coordinate_descent_lasso(
   //          Sparse_Betas sparse_betas;
   //          int count = 0;
   //          for (int b = 0; b < p_int; b++) {
-  //            if (beta[b] != 0) {
+  //            if ( beta[b] != 0) {
   //              beta_cache[count] = beta[b];
   //              index_cache[count] = b;
   //              count++;
@@ -875,13 +884,14 @@ float *simple_coordinate_descent_lasso(
 
   if (use_adaptive_calibration) {
     for (int i = 0; i < beta_sequence.count; i++) {
-      free(beta_sequence.betas[i].betas);
+      beta_sequence.betas[i].betas.clear();
+      // free(beta_sequence.betas[i].betas);
       free(beta_sequence.betas[i].indices);
     }
     free(beta_sequence.betas);
     free(beta_sequence.lambdas);
 
-    free(beta_cache);
+    // free(beta_cache);
     free(index_cache);
   }
 
@@ -900,7 +910,7 @@ float *simple_coordinate_descent_lasso(
   printf("checking nz beta count\n");
   int nonzero = 0;
   for (int i = 0; i < p_int; i++) {
-    if (beta[i] != 0) {
+    if ( (beta)[i] != 0) {
       nonzero++;
     }
   }
@@ -914,7 +924,7 @@ static int firstchanged = FALSE;
 
 Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
                                float *rowsum, int n, int p, float lambda,
-                               float *beta, long k, float intercept,
+                               ska::flat_hash_map<long, float> beta, long k, float intercept,
                                int_pair *precalc_get_num,
                                int *column_entry_cache) {
   float sumk = xmatrix_sparse.cols[k].nz;
@@ -952,7 +962,7 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
   //}
   // if (k==4147) {
   //	printf("sumn: %f\n", sumn);
-  //	printf("sumn -bk: %f\n", sumn - sumk*beta[k]);
+  //	printf("sumn -bk: %f\n", sumn - sumkbeta[k]);
   //}
 
   // TODO: This is probably slower than necessary.
@@ -986,7 +996,7 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
   return changes;
 }
 Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
-                           float lambda, float *beta, long k,
+                           float lambda, ska::flat_hash_map<long, float> beta, long k,
                            float intercept, int_pair *precalc_get_num,
                            int *column_entry_cache) {
   float sumk = col.nz;
@@ -1037,7 +1047,7 @@ Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
 }
 
 float update_intercept_cyclic(float intercept, int **X, float *Y,
-                               float *beta, int n, int p) {
+                               ska::flat_hash_map<long, float> beta, int n, int p) {
   float new_intercept = 0.0;
   float sumn = 0.0, sumx = 0.0;
 
