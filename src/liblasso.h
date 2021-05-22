@@ -1,5 +1,6 @@
 // #define interesting_col 58
 #include "flat_hash_map.hpp"
+#include "robin_hood.h"
 #define interesting_col 54
 // #define interesting_col 0
 #include <errno.h>
@@ -34,7 +35,7 @@ extern "C" {
 typedef struct {
   int *col_i;
   int *col_j;
-  // ska::flat_hash_map<long, float> lf_map;
+  // robin_hood::unordered_flat_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
   long val;
@@ -99,7 +100,7 @@ typedef struct {
   // int *entries;
   // struct AS_Properties *properties;
   // struct AS_Entry *entries;
-  ska::flat_hash_map<long, struct AS_Entry> entries;
+  robin_hood::unordered_flat_map<long, struct AS_Entry> entries;
   int length;
   int max_length;
   gsl_permutation *permutation;
@@ -120,7 +121,7 @@ typedef struct {
   float **last_rowsum;
   Thread_Cache *thread_caches;
   int n;
-  ska::flat_hash_map<long, float> beta;
+  robin_hood::unordered_flat_map<long, float> *beta;
   float *last_max;
   bool *wont_update;
   int p;

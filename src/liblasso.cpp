@@ -160,7 +160,7 @@ float soft_threshold(float z, float gamma) {
     return val;
 }
 
-float get_sump(int p, int k, int i, ska::flat_hash_map<long, float> beta, int **X) {
+float get_sump(int p, int k, int i, robin_hood::unordered_flat_map<long, float> beta, int **X) {
   float sump = 0;
   for (int j = 0; j < p; j++) {
     if (j != k)

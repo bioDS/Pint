@@ -1,7 +1,7 @@
 #include "liblasso.h"
 #include <stdalign.h>
-#define verbose FALSE
-// #define verbose TRUE
+// #define verbose FALSE
+#define verbose TRUE
 
 // Force all paramaters for this function onto a single cache line.
 struct pe_params {
@@ -96,19 +96,18 @@ float l2_combined_estimate(XMatrixSparse X, float lambda, int k,
  */
 // TODO: should beta[k] be in here?
 bool wont_update_effect(XMatrixSparse X, float lambda, int k, float last_max,
-                       float *last_rowsum, float *rowsum, int *column_cache,
-                       ska::flat_hash_map<long, float> beta) {
+                       float *last_rowsum, float *rowsum, int *column_cache) {
   int *cache = malloc(X.n * sizeof *column_cache);
   float upper_bound =
       l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, cache);
   if (verbose && k == interesting_col) {
-    printf("beta[%d] = %f\n", k, beta[k]);
+    // printf("beta[%d] = %f\n", k, beta[k]);
     printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound,
-           lambda * (X.n / 2));
-           if (upper_bound <= lambda * (X.n/2)) {
+           lambda);
+           if (upper_bound <= lambda) {
              printf("may update %d\n", k);
            }
   }
   free(cache);
-  return upper_bound <= lambda * (X.n / 2);
+  return upper_bound <= lambda;
 }

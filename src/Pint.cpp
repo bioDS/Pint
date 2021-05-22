@@ -52,7 +52,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
   Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
 
-  ska::flat_hash_map<long, float> beta = simple_coordinate_descent_lasso(
+  robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(
       xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
       asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed, halt_error_diff,
       log_level, NULL, 0, use_adaptive_calibration, max_nz_beta);

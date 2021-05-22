@@ -22,13 +22,13 @@ using namespace std;
 /* float *simple_coordinate_descent_lasso(int **X, float *Y, int n, int p,
  * float lambda, char *method); */
 /* float update_beta_greedy_l1(int **X, float *Y, int n, int p, float lambda,
- * ska::flat_hash_map<long, float> beta, int k, float dBMax); */
+ * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax); */
 /* float update_intercept_cyclic(float intercept, int **X, float *Y, float
  * beta, int n, int p); */
 /* float update_beta_cyclic(int **X, float *Y, int n, int p, float lambda,
- * ska::flat_hash_map<long, float> beta, int k, float dBMax, float intercept); */
+ * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax, float intercept); */
 /* float update_beta_glmnet(int **X, float *Y, int n, int p, float lambda,
- * ska::flat_hash_map<long, float> beta, int k, float dBMax, float intercept); */
+ * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax, float intercept); */
 /* float soft_threshold(float z, float gamma); */
 /* float *read_y_csv(char *fn, int n); */
 /* XMatrix read_x_csv(char *fn, int n, int p); */
@@ -42,7 +42,7 @@ extern int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
                             float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup);
 static long total_basic_beta_updates = 0;
 static long total_basic_beta_nz_updates = 0;
-static float LAMBDA_MIN = 15;
+static float LAMBDA_MIN = 15.0;
 
 // #pragma omp declare target
 // float fabs(float a) {
@@ -60,7 +60,7 @@ typedef struct {
   float *Y;
   float *rowsum;
   float lambda;
-  ska::flat_hash_map<long, float> beta;
+  robin_hood::unordered_flat_map<long, float> beta;
   int k;
   float dBMax;
   float intercept;
@@ -239,7 +239,7 @@ static void test_update_beta_cyclic(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
   update_beta_cyclic_old(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
-                         fixture->n, fixture->p, fixture->lambda, fixture->beta,
+                         fixture->n, fixture->p, fixture->lambda, &fixture->beta,
                          fixture->k, fixture->intercept,
                          fixture->precalc_get_num, fixture->column_caches[0]);
   printf("beta[27]: %f\n", fixture->beta[27]);
@@ -415,6 +415,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     fixture->p = 5000;
     xfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv";
     yfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv";
+    LAMBDA_MIN = 0.01*fixture->n/2;
     //fixture->n = 8000;
     //fixture->p = 4000;
     //xfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/X.csv";
@@ -425,13 +426,14 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     fixture->p = 1000;
     xfile = "../X_nlethals50_v15803.csv";
     yfile = "../Y_nlethals50_v15803.csv";
+    LAMBDA_MIN = 0.01*fixture->n/2;
     //xfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/X.csv";
     //yfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/Y.csv";
   } else if (use_big == 0) {
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
-    LAMBDA_MIN = 1;
+    LAMBDA_MIN = 1*fixture->n/2;
     //xfile = "../testX.csv";
     //yfile = "../testY.csv";
     xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
@@ -507,7 +509,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  ska::flat_hash_map<long, float> beta = fixture->beta;
+  robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
 
   float dBMax;
   for (int j = 0; j < 10; j++)
@@ -517,7 +519,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture *fixture,
       // int k = i;
       Changes changes = update_beta_cyclic_old(
           fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n,
-          fixture->p, fixture->lambda, beta, k, 0, fixture->precalc_get_num,
+          fixture->p, fixture->lambda, &beta, k, 0, fixture->precalc_get_num,
           fixture->column_caches[0]);
       dBMax = changes.actual_diff;
     }
@@ -553,7 +555,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
   fixture->xmatrix_sparse =
       sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  ska::flat_hash_map<long, float> beta = fixture->beta;
+  robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
 
   beta = simple_coordinate_descent_lasso(
       fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
@@ -859,7 +861,7 @@ static void check_permutation() {
   gsl_permutation_free(perm);
 }
 
-int check_didnt_update(int p, int p_int, bool *wont_update, ska::flat_hash_map<long, float> beta) {
+int check_didnt_update(int p, int p_int, bool *wont_update, robin_hood::unordered_flat_map<long, float> beta) {
   int no_disagreeing = 0;
   for (int i = 0; i < p_int; i++) {
     // int k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
@@ -915,12 +917,12 @@ static void pruning_fixture_tear_down(UpdateFixture *fixture,
 bool get_wont_update(char *working_set, bool *wont_update, int p,
                     XMatrixSparse Xc, float lambda, float *last_max,
                     float **last_rowsum, float *rowsum, int *column_cache,
-                    int n, ska::flat_hash_map<long, float> beta) {
+                    int n, robin_hood::unordered_flat_map<long, float> beta) {
   bool ruled_out = false;
   for (int j = 0; j < p; j++) {
     float sum = 0.0;
     wont_update[j] = wont_update_effect(
-        Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache, beta);
+        Xc, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache);
     if (wont_update[j])
       ruled_out = true;
   }
@@ -948,7 +950,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   // fixture->p);
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  ska::flat_hash_map<long, float> beta = fixture->beta;
+  robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
   char *working_set = malloc(sizeof *working_set * p_int);
   memset(working_set, 0, sizeof *working_set * p_int);
 
@@ -1012,7 +1014,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
         for (int interaction = main_effect; interaction < p; interaction++) {
           float old = beta[k];
           Changes changes = update_beta_cyclic_old(
-              X2c, fixture->Y, rowsum, n, p, lambda, beta, k, 0,
+              X2c, fixture->Y, rowsum, n, p, lambda, &beta, k, 0,
               fixture->precalc_get_num, column_cache);
           dBMax = changes.actual_diff;
           // float new = beta[k];
@@ -1070,7 +1072,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   // int **thread_column_caches = vars->thread_column_caches;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  ska::flat_hash_map<long, float> beta = vars->beta;
+  robin_hood::unordered_flat_map<long, float> *beta = vars->beta;
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -1231,7 +1233,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("starting interaction test\n");
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  ska::flat_hash_map<long, float> beta = fixture->beta;
+  robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
+  // robin_hood::unordered_flat_map<long, float> beta
   float *Y = fixture->Y;
   printf("test\n");
   //TODO: breaks at 0.5?
@@ -1298,7 +1301,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       last_rowsum,
       thread_caches,
       n,
-      beta,
+      &beta,
       last_max,
       NULL,
       p,
@@ -1312,12 +1315,12 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   };
   struct timespec start, end;
   float basic_cpu_time_used, pruned_cpu_time_used;
-  printf("getting time for un-pruned version\n");
+  printf("getting time for un-pruned version: lambda min = %f\n", LAMBDA_MIN);
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
+  for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
-    #pragma omp parallel for schedule(static) reduction(+:nz_beta)
+    // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
     for (int i = 0; i < p_int; i++) {
       if ( beta[i] != 0) {
         nz_beta++;
@@ -1341,7 +1344,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
                         (end.tv_sec - start.tv_sec);
   printf("time: %f s\n", basic_cpu_time_used);
 
-  ska::flat_hash_map<long, float> beta_pruning;
+  robin_hood::unordered_flat_map<long, float> beta_pruning;
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
@@ -1360,7 +1363,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       last_rowsum,
       thread_caches,
       n,
-      beta_pruning,
+      &beta_pruning,
       last_max,
       wont_update,
       p,
@@ -1384,11 +1387,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   struct OpenCL_Setup ocl_setup; //TODO: remove this
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   Active_Set active_set = active_set_new(p_int);
-  for (float lambda = 10000; lambda > LAMBDA_MIN; lambda *= 0.9) {
+  for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
-    #pragma omp parallel for schedule(static) reduction(+:nz_beta)
-    for (int i = 0; i < p_int; i++) {
-      if (beta_pruning[i] != 0) {
+    // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
+    for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
+      if (it->second != 0) {
         nz_beta++;
       }
     }
@@ -1401,6 +1404,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     // TODO: implement working set and update test
     int last_iter_count = 0;
 
+  //TODO: probably best to remove lambda scalling in all the tests too.
     run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
                             &active_set, &ocl_setup);
   }
@@ -1456,16 +1460,56 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
           // do whatever we need here with the index below:
           basic_rowsum[entry] += beta[k];
           nz_beta_basic += beta[k] != 0.0;
-          nz_beta_pruning += beta_pruning[k] != 0.0;
-          pruned_rowsum[entry] += beta_pruning[k];
-          if (basic_rowsum[entry] > 1e20) {
-            printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
-          }
+          // nz_beta_pruning += beta_pruning[k] != 0.0;
+          // pruned_rowsum[entry] += beta_pruning[k];
+          //if (basic_rowsum[entry] > 1e20) {
+          //  printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
+          //}
         }
         values >>= item_width[word.selector];
       }
     }
   }
+  printf("reading beta values\n");
+  for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
+    long value = it->first;
+    float bv = it->second;
+    auto tuple = val_to_triplet(value, p);
+    long a = std::get<0>(tuple);
+    long b = std::get<0>(tuple);
+    long c = std::get<0>(tuple);
+
+    if (bv == 0.0)
+      continue;
+    printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
+
+    if (bv != 0.0) {
+      nz_beta_pruning++;
+    }
+
+    int *colA = &Xu.host_col_nz[Xu.host_col_offsets[a]];
+    int *colB = &Xu.host_col_nz[Xu.host_col_offsets[b]];
+    int *colC = &Xu.host_col_nz[Xu.host_col_offsets[c]];
+    int ib = 0, ic = 0;
+    //TODO: probably broken
+    long total_entries_found = 0;
+    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
+      int cur_row = colA[ia];
+      while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+        ib++;
+      while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
+        ic++;
+      if (cur_row == colB[ib] && cur_row == colC[ic]) {
+        pruned_rowsum[cur_row] += bv;
+        total_entries_found++;
+      }
+    }
+    if (a == b && a == c) {
+      printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
+      g_assert_true(total_entries_found == Xu.host_col_nz[a]);
+    }
+  }
+  // g_assert_true(nz_beta_pruning >= beta_pruning.size() /2);
   float basic_error = 0.0;
   float pruned_error = 0.0;
   for (int i = 0; i < n; i++) {
@@ -1618,7 +1662,7 @@ void trivial_3way_test() {
   
   XMatrixSparse Xc = sparsify_X(xm, n, p);
 
-  ska::flat_hash_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
+  robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
     -1, 0.01, 100,
     100, FALSE, -1, 1.01,
     NONE, NULL, 0, FALSE,

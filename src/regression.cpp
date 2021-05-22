@@ -69,7 +69,7 @@ int check_adaptive_calibration(float c_bar, Beta_Sequence beta_sequence,
 
 
 float calculate_error(int n, long p_int, float *Y, int **X,
-                       ska::flat_hash_map<long, float> beta, float p, float intercept,
+                       robin_hood::unordered_flat_map<long, float> beta, float p, float intercept,
                        float *rowsum) {
   float error = 0.0;
   for (int row = 0; row < n; row++) {
@@ -87,7 +87,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
   float **last_rowsum = vars->last_rowsum;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  ska::flat_hash_map<long, float> beta = vars->beta;
+  robin_hood::unordered_flat_map<long, float> *beta = vars->beta;
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -177,7 +177,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       wont_update[j] =
            wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j],
            rowsum,
-                             thread_caches[omp_get_thread_num()].col_j, beta);
+                             thread_caches[omp_get_thread_num()].col_j);
           //wont_update_effect(Xc, lambda, j, last_max[j], last_rowsum[j], rowsum,
           //                   NULL, beta);
       char new_active_branch = old_wont_update && !wont_update[j];
@@ -278,7 +278,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       //}
       // parallel_shuffle(iter_permutation, permutation_split_size,
       //                 final_split_size, permutation_splits);
-#pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
+// #pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
       for (int i = 0; i < p; i++) {
         for (int j = i; j < p; j++) {
           //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
@@ -286,13 +286,25 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
           //         (i - 1)) /
           //            2 +
           //        j;
-          int k = pair_to_val(std::make_tuple(i, j), p);
-          if (active_set->entries.count(k) > 0 && active_set->entries[k].present) {
+          // int k = pair_to_val(std::make_tuple(i, j), p);
+          int k = triplet_to_val(std::make_tuple(i, j, j), p);
+          if (i == interesting_col && j == interesting_col) {
+            printf("checking subproblem for interesting col %d, (%d,%d)\n", k, i, j);
+          }
+          if (active_set->entries.contains(k) && active_set->entries[k].present) {
+            // if (i == interesting_col && j == interesting_col) {
+              printf("present in active set\n");
+            // }
             // TODO: apply permutation here.
             total_present++;
-            int was_zero = FALSE;
-            if ( beta[k] == 0.0) {
-              was_zero = TRUE;
+            int was_zero = TRUE;
+            auto count = beta->count(k);
+            printf("found %d entries\n", count);
+            if ( count > 0) {
+              printf("found %d entries for key %d\n", count, k);
+              if (beta->at(k) != 0.0) {
+                was_zero = FALSE;
+              }
             }
             total_beta_updates++;
             Changes changes = update_beta_cyclic(
@@ -307,7 +319,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
             if (was_zero && changes.actual_diff != 0) {
               new_nz_beta++;
             }
-            if (!was_zero && beta[k] == 0) {
+            if (!was_zero && beta->contains(k) && beta->at(k) == 0) {
               new_nz_beta--;
             }
           } else {
@@ -369,7 +381,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
   return new_nz_beta;
 }
 
-ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
+robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
     XMatrix xmatrix, float *Y, int n, int p, long max_interaction_distance,
     float lambda_min, float lambda_max, int max_iter, int verbose,
     float frac_overlap_allowed, float hed,
@@ -401,7 +413,7 @@ ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
   }
   if (max_nz_beta < 0)
     max_nz_beta = p_int;
-  ska::flat_hash_map<long, float> beta;
+  robin_hood::unordered_flat_map<long, float> beta;
   //beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
   //memset(beta, 0, p_int * sizeof(float));
 
@@ -549,7 +561,7 @@ ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
     log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
   // set-up beta_sequence struct
-  ska::flat_hash_map<long, float> beta_cache;
+  robin_hood::unordered_flat_map<long, float> beta_cache;
   int *index_cache = NULL;
   Beta_Sequence beta_sequence;
   if (use_adaptive_calibration) {
@@ -574,7 +586,7 @@ ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
   for (int i = 0; i < NumCores; i++) {
     thread_caches[i].col_i = (int*)malloc(sizeof(int) * max(n,p));
     thread_caches[i].col_j = (int*)malloc(sizeof(int) * n);
-    // ska::flat_hash_map<long, float> tmp;
+    // robin_hood::unordered_flat_map<long, float> tmp;
 
     // thread_caches[i].lf_map = tmp; 
   }
@@ -599,7 +611,7 @@ ska::flat_hash_map<long, float> simple_coordinate_descent_lasso(
       last_rowsum,
       thread_caches,
       n,
-      beta,
+      &beta,
       last_max,
       wont_update,
       p,
@@ -924,11 +936,11 @@ static int firstchanged = FALSE;
 
 Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
                                float *rowsum, int n, int p, float lambda,
-                               ska::flat_hash_map<long, float> beta, long k, float intercept,
+                               robin_hood::unordered_flat_map<long, float> *beta, long k, float intercept,
                                int_pair *precalc_get_num,
                                int *column_entry_cache) {
   float sumk = xmatrix_sparse.cols[k].nz;
-  float sumn = xmatrix_sparse.cols[k].nz * beta[k];
+  float sumn = xmatrix_sparse.cols[k].nz * beta->at(k);
   // float sumk = col.nz;
   // float sumn = col.nz * beta[k];
   int *column_entries = column_entry_cache;
@@ -966,13 +978,13 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
   //}
 
   // TODO: This is probably slower than necessary.
-  float Bk_diff = beta[k];
+  float Bk_diff = beta->at(k);
   if (sumk == 0.0) {
-    beta[k] = 0.0;
+    // beta[k] = 0.0;
   } else {
-    beta[k] = soft_threshold(sumn, lambda * n / 2) / sumk;
+    beta->insert_or_assign(k, soft_threshold(sumn, lambda ) / sumk);
   }
-  Bk_diff = beta[k] - Bk_diff;
+  Bk_diff = beta->at(k) - Bk_diff;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
     if (!firstchanged) {
@@ -996,11 +1008,15 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float *Y,
   return changes;
 }
 Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
-                           float lambda, ska::flat_hash_map<long, float> beta, long k,
+                           float lambda, robin_hood::unordered_flat_map<long, float> *beta, long k,
                            float intercept, int_pair *precalc_get_num,
                            int *column_entry_cache) {
   float sumk = col.nz;
-  float sumn = col.nz * beta[k];
+  float bk = 0.0;
+  if (beta->contains(k)) {
+    bk = beta->at(k);
+  }
+  float sumn = col.nz * bk;
   int *column_entries = column_entry_cache;
 
   long col_entry_pos = 0;
@@ -1020,15 +1036,19 @@ Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
     }
   }
 
-  float Bk_diff = beta[k];
-  if (sumk == 0.0) {
-    beta[k] = 0.0;
-  } else {
-    beta[k] = soft_threshold(sumn, lambda * n / 2) / sumk;
+  float new_value =  soft_threshold(sumn, lambda) / sumk;
+  if (k == triplet_to_val(std::make_tuple(interesting_col, interesting_col, interesting_col), p)) {
+    printf("interesting col sumn: %f, new_values: %f\n", sumn, new_value);
   }
-  Bk_diff = beta[k] - Bk_diff;
+  if (sumk == 0.0) {
+    // beta[k] = 0.0;
+  } else {
+    beta->insert_or_assign(k, new_value);
+  }
+  float Bk_diff = new_value - bk;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
+    printf("nz beta update!\n");
     for (int e = 0; e < col.nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic
@@ -1047,7 +1067,7 @@ Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
 }
 
 float update_intercept_cyclic(float intercept, int **X, float *Y,
-                               ska::flat_hash_map<long, float> beta, int n, int p) {
+                               robin_hood::unordered_flat_map<long, float> beta, int n, int p) {
   float new_intercept = 0.0;
   float sumn = 0.0, sumx = 0.0;
 

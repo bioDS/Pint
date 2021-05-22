@@ -12,7 +12,7 @@ __kernel void vector_add(__global const int *A, __global const int *B,
 
 __kernel void
 update_working_set(__global float *rowsum, __global int *wont_update, int p,
-                   int n, float lambda, __global ska::flat_hash_map<long, float> beta,
+                   int n, float lambda, __global robin_hood::unordered_flat_map<long, float> beta,
                    __global char *append, __global int *target_col_nz,
                    __global int *target_X, __global int *target_col_offsets,
                    __global int *updateable_items, int count_may_update, 

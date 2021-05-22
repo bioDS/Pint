@@ -22,7 +22,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 static int log_pos = 0;
 // save the current beta values to a log, so the program can be resumed if it is
 // interrupted
-void save_log(int iter, float lambda_value, int lambda_count, ska::flat_hash_map<long, float> beta,
+void save_log(int iter, float lambda_value, int lambda_count, robin_hood::unordered_flat_map<long, float> beta,
               int n_betas, FILE *log_file) {
   // Rather than filling the log with beta values, we want to only keep two
   // copies. The current one, and a backup in case we stop while writing the
@@ -93,7 +93,7 @@ int check_can_restore_from_log(char *filename, int n, int p, int num_betas,
 FILE *restore_from_log(char *filename, int n, int p, int num_betas,
                        char **job_args, int job_args_num, int *actual_iter,
                        int *actual_lambda_count, float *actual_lambda_value,
-                       ska::flat_hash_map<long, float> actual_beta) {
+                       robin_hood::unordered_flat_map<long, float> actual_beta) {
 
   FILE *log_file = fopen(filename, "r+");
   int buf_size = num_betas * 16 + 500;
