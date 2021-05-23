@@ -278,7 +278,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       //}
       // parallel_shuffle(iter_permutation, permutation_split_size,
       //                 final_split_size, permutation_splits);
-// #pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
+#pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
       for (int i = 0; i < p; i++) {
         for (int j = i; j < p; j++) {
           //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
