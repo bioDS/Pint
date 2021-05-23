@@ -433,7 +433,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
-    LAMBDA_MIN = 1*fixture->n/2;
+    LAMBDA_MIN = 0.1*fixture->n/2;
     //xfile = "../testX.csv";
     //yfile = "../testY.csv";
     xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
@@ -1473,14 +1473,17 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   //for (int i = 0; i < Xu.host_col_nz[54]; i++) {
   //  Xu.host_X Xu.host_col_offsets[54]
   //}
+  long total_effects = 0;
   printf("reading beta values\n");
   for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
+    total_effects++;
     long value = it->first;
     float bv = it->second;
     auto tuple = val_to_triplet(value, p);
     long a = std::get<0>(tuple);
-    long b = std::get<0>(tuple);
-    long c = std::get<0>(tuple);
+    long b = std::get<1>(tuple);
+    long c = std::get<2>(tuple);
+    // printf("%d,%d,%d\n", a, b, c);
 
     if (bv == 0.0)
       continue;
@@ -1494,7 +1497,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
     int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
     int ib = 0, ic = 0;
-    //TODO: probably broken
     long total_entries_found = 0;
     // printf("checking col %d, has %d entries\n", a, Xu.host_col_nz[a]);
     for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
@@ -1515,10 +1517,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       }
     }
     if (a == b && a == c) {
-      printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
-      g_assert_true(total_entries_found == Xu.host_col_nz[a]);
+    //  printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
+     g_assert_true(total_entries_found == Xu.host_col_nz[a]);
     }
   }
+  printf("found %d effects\n", total_effects);
   // g_assert_true(nz_beta_pruning >= beta_pruning.size() /2);
   float basic_error = 0.0;
   float pruned_error = 0.0;
@@ -1695,6 +1698,29 @@ void trivial_3way_test() {
   free(xm);
 }
 
+void test_tuple_vals() {
+  long p = 100;
+  for (int a = 0; a < p; a++) {
+    for (int b = 0; b < p; b++) {
+      for (int c = 0; c < p; c++) {
+        long val = triplet_to_val(std::make_tuple(a,b,c), p);
+        auto tp = val_to_triplet(val, p);
+        int x = std::get<0>(tp);
+        int y = std::get<1>(tp);
+        int z = std::get<2>(tp);
+        if (a != x || b != y || c != z) {
+          printf("assigning %d %d %d ... ", a, b, c);
+          printf("%d\n", val);
+          printf("found %d %d %d\n", x, y, z);
+        }
+        g_assert_true(std::get<0>(tp) == a);
+        g_assert_true(std::get<1>(tp) == b);
+        g_assert_true(std::get<2>(tp) == c);
+      }
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   initialise_static_resources();
   setlocale(LC_ALL, "");
@@ -1737,6 +1763,7 @@ int main(int argc, char *argv[]) {
              pruning_fixture_set_up, check_branch_pruning_faster,
              pruning_fixture_tear_down);
   g_test_add_func("/func/trivial-3way", trivial_3way_test);
+  g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
   // test_simple_coordinate_descent_set_up,
   // test_simple_coordinate_descent_int,

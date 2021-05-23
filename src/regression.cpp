@@ -1048,7 +1048,6 @@ Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
   float Bk_diff = new_value - bk;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
-    printf("nz beta update!\n");
     for (int e = 0; e < col.nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic

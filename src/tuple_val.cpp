@@ -9,7 +9,7 @@ std::tuple<long, long> val_to_pair(long val, long range) {
 
 std::tuple<long, long, long> val_to_triplet(long val, long range) {
     int a = val / (range*range);
-    int b = (val-a) / (range);
+    int b = (val-(a*range*range)) / (range);
     int c = val % range;
     return std::make_tuple(a, b, c);
 }
