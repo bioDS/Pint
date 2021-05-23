@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
-#include <boost/tuple/tuple.hpp>
-#include <boost/unordered_map.hpp>
-#include <boost/unordered_set.hpp>
+// #include <boost/tuple/tuple.hpp>
+// #include <boost/unordered_map.hpp>
+// #include <boost/unordered_set.hpp>
 #include <iostream>
 
 
@@ -1596,39 +1596,43 @@ void trivial_3way_test() {
       xm[i][j] = xm_a[i][j];
     }
 
-  boost::unordered::unordered_map<long, float> correct_beta1;
-  boost::unordered::unordered_map<std::pair<long,long>, float> correct_beta2;
-  boost::unordered::unordered_map<std::tuple<long,long,long>, float> correct_beta3;
+  robin_hood::unordered_map<long, float> correct_beta;
+  //robin_hood::unordered_map<std::pair<long,long>, float> correct_beta2;
+  //robin_hood::unordered_map<std::tuple<long,long,long>, float> correct_beta3;
 
 
-  correct_beta1[0] = 2.3;
-  correct_beta2[std::pair(0,1)] = -5;
-  correct_beta3[std::make_tuple(0,1,2)] = 4.6;
+  //correct_beta1[0] = 2.3;
+  //correct_beta2[std::pair(0,1)] = -5;
+  //correct_beta3[std::make_tuple(0,1,2)] = 4.6;
+  correct_beta[0] = 2.3;
+  correct_beta[pair_to_val(std::make_tuple(0,1), p)] = -5;
+  correct_beta[triplet_to_val(std::make_tuple(0,1,2), p)] = -4.6;
+  // val_to_triplet()
 
   float Y[n];
   for (int i = 0; i < n; i++) {
     Y[i] = 0.0;
   }
-  auto beta_sets = std::tuple(correct_beta1, correct_beta2, correct_beta3);
+  //auto beta_sets = std::tuple(correct_beta1, correct_beta2, correct_beta3);
 
-  std::apply([](auto beta_set ...) {
+  //std::apply([](auto beta_set ...) {
 
-  }, beta_sets);
+  //}, beta_sets);
 
-  for_each(beta_sets, [](auto& beta_set) {
-    auto curr_inter = beta_set.cbegin();
-    auto last_inter = beta_set.cend();
-    while (curr_inter != last_inter) {
-      std::tuple ind = curr_inter->first;
-      for_each(ind, [](auto& val){
-        cout << val << ", ";
-      });
-      cout << ": ";
-      float effect = curr_inter->second;
-      std::cout << effect << "\n";
-      curr_inter++;
-    }
-  });
+  //for_each(beta_sets, [](auto& beta_set) {
+  //  auto curr_inter = beta_set.cbegin();
+  //  auto last_inter = beta_set.cend();
+  //  while (curr_inter != last_inter) {
+  //    std::tuple ind = curr_inter->first;
+  //    for_each(ind, [](auto& val){
+  //      cout << val << ", ";
+  //    });
+  //    cout << ": ";
+  //    float effect = curr_inter->second;
+  //    std::cout << effect << "\n";
+  //    curr_inter++;
+  //  }
+  //});
 
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < p; j++) {
@@ -1640,13 +1644,13 @@ void trivial_3way_test() {
                 //if (j == 0 && j2 == 1 && j3 == 2) {
                 //  cout << "b3[0,1,2]: " << correct_beta3[std::tuple{j,j2,j3}] << "\n";
                 //}
-                Y[i] += correct_beta3[std::tuple{j,j2,j3}];
+                Y[i] += correct_beta[triplet_to_val(std::make_tuple(j,j2,j3), p)];
               }
             }
-            Y[i] += correct_beta2[std::pair{j,j2}];
+            Y[i] += correct_beta[pair_to_val(std::make_tuple(j,j2), p)];
           }
         }
-        Y[i] += correct_beta1[j];
+        Y[i] += correct_beta[j];
       }
     }
   }

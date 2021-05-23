@@ -20,9 +20,9 @@ configure_file(output: 'config.h', configuration: conf_data)
 liblasso_deps = [
 	dependency('gsl'),
 	dependency('openmp'),
-	dependency('OpenCL'),
+	#dependency('OpenCL'),
     dependency('glib-2.0'),
-    dependency('boost'),
+    #dependency('boost'),
 	#rt_dependency,
 ]
 
