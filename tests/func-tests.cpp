@@ -982,7 +982,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   float lambda_sequence[] = {10000, 500, 400, 300, 200, 100, 50, 25,
                              10,    5,   2,   1,   0.5, 0.2, 0.1};
   int seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
-  float lambda = lambda_sequence[0];
+  float lambda = lambda_sequence[0]*n/2;
   bool ruled_out = 0;
   float *old_rowsum = malloc(sizeof *old_rowsum * n);
 
@@ -997,7 +997,7 @@ static void check_branch_pruning(UpdateFixture *fixture,
   memset(max_int_delta, 0, sizeof *max_int_delta * p);
   for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind++) {
     memcpy(old_rowsum, rowsum, sizeof *rowsum * n);
-    lambda = lambda_sequence[lambda_ind];
+    lambda = lambda_sequence[lambda_ind]*n/2;
     printf("\nrunning lambda %f, current error: %f\n", lambda, error);
     float dBMax;
     // TODO: implement working set and update test
