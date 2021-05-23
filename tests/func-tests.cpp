@@ -1678,6 +1678,7 @@ void trivial_3way_test() {
   X.actual_cols = p;
   
   XMatrixSparse Xc = sparsify_X(xm, n, p);
+  X_uncompressed Xu = construct_host_X(&Xc);
 
   robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
     -1, 0.01, 100,
@@ -1685,7 +1686,53 @@ void trivial_3way_test() {
     NONE, NULL, 0, FALSE,
     -1);
   
+  long total_effects = 0;
   printf("Beta values found:\n");
+  for (auto it = beta.begin(); it != beta.end(); it++) {
+    long value = it->first;
+    float bv = it->second;
+    auto tuple = val_to_triplet(value, p);
+    long a = std::get<0>(tuple);
+    long b = std::get<1>(tuple);
+    long c = std::get<2>(tuple);
+    printf("%d,%d,%d: %f\n", a, b, c, bv);
+
+    if (bv == 0.0)
+      continue;
+    // printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
+
+    if (bv != 0.0) {
+     total_effects++;
+    }
+
+    int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
+    int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
+    int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
+    int ib = 0, ic = 0;
+    long total_entries_found = 0;
+    // printf("checking col %d, has %d entries\n", a, Xu.host_col_nz[a]);
+    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
+      int cur_row = colA[ia];
+      //if (a == b && a == c) {
+      //  printf("%d: %d ", ia, cur_row);
+      //}
+      while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+        ib++;
+      while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
+        ic++;
+      if (cur_row == colB[ib] && cur_row == colC[ic]) {
+        //if (a == b && a == c) {
+        //  printf("\n%d,%d,%d\n", ia, ib, ic);
+        //}
+        // pruned_rowsum[cur_row] += bv;
+        total_entries_found++;
+      }
+    }
+    if (a == b && a == c) {
+    //  printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
+     g_assert_true(total_entries_found == Xu.host_col_nz[a]);
+    }
+  }
   for (int i = 0; i < p*(p+1)/2; i++) {
     if ( beta[i] != 0.0) {
       printf("%d: %f\n", i, (beta)[i]);
