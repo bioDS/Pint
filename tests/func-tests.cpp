@@ -1470,6 +1470,9 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       }
     }
   }
+  //for (int i = 0; i < Xu.host_col_nz[54]; i++) {
+  //  Xu.host_X Xu.host_col_offsets[54]
+  //}
   printf("reading beta values\n");
   for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
     long value = it->first;
@@ -1481,25 +1484,32 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
     if (bv == 0.0)
       continue;
-    printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
+    // printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
 
     if (bv != 0.0) {
       nz_beta_pruning++;
     }
 
-    int *colA = &Xu.host_col_nz[Xu.host_col_offsets[a]];
-    int *colB = &Xu.host_col_nz[Xu.host_col_offsets[b]];
-    int *colC = &Xu.host_col_nz[Xu.host_col_offsets[c]];
+    int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
+    int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
+    int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
     int ib = 0, ic = 0;
     //TODO: probably broken
     long total_entries_found = 0;
+    // printf("checking col %d, has %d entries\n", a, Xu.host_col_nz[a]);
     for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
       int cur_row = colA[ia];
+      //if (a == b && a == c) {
+      //  printf("%d: %d ", ia, cur_row);
+      //}
       while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
         ib++;
       while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
         ic++;
       if (cur_row == colB[ib] && cur_row == colC[ic]) {
+        //if (a == b && a == c) {
+        //  printf("\n%d,%d,%d\n", ia, ib, ic);
+        //}
         pruned_rowsum[cur_row] += bv;
         total_entries_found++;
       }
