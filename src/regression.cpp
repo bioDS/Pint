@@ -292,16 +292,16 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
             printf("checking subproblem for interesting col %d, (%d,%d)\n", k, i, j);
           }
           if (active_set->entries.contains(k) && active_set->entries[k].present) {
-            // if (i == interesting_col && j == interesting_col) {
+            if (i == interesting_col && j == interesting_col) {
               printf("present in active set\n");
-            // }
+            }
             // TODO: apply permutation here.
             total_present++;
             int was_zero = TRUE;
             auto count = beta->count(k);
-            printf("found %d entries\n", count);
+            // printf("found %d entries\n", count);
             if ( count > 0) {
-              printf("found %d entries for key %d\n", count, k);
+              // printf("found %d entries for key %d\n", count, k);
               if (beta->at(k) != 0.0) {
                 was_zero = FALSE;
               }
