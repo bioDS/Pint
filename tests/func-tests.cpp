@@ -1564,38 +1564,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   // opencl_cleanup(ocl_setup);
 }
 
-// borrowed from https://stackoverflow.com/a/47762456
-#include <tuple>      // std::tuple
-#include <functional> // std::invoke
-
-template <
-    size_t Index = 0, // start iteration at 0 index
-    typename TTuple,  // the tuple type
-    size_t Size =
-        std::tuple_size_v<
-            std::remove_reference_t<TTuple>>, // tuple size
-    typename TCallable, // the callable to bo invoked for each tuple item
-    typename... TArgs   // other arguments to be passed to the callable 
->
-void for_each(TTuple&& tuple, TCallable&& callable, TArgs&&... args)
-{
-    if constexpr (Index < Size)
-    {
-        std::invoke(callable, args..., std::get<Index>(tuple));
-
-        if constexpr (Index + 1 < Size)
-            for_each<Index + 1>(
-                std::forward<TTuple>(tuple),
-                std::forward<TCallable>(callable),
-                std::forward<TArgs>(args)...);
-    }
-}
-
-void trivial_3way_test() {
+void test_row_list_without_columns() {
   int n = 5, p = 5;
   const int xm_a[n][p] = {
     {1, 0, 0, 0, 0},
-    {0, 1, 0, 1, 0},
+    {0, 1, 1, 1, 0},
     {0, 0, 0, 0, 1},
     {1, 1, 0, 0, 0},
     {1, 1, 1, 0, 0},
@@ -1606,7 +1579,48 @@ void trivial_3way_test() {
   }
   for (int i = 0; i < n; i++)
     for (int j = 0; j < p; j++) {
-      xm[i][j] = xm_a[i][j];
+      xm[i][j] = xm_a[j][i];
+    }
+  XMatrixSparse Xc = sparsify_X(xm, n, p);
+  X_uncompressed Xu = construct_host_X(&Xc);
+  bool remove[p] = {false,false,false,true,false};
+
+  Thread_Cache thread_caches[NumCores];
+  for (int i = 0; i < NumCores; i++) {
+    thread_caches[i].col_i = malloc(sizeof(int) * max(n,p));
+    thread_caches[i].col_j = malloc(sizeof(int) * n);
+  }
+
+  struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
+
+  g_assert_true(rs.row_lengths[0] == 1);
+  g_assert_true(rs.row_lengths[1] == 1);
+  g_assert_true(rs.row_lengths[4] == 3);
+
+  
+
+  for (int i = 0; i < NumCores; i++) {
+    free(thread_caches[i].col_i);
+    free(thread_caches[i].col_j);
+  }
+}
+
+void trivial_3way_test() {
+  int n = 5, p = 5;
+  const int xm_a[n][p] = {
+    {1, 1, 1, 0, 0},
+    {0, 1, 0, 1, 0},
+    {0, 0, 1, 0, 1},
+    {1, 1, 0, 0, 0},
+    {1, 1, 1, 0, 0},
+  };
+  int **xm = new int*[p];
+  for (int j = 0; j < p; j++) {
+    xm[j] = new int[n];
+  }
+  for (int i = 0; i < n; i++)
+    for (int j = 0; j < p; j++) {
+      xm[i][j] = xm_a[j][i];
     }
 
   robin_hood::unordered_map<long, float> correct_beta;
@@ -1618,8 +1632,8 @@ void trivial_3way_test() {
   //correct_beta2[std::pair(0,1)] = -5;
   //correct_beta3[std::make_tuple(0,1,2)] = 4.6;
   correct_beta[0] = 2.3;
-  correct_beta[pair_to_val(std::make_tuple(0,1), p)] = -5;
-  correct_beta[triplet_to_val(std::make_tuple(0,1,2), p)] = -4.6;
+  correct_beta[pair_to_val(std::make_tuple(0,1), p)] = 5;
+  correct_beta[triplet_to_val(std::make_tuple(0,1,2), p)] = -14.6;
   // val_to_triplet()
 
   float Y[n];
@@ -1649,15 +1663,19 @@ void trivial_3way_test() {
 
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < p; j++) {
-      if (xm[i][j] != 0) {
+      if (xm[j][i] != 0) {
         for (int j2 = j; j2 < p; j2++) {
-          if (xm[i][j2] != 0) {
+          if (xm[j2][i] != 0) {
             for (int j3 = j2; j3 < p; j3++) {
-              if (xm[i][j3] != 0) {
+              if (xm[j3][i] != 0) {
                 //if (j == 0 && j2 == 1 && j3 == 2) {
                 //  cout << "b3[0,1,2]: " << correct_beta3[std::tuple{j,j2,j3}] << "\n";
                 //}
-                Y[i] += correct_beta[triplet_to_val(std::make_tuple(j,j2,j3), p)];
+                float cb = correct_beta[triplet_to_val(std::make_tuple(j,j2,j3), p)];
+                if (cb != 0.0) {
+                  printf("Y[%d] +=  %f (%d,%d,%d)\n", i, cb, j, j2, j3);
+                  Y[i] += cb;
+                }
               }
             }
             Y[i] += correct_beta[pair_to_val(std::make_tuple(j,j2), p)];
@@ -1682,8 +1700,8 @@ void trivial_3way_test() {
 
   robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
     -1, 0.01, 100,
-    100, FALSE, -1, 1.01,
-    NONE, NULL, 0, FALSE,
+    LAMBDA_MIN, FALSE, -1, 1.01,
+    NONE, NULL, 0, TRUE,
     -1);
   
   long total_effects = 0;
@@ -1696,6 +1714,9 @@ void trivial_3way_test() {
     long b = std::get<1>(tuple);
     long c = std::get<2>(tuple);
     printf("%d,%d,%d: %f\n", a, b, c, bv);
+
+    //g_assert_true(a <= b);
+    //g_assert_true(b <= c);
 
     if (bv == 0.0)
       continue;
@@ -1731,11 +1752,6 @@ void trivial_3way_test() {
     if (a == b && a == c) {
     //  printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
      g_assert_true(total_entries_found == Xu.host_col_nz[a]);
-    }
-  }
-  for (int i = 0; i < p*(p+1)/2; i++) {
-    if ( beta[i] != 0.0) {
-      printf("%d: %f\n", i, (beta)[i]);
     }
   }
 
@@ -1811,6 +1827,7 @@ int main(int argc, char *argv[]) {
              pruning_fixture_tear_down);
   g_test_add_func("/func/trivial-3way", trivial_3way_test);
   g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
+  g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
   // test_simple_coordinate_descent_set_up,
   // test_simple_coordinate_descent_int,

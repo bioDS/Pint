@@ -17,9 +17,6 @@ void free_sparse_matrix(XMatrixSparse X) {
   gsl_permutation_free(X.permutation);
 }
 
-/**
- * present: true if column should remain, false if it should be removed.
- */
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool *remove, Thread_Cache *thread_caches) {
   int p = Xc.p;
   int n = Xc.n;
@@ -42,26 +39,6 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
         row_pos++;
       }
     }
-    //long entry = -1;
-    //int row_pos = 0;
-    //for (int r = 0; r < Xc.rows[row].nwords; r++) {
-    //  S8bWord word = Xc.rows[row].compressed_indices[r];
-    //  unsigned long values = word.values;
-    //  row_pos = 0;
-    //  for (int j = 0; j <= group_size[word.selector]; j++) {
-    //    int diff = values & masks[word.selector];
-    //    if (diff != 0) {
-    //        entry += diff;
-    //        
-    //        // per-entry action here
-    //        // if (!remove[entry]) {
-    //          row_cache[row_pos] = entry;
-    //          row_pos++;
-    //        // }
-    //    }
-    //    values >>= item_width[word.selector];
-    //  }
-    //}
     row_lengths[row] = row_pos;
     new_rows[row] = (int*)malloc(row_pos * sizeof(int));
     memcpy(new_rows[row], row_cache, row_pos * sizeof(int));

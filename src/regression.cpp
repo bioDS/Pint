@@ -13,8 +13,8 @@ long total_beta_nz_updates = 0;
 
 // check a particular pair of betas in the adaptive calibration scheme
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
-                                    Sparse_Betas beta_1, float lambda_2,
-                                    Sparse_Betas beta_2, int beta_length,
+                                    Sparse_Betas *beta_1, float lambda_2,
+                                    Sparse_Betas *beta_2, int beta_length,
                                     int n) {
   float max_diff = 0.0;
   float adjusted_max_diff = 0.0;
@@ -22,16 +22,16 @@ int adaptive_calibration_check_beta(float c_bar, float lambda_1,
   int b1_ind = 0;
   int b2_ind = 0;
 
-  while (b1_ind < beta_1.count && b2_ind < beta_2.count) {
-    while (beta_1.indices[b1_ind] < beta_2.indices[b2_ind] &&
-           b1_ind < beta_1.count)
+  while (b1_ind < beta_1->count && b2_ind < beta_2->count) {
+    while (beta_1->indices[b1_ind] < beta_2->indices[b2_ind] &&
+           b1_ind < beta_1->count)
       b1_ind++;
-    while (beta_2.indices[b2_ind] < beta_1.indices[b1_ind] &&
-           b2_ind < beta_2.count)
+    while (beta_2->indices[b2_ind] < beta_1->indices[b1_ind] &&
+           b2_ind < beta_2->count)
       b2_ind++;
-    if (b1_ind < beta_1.count && b2_ind < beta_2.count &&
-        beta_1.indices[b1_ind] == beta_2.indices[b2_ind]) {
-      float diff = fabs(beta_1.betas[b1_ind] - (beta_2.betas)[b2_ind]);
+    if (b1_ind < beta_1->count && b2_ind < beta_2->count &&
+        beta_1->indices[b1_ind] == beta_2->indices[b2_ind]) {
+      float diff = fabs(beta_1->betas.at(b1_ind) - beta_2->betas.at(b2_ind));
       if (diff > max_diff)
         max_diff = diff;
       b1_ind++;
@@ -51,14 +51,14 @@ int adaptive_calibration_check_beta(float c_bar, float lambda_1,
 // checks whether the last element in the beta_sequence is the one we should
 // stop at, according to Chichignoud et als 'Adaptive Calibration Scheme'
 // returns TRUE if we are finished, FALSE if we should continue.
-int check_adaptive_calibration(float c_bar, Beta_Sequence beta_sequence,
+int check_adaptive_calibration(float c_bar, Beta_Sequence *beta_sequence,
                                int n) {
   // printf("\nchecking %d betas\n", beta_sequence.count);
-  for (int i = 0; i < beta_sequence.count; i++) {
+  for (int i = 0; i < beta_sequence->count; i++) {
     int this_result = adaptive_calibration_check_beta(
-        c_bar, beta_sequence.lambdas[beta_sequence.count - 1],
-        beta_sequence.betas[beta_sequence.count - 1], beta_sequence.lambdas[i],
-        beta_sequence.betas[i], beta_sequence.vec_length, n);
+        c_bar, beta_sequence->lambdas[beta_sequence->count - 1],
+        &beta_sequence->betas[beta_sequence->count - 1], beta_sequence->lambdas[i],
+        &beta_sequence->betas[i], beta_sequence->vec_length, n);
     // printf("result: %d\n", this_result);
     if (this_result == 0) {
       return TRUE;
@@ -219,7 +219,7 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
     //********** Identify Working Set *******************
     // TODO: is it worth constructing a new set with no 'blank'
     // elements?
-    if (VERBOSE)
+    // if (VERBOSE)
       printf("updating working set.\n");
     int count_may_update = 0;
     int* updateable_items = calloc(p, sizeof *updateable_items); //TODO: keep between iters
@@ -227,10 +227,11 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
         if (!wont_update[i] && !active_set->entries[i].present) {
           updateable_items[count_may_update] = i;
           count_may_update++;
+          printf("%d ", i);
         }
     }
-    if (VERBOSE)
-      printf("there were %d updateable items\n", count_may_update);
+    // if (VERBOSE)
+      printf("\nthere were %d updateable items\n", count_may_update);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     char increased_set =
         update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, active_set, thread_caches, ocl_setup, last_max);
@@ -278,55 +279,90 @@ int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
       //}
       // parallel_shuffle(iter_permutation, permutation_split_size,
       //                 final_split_size, permutation_splits);
-#pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
-      for (int i = 0; i < p; i++) {
-        for (int j = i; j < p; j++) {
-          //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
-          //int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
-          //         (i - 1)) /
-          //            2 +
-          //        j;
-          // int k = pair_to_val(std::make_tuple(i, j), p);
-          int k = triplet_to_val(std::make_tuple(i, j, j), p);
-          if (i == interesting_col && j == interesting_col) {
-            printf("checking subproblem for interesting col %d, (%d,%d)\n", k, i, j);
+// #pragma omp parallel for num_threads(NumCores) schedule(static) shared(Y, rowsum, beta, precalc_get_num, perm) reduction(+:total_unchanged, total_changed, total_present, total_notpresent, new_nz_beta, total_beta_updates, total_beta_nz_updates)
+      for (auto it = active_set->entries.begin(); it != active_set->entries.end(); it++) {
+        long k = it->first;
+        AS_Entry entry = it->second;
+        if (entry.present) {
+          // TODO: apply permutation here.
+          total_present++;
+          int was_zero = TRUE;
+          auto count = beta->count(k);
+          // printf("found %d entries\n", count);
+          if ( count > 0) {
+            // printf("found %d entries for key %d\n", count, k);
+            if (beta->at(k) != 0.0) {
+              was_zero = FALSE;
+            }
           }
-          if (active_set->entries.contains(k) && active_set->entries[k].present) {
-            if (i == interesting_col && j == interesting_col) {
-              printf("present in active set\n");
-            }
-            // TODO: apply permutation here.
-            total_present++;
-            int was_zero = TRUE;
-            auto count = beta->count(k);
-            // printf("found %d entries\n", count);
-            if ( count > 0) {
-              // printf("found %d entries for key %d\n", count, k);
-              if (beta->at(k) != 0.0) {
-                was_zero = FALSE;
-              }
-            }
-            total_beta_updates++;
-            Changes changes = update_beta_cyclic(
-                active_set->entries[k].col, Y, rowsum, n, p, lambda, beta, k, 0,
-                precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
-            if (changes.actual_diff == 0.0) {
-              total_unchanged++;
-            } else {
-              total_beta_nz_updates++;
-              total_changed++;
-            }
-            if (was_zero && changes.actual_diff != 0) {
-              new_nz_beta++;
-            }
-            if (!was_zero && beta->contains(k) && beta->at(k) == 0) {
-              new_nz_beta--;
-            }
+          total_beta_updates++;
+          Changes changes = update_beta_cyclic(
+              active_set->entries[k].col, Y, rowsum, n, p, lambda, beta, k, 0,
+              precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+          if (changes.actual_diff == 0.0) {
+            total_unchanged++;
+          } else {
+            total_beta_nz_updates++;
+            total_changed++;
+          }
+          if (was_zero && changes.actual_diff != 0) {
+            new_nz_beta++;
+          }
+          if (!was_zero && beta->contains(k) && beta->at(k) == 0) {
+            new_nz_beta--;
+          }
           } else {
             total_notpresent++;
           }
-        }
       }
+      //for (int i = 0; i < p; i++) {
+      //  for (int j = i; j < p; j++) {
+      //    //TODO: this loop could be better. we don't need to check everything if we use a hashset of active columns.
+      //    //int k = (2 * (p - 1) + 2 * (p - 1) * (i - 1) - (i - 1) * (i - 1) -
+      //    //         (i - 1)) /
+      //    //            2 +
+      //    //        j;
+      //    // int k = pair_to_val(std::make_tuple(i, j), p);
+      //    int k = triplet_to_val(std::make_tuple(i, j, j), p);
+      //    if (i == interesting_col && j == interesting_col) {
+      //      printf("checking subproblem for interesting col %d, (%d,%d)\n", k, i, j);
+      //    }
+      //    if (active_set->entries.contains(k) && active_set->entries[k].present) {
+      //      if (i == interesting_col && j == interesting_col) {
+      //        printf("present in active set\n");
+      //      }
+      //      // TODO: apply permutation here.
+      //      total_present++;
+      //      int was_zero = TRUE;
+      //      auto count = beta->count(k);
+      //      // printf("found %d entries\n", count);
+      //      if ( count > 0) {
+      //        // printf("found %d entries for key %d\n", count, k);
+      //        if (beta->at(k) != 0.0) {
+      //          was_zero = FALSE;
+      //        }
+      //      }
+      //      total_beta_updates++;
+      //      Changes changes = update_beta_cyclic(
+      //          active_set->entries[k].col, Y, rowsum, n, p, lambda, beta, k, 0,
+      //          precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+      //      if (changes.actual_diff == 0.0) {
+      //        total_unchanged++;
+      //      } else {
+      //        total_beta_nz_updates++;
+      //        total_changed++;
+      //      }
+      //      if (was_zero && changes.actual_diff != 0) {
+      //        new_nz_beta++;
+      //      }
+      //      if (!was_zero && beta->contains(k) && beta->at(k) == 0) {
+      //        new_nz_beta--;
+      //      }
+      //    } else {
+      //      total_notpresent++;
+      //    }
+      //  }
+      //}
       //printf("total beta updates: %ld\n", total_beta_updates);
       // for (int ki = 0; ki < active_set->length; ki++) {
       //  int k = active_set->entries[perm->data[ki]];
@@ -567,11 +603,11 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
   if (use_adaptive_calibration) {
     Rprintf("Using Adaptive Calibration\n");
     beta_sequence.count = 0;
-    beta_sequence.vec_length = p_int;
-    // beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
-    // beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
+    // beta_sequence.vec_length = p_int;
+    beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
+    beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
     // beta_cache = (float*)malloc(p_int * sizeof(float));
-    index_cache = (int*)malloc(p_int * sizeof(int));
+    // index_cache = (int*)malloc(p_int * sizeof(int));
   }
 
 
@@ -659,11 +695,12 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
     error = calculate_error(n, p_int, Y, X, beta, p, intercept, rowsum);
     printf("lambda %d = %f, error %.1f, nz_beta %ld\n", iter, lambda, error, nz_beta);
     if (use_adaptive_calibration && nz_beta > 0) {
-        Sparse_Betas sparse_betas;
+        Sparse_Betas *sparse_betas = &beta_sequence.betas[beta_sequence.count];
         int count = 0;
         //TODO: it should be possible to do something more like memcpy here
         for (auto c = beta.begin(); c != beta.end(); c++) {
-          (sparse_betas.betas)[c->first] = c->second;
+          sparse_betas->betas.insert_or_assign(c->first, c->second);
+          count++;
         }
         //for (int b = 0; b < p_int; b++) {
         //  if ( beta[b] != 0) {
@@ -672,26 +709,26 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
         //    count++;
         //  }
         //}
-        if (count != nz_beta) {
-         printf("count (%d) or nz_beta (%d) is wrong\n", count, nz_beta);
-        }
+        //if (count != nz_beta) {
+        // printf("count (%d) or nz_beta (%d) is wrong\n", count, nz_beta);
+        //}
         // sparse_betas.betas = (float*)malloc(count * sizeof(float));
         // sparse_betas.indices = (int*)malloc(count * sizeof(int));
         // memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
         // memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
         // sparse_betas.betas.
 
-        sparse_betas.count = count;
+        sparse_betas->count = count;
 
         if (beta_sequence.count >= max_lambda_count) {
           printf("allocated too many beta sequences for adaptive calibration, things will now break. ***************************************\n");
         }
         beta_sequence.lambdas[beta_sequence.count] = lambda;
-        beta_sequence.betas[beta_sequence.count] = sparse_betas;
+        // beta_sequence.betas[beta_sequence.count] = sparse_betas;
         beta_sequence.count++;
 
         printf("checking adaptive cal\n");
-        if (check_adaptive_calibration(0.75, beta_sequence, n)) {
+        if (check_adaptive_calibration(0.75, &beta_sequence, n)) {
          printf("Halting as reccommended by adaptive calibration\n");
          final_lambda = lambda;
         }
@@ -904,7 +941,7 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
     free(beta_sequence.lambdas);
 
     // free(beta_cache);
-    free(index_cache);
+    // free(index_cache);
   }
 
   // free beta sets
@@ -1040,14 +1077,17 @@ Changes update_beta_cyclic(S8bCol col, float *Y, float *rowsum, int n, int p,
   if (k == triplet_to_val(std::make_tuple(interesting_col, interesting_col, interesting_col), p)) {
     printf("interesting col sumn: %f, new_values: %f\n", sumn, new_value);
   }
+  auto tp = val_to_triplet(k, p);
   if (sumk == 0.0) {
     // beta[k] = 0.0;
   } else {
+    printf("assigning %f to: %ld,%ld,%ld\n", new_value, std::get<0>(tp), std::get<1>(tp), std::get<2>(tp));
     beta->insert_or_assign(k, new_value);
   }
   float Bk_diff = new_value - bk;
   // update every rowsum[i] w/ effects of beta change.
   if (Bk_diff != 0) {
+    printf("nz beta update for: %ld,%ld,%ld\n", std::get<0>(tp), std::get<1>(tp), std::get<2>(tp));
     for (int e = 0; e < col.nz; e++) {
       int i = column_entries[e];
 #pragma omp atomic
