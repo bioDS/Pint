@@ -1700,7 +1700,7 @@ void trivial_3way_test() {
 
   robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
     -1, 0.01, 100,
-    LAMBDA_MIN, FALSE, -1, 1.01,
+    100, FALSE, -1, 1.01,
     NONE, NULL, 0, TRUE,
     -1);
   
