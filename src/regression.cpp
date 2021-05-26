@@ -890,21 +890,21 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
   // * 100);
 
   // TODO: this really should be 0. Fix things until it is.
-  Rprintf("checking how much rowsums have diverged:\n");
-  float *temp_rowsum = calloc(n, sizeof *temp_rowsum);
-  for (int col_i = 0; col_i < p; col_i++) {
-    int *col_i_entries = &Xu.host_X[Xu.host_col_offsets[col_i]];
-    for (int i = 0; i < Xu.host_col_nz[col_i]; i++) {
-      int row = col_i_entries[i];
-      int *inter_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
-      int row_nz = Xu.host_row_nz[row];
-      for (int col_j_ind = 0; col_j_ind < row_nz; col_j_ind++) {
-        int col_j = inter_row[col_j_ind];
-        long k = (2 * (p - 1) + 2 * (p - 1) * (col_i - 1) - (col_i - 1) * (col_i - 1) - (col_i - 1)) / 2 + col_j;
-        temp_rowsum[row] += beta[k];
-      }
-    }
-  }
+  //Rprintf("checking how much rowsums have diverged:\n");
+  //float *temp_rowsum = calloc(n, sizeof *temp_rowsum);
+  //for (int col_i = 0; col_i < p; col_i++) {
+  //  int *col_i_entries = &Xu.host_X[Xu.host_col_offsets[col_i]];
+  //  for (int i = 0; i < Xu.host_col_nz[col_i]; i++) {
+  //    int row = col_i_entries[i];
+  //    int *inter_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
+  //    int row_nz = Xu.host_row_nz[row];
+  //    for (int col_j_ind = 0; col_j_ind < row_nz; col_j_ind++) {
+  //      int col_j = inter_row[col_j_ind];
+  //      long k = (2 * (p - 1) + 2 * (p - 1) * (col_i - 1) - (col_i - 1) * (col_i - 1) - (col_i - 1)) / 2 + col_j;
+  //      temp_rowsum[row] += beta[k];
+  //    }
+  //  }
+  //}
   //for (long col = 0; col < p_int; col++) {
   //  int entry = -1;
   //  for (int i = 0; i < X2.cols[col].nwords; i++) {
@@ -958,10 +958,9 @@ robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
 
   printf("checking nz beta count\n");
   int nonzero = 0;
-  for (int i = 0; i < p_int; i++) {
-    if ( (beta)[i] != 0) {
+  for (auto it = beta.begin(); it != beta.end(); it++) {
+    if (it->second != 0.0)
       nonzero++;
-    }
   }
   printf("%d found\n", nonzero);
   printf("nz = %d, became_zero = %d\n", num_nz_beta, became_zero);
