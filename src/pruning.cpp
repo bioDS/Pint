@@ -1,7 +1,7 @@
 #include "liblasso.h"
 #include <stdalign.h>
-// #define verbose FALSE
-#define verbose TRUE
+#define verbose FALSE
+// #define verbose TRUE
 
 // Force all paramaters for this function onto a single cache line.
 struct pe_params {

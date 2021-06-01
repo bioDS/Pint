@@ -7,9 +7,6 @@
 #include <stdlib.h>
 #define _POSIX_C_SOURCE 199309L
 #include <time.h>
-// #include <boost/tuple/tuple.hpp>
-// #include <boost/unordered_map.hpp>
-// #include <boost/unordered_set.hpp>
 #include <iostream>
 
 
@@ -18,22 +15,6 @@
 using namespace std;
 //using namespace boost;
 
-/* int **X2_from_X(int **X, int n, int p); */
-/* float *simple_coordinate_descent_lasso(int **X, float *Y, int n, int p,
- * float lambda, char *method); */
-/* float update_beta_greedy_l1(int **X, float *Y, int n, int p, float lambda,
- * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax); */
-/* float update_intercept_cyclic(float intercept, int **X, float *Y, float
- * beta, int n, int p); */
-/* float update_beta_cyclic(int **X, float *Y, int n, int p, float lambda,
- * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax, float intercept); */
-/* float update_beta_glmnet(int **X, float *Y, int n, int p, float lambda,
- * robin_hood::unordered_flat_map<long, float> beta, int k, float dBMax, float intercept); */
-/* float soft_threshold(float z, float gamma); */
-/* float *read_y_csv(char *fn, int n); */
-/* XMatrix read_x_csv(char *fn, int n, int p); */
-
-// #define NumCores 4
 #define HALT_ERROR_DIFF 1.01
 
 struct timespec start_time, end_time;
@@ -1345,7 +1326,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     int last_iter_count = 0;
 
     if (Xc.p <= 1000) {
-      run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+      // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
     }
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
