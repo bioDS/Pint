@@ -1,5 +1,7 @@
+//TODO: no reason this can't be an array
 typedef struct {
   robin_hood::unordered_flat_map<long, float> betas;
+  // Beta_Value_Sets *beta_sets;
   int *indices;
   int count;
 } Sparse_Betas;
@@ -15,9 +17,11 @@ typedef struct {
 typedef struct {
   float actual_diff;
   float pre_lambda_diff;
+  bool added;
+  bool removed;
 } Changes;
 
-robin_hood::unordered_flat_map<long, float> simple_coordinate_descent_lasso(
+Beta_Value_Sets simple_coordinate_descent_lasso(
     XMatrix X, float *Y, int n, int p, long max_interaction_distance,
     float lambda_min, float lambda_max, int max_iter, int VERBOSE,
     float frac_overlap_allowed, float halt_beta_diff,

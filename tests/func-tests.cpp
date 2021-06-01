@@ -557,9 +557,10 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture *fixture,
   int p_int = fixture->p * (fixture->p + 1) / 2;
   robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
 
-  beta = simple_coordinate_descent_lasso(
+  Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
       fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
       0, 0.01, 1.0001, FALSE, 1, "test", FALSE, -1);
+  beta = beta_sets.beta3; //TODO: don't
 
   float acceptable_diff = 10;
   int no_agreeing = 0;
@@ -1072,7 +1073,11 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   // int **thread_column_caches = vars->thread_column_caches;
   Thread_Cache *thread_caches = vars->thread_caches;
   int n = vars->n;
-  robin_hood::unordered_flat_map<long, float> *beta = vars->beta;
+  Beta_Value_Sets *beta_sets = vars->beta_sets;
+  robin_hood::unordered_flat_map<long, float> *beta1 = &beta_sets->beta1;
+  robin_hood::unordered_flat_map<long, float> *beta2 = &beta_sets->beta2;
+  robin_hood::unordered_flat_map<long, float> *beta3 = &beta_sets->beta3;
+  robin_hood::unordered_flat_map<long, float> *beta = &beta_sets->beta3; //TODO: dont
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -1233,7 +1238,14 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   printf("starting interaction test\n");
   printf("creating X2\n");
   int p_int = fixture->p * (fixture->p + 1) / 2;
-  robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
+  robin_hood::unordered_flat_map<long, float> beta1;
+  robin_hood::unordered_flat_map<long, float> beta2;
+  robin_hood::unordered_flat_map<long, float> beta3;
+  Beta_Value_Sets beta_sets = {beta1, beta2, beta3};
+  robin_hood::unordered_flat_map<long, float> pruning_beta1;
+  robin_hood::unordered_flat_map<long, float> pruning_beta2;
+  robin_hood::unordered_flat_map<long, float> pruning_beta3;
+  Beta_Value_Sets pruning_beta_sets = {pruning_beta1, pruning_beta2, pruning_beta3};
   // robin_hood::unordered_flat_map<long, float> beta
   float *Y = fixture->Y;
   printf("test\n");
@@ -1301,7 +1313,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       last_rowsum,
       thread_caches,
       n,
-      &beta,
+      &beta_sets,
       last_max,
       NULL,
       p,
@@ -1319,13 +1331,10 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
-    long nz_beta = 0;
-    // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
-    for (int i = 0; i < p_int; i++) {
-      if ( beta[i] != 0) {
-        nz_beta++;
-      }
-    }
+    long nz_beta = beta_sets.beta1.size()
+                  +beta_sets.beta2.size()
+                  +beta_sets.beta3.size();
+
     if (nz_beta > MAX_NZ_BETA) {
       break;
     }
@@ -1363,7 +1372,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
       last_rowsum,
       thread_caches,
       n,
-      &beta_pruning,
+      &pruning_beta_sets,
       last_max,
       wont_update,
       p,
@@ -1386,7 +1395,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   // struct OpenCL_Setup ocl_setup = setup_working_set_kernel(Xu, n, p);
   struct OpenCL_Setup ocl_setup; //TODO: remove this
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-  Active_Set active_set = active_set_new(p_int);
+  Active_Set active_set = active_set_new(p_int, p);
   for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
     // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
@@ -1458,8 +1467,8 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
           entry += diff;
 
           // do whatever we need here with the index below:
-          basic_rowsum[entry] += beta[k];
-          nz_beta_basic += beta[k] != 0.0;
+          basic_rowsum[entry] += beta3[k];
+          nz_beta_basic += beta3[k] != 0.0;
           // nz_beta_pruning += beta_pruning[k] != 0.0;
           // pruned_rowsum[entry] += beta_pruning[k];
           //if (basic_rowsum[entry] > 1e20) {
@@ -1549,18 +1558,18 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
          "reused col\n",
          main_col_time, int_col_time, reused_col_time);
 
-  printf("checking beta values come out the same\n");
-  for (int k = 0; k < 10; k++) {
-    float basic_beta = fabs( beta[k]);
-    float pruned_beta = fabs( beta[k]);
-    float max = fmax(basic_beta, pruned_beta);
-    float min = fmin(basic_beta, pruned_beta);
+  //printf("checking beta values come out the same\n");
+  //for (int k = 0; k < 10; k++) {
+  //  float basic_beta = fabs( beta[k]);
+  //  float pruned_beta = fabs( beta[k]);
+  //  float max = fmax(basic_beta, pruned_beta);
+  //  float min = fmin(basic_beta, pruned_beta);
 
-    if (max / min > acceptable_diff) {
-      printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k],
-             beta_pruning[k], k);
-    }
-  }
+  //  if (max / min > acceptable_diff) {
+  //    printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k],
+  //           beta_pruning[k], k);
+  //  }
+  //}
   // opencl_cleanup(ocl_setup);
 }
 
@@ -1609,8 +1618,8 @@ void trivial_3way_test() {
   int n = 5, p = 5;
   const int xm_a[n][p] = {
     {1, 1, 1, 0, 0},
-    {0, 1, 0, 1, 0},
-    {0, 0, 1, 0, 1},
+    {1, 0, 1, 1, 0},
+    {0, 1, 1, 1, 1},
     {1, 1, 0, 0, 0},
     {1, 1, 1, 0, 0},
   };
@@ -1632,7 +1641,7 @@ void trivial_3way_test() {
   //correct_beta2[std::pair(0,1)] = -5;
   //correct_beta3[std::make_tuple(0,1,2)] = 4.6;
   correct_beta[0] = 2.3;
-  correct_beta[pair_to_val(std::make_tuple(0,1), p)] = 5;
+  correct_beta[pair_to_val(std::make_tuple(0,3), p)] = 5;
   correct_beta[triplet_to_val(std::make_tuple(0,1,2), p)] = -14.6;
   // val_to_triplet()
 
@@ -1698,62 +1707,45 @@ void trivial_3way_test() {
   XMatrixSparse Xc = sparsify_X(xm, n, p);
   X_uncompressed Xu = construct_host_X(&Xc);
 
-  robin_hood::unordered_flat_map<long, float> beta = simple_coordinate_descent_lasso(X, Y, n, p,
+  const int use_adcal = FALSE;
+  Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(X, Y, n, p,
     -1, 0.01, 100,
     100, FALSE, -1, 1.01,
-    NONE, NULL, 0, TRUE,
+    NONE, NULL, 0, use_adcal,
     -1);
+    // auto beta = beta_sets.beta3;
   
   long total_effects = 0;
-  printf("Beta values found:\n");
-  for (auto it = beta.begin(); it != beta.end(); it++) {
-    long value = it->first;
-    float bv = it->second;
-    auto tuple = val_to_triplet(value, p);
-    long a = std::get<0>(tuple);
-    long b = std::get<1>(tuple);
-    long c = std::get<2>(tuple);
-    printf("%d,%d,%d: %f\n", a, b, c, bv);
-
-    //g_assert_true(a <= b);
-    //g_assert_true(b <= c);
-
-    if (bv == 0.0)
-      continue;
-    // printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
-
-    if (bv != 0.0) {
-     total_effects++;
-    }
-
-    int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
-    int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
-    int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
-    int ib = 0, ic = 0;
-    long total_entries_found = 0;
-    // printf("checking col %d, has %d entries\n", a, Xu.host_col_nz[a]);
-    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
-      int cur_row = colA[ia];
-      //if (a == b && a == c) {
-      //  printf("%d: %d ", ia, cur_row);
-      //}
-      while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
-        ib++;
-      while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
-        ic++;
-      if (cur_row == colB[ib] && cur_row == colC[ic]) {
-        //if (a == b && a == c) {
-        //  printf("\n%d,%d,%d\n", ia, ib, ic);
-        //}
-        // pruned_rowsum[cur_row] += bv;
-        total_entries_found++;
+  auto print_beta_set = [&](auto beta_set) {
+    for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
+      long val = it->first;
+      if (val < p) {
+        printf("%d: %f\n", val, it->second);
+      } else if (val < p*p) {
+        auto pair = val_to_pair(val, p);
+        printf("%d,%d: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
+      } else {
+        g_assert_true(val < p*p*p);
+        auto triple = val_to_triplet(val, p);
+        printf("%d,%d,%d: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
       }
     }
-    if (a == b && a == c) {
-    //  printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
-     g_assert_true(total_entries_found == Xu.host_col_nz[a]);
-    }
-  }
+  };
+  printf("Beta values found:\n");
+  printf("beta 1:\n");
+  print_beta_set(&beta_sets.beta1);
+  printf("beta 2:\n");
+  print_beta_set(&beta_sets.beta2);
+  printf("beta 3:\n");
+  print_beta_set(&beta_sets.beta3);
+
+  g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 2.0);
+  long tmpval = pair_to_val(std::make_tuple(0,3), p);
+  g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) != 0.0);
+  tmpval = triplet_to_val(std::make_tuple(0,1,2), p);
+  g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -10.0);
+
+  g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 6);
 
   for (int i = 0; i < p; i++) {
     free(xm[i]);

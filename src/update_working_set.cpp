@@ -1,6 +1,7 @@
+#include "robin_hood.h"
 #include <omp.h>
 #include <stdlib.h>
-// #include <glib-2.0/glib.h>
+#include <glib-2.0/glib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "liblasso.h"
@@ -47,7 +48,7 @@ struct CL_Source read_file(char* filename)
     return src;
 }
 
-Active_Set active_set_new(int max_length)
+Active_Set active_set_new(int max_length, int p)
 {
     // robin_hood::unordered_flat_map<long, struct AS_Entry> entries;
     //struct AS_Entry* entries = malloc(sizeof *entries * max_length);
@@ -60,14 +61,25 @@ Active_Set active_set_new(int max_length)
     as.length = 0;
     as.max_length = max_length;
     as.permutation = NULL;
+    as.p = p;
     return as;
 }
 
 void active_set_free(Active_Set as)
 {
-    auto c = as.entries.begin();
-    auto e = as.entries.end();
-    for (; c != e; c++) {
+    for (auto c = as.entries1.begin(); c != as.entries1.end(); c++) {
+      struct AS_Entry e = c->second;
+      if (NULL != e.col.compressed_indices) {
+          free(e.col.compressed_indices);
+      }
+    }
+    for (auto c = as.entries2.begin(); c != as.entries2.end(); c++) {
+      struct AS_Entry e = c->second;
+      if (NULL != e.col.compressed_indices) {
+          free(e.col.compressed_indices);
+      }
+    }
+    for (auto c = as.entries3.begin(); c != as.entries3.end(); c++) {
       struct AS_Entry e = c->second;
       if (NULL != e.col.compressed_indices) {
           free(e.col.compressed_indices);
@@ -82,23 +94,57 @@ void active_set_free(Active_Set as)
     //  }
     //}
     // free(as.entries);
-    as.entries.clear();
+    as.entries1.clear();
+    as.entries2.clear();
+    as.entries3.clear();
     if (NULL != as.permutation)
         gsl_permutation_free(as.permutation);
 }
 
-void active_set_append(Active_Set* as, int value, int* col, int len)
+bool active_set_present(Active_Set *as, long value) {
+  robin_hood::unordered_flat_map<long, AS_Entry> *entries;
+  int p = as->p;
+  if (value < p) {
+    entries = &as->entries1;
+  } else if (value < p*p) {
+    entries = &as->entries2;
+  } else {
+    entries = &as->entries3;
+  }
+
+  return (entries->contains(value) &&  entries->at(value).present);
+}
+
+void active_set_append(Active_Set* as, long value, int* col, int len)
 {
   //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
   //  printf("appending interesting col %d to as\n", value);
   //}
-  if (as->entries.contains(value)) {
-    struct AS_Entry* e = &as->entries[value];
-    if (e->present)
+  printf("as, adding val %ld as ", value);
+  robin_hood::unordered_flat_map<long, AS_Entry> *entries;
+  int p = as->p;
+  if (p % 5 != 0) {
+    printf("\np = %d\n", p);
+    g_assert_true(p % 5 == 0);
+  }
+  if (value < p) {
+    printf("[%ld < %d]: main\n", value, p);
+    entries = &as->entries1;
+  } else if (value < p*p) {
+    printf("[%ld < %d]: pair\n", value, p*p);
+    entries = &as->entries2;
+  } else {
+    printf("triple\n");
+    entries = &as->entries3;
+  }
+  if (entries->contains(value)) {
+    struct AS_Entry e = entries->at(value);
+    if (e.present)
       return;
-    if (e->was_present) {
-        e->present = TRUE;
+    if (e.was_present) {
+        e.present = TRUE;
     }
+    entries->insert_or_assign(value, e);
   } else {
     struct AS_Entry e;
     e.val = value;
@@ -106,26 +152,35 @@ void active_set_append(Active_Set* as, int value, int* col, int len)
     e.was_present = TRUE;
     e.col = col_to_s8b_col(len, col);
     int i = as->length;
-    as->entries.insert_or_assign(value, e);
+    entries->insert_or_assign(value, e);
   }
   as->length++;
 }
 
-void active_set_remove(Active_Set* as, int index)
+void active_set_remove(Active_Set* as, long value)
 {
-    as->entries[index].present = FALSE;
+    robin_hood::unordered_flat_map<long, AS_Entry> *entries;
+    int p = as->p;
+    if (value < p) {
+      entries = &as->entries1;
+    } else if (value < p*p) {
+      entries = &as->entries2;
+    } else {
+      entries = &as->entries3;
+    }
+    entries->at(value).present = FALSE; //TODO does this work?
     as->length--;
 }
 
-int active_set_get_index(Active_Set* as, int index)
-{
-    struct AS_Entry* e = &as->entries[index];
-    if (e->present) {
-        return e->val;
-    } else {
-        return -INT_MAX;
-    }
-}
+//int active_set_get_index(Active_Set* as, int index)
+//{
+//    struct AS_Entry* e = &as->entries[index];
+//    if (e->present) {
+//        return e->val;
+//    } else {
+//        return -INT_MAX;
+//    }
+//}
 
 
 /*
@@ -503,13 +558,14 @@ char update_working_set_cpu(
                 // Iterate through matrix of remaining pairs, checking three-way interactions.
                 //TODO: maybe it's worth completely solving main effects, re-running pruning, then checking pairwise, re-run, 3way
                 // to minimise the number of candidates at later stages.
-                printf("checking main: %ld,%ld,%ld\n", main, main, main); //TOOD: maintain separate lists so we can solve them in order
-                sum_with_col[pair_to_val(std::make_tuple(main, main), p)] += rowsum_diff;
+                printf("checking main: %ld\n", main); //TOOD: maintain separate lists so we can solve them in order
+                sum_with_col[main] += rowsum_diff;
+                // sum_with_col[pair_to_val(std::make_tuple(main, main), p)] += rowsum_diff;
                 for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
                   int inter = relevant_row_set.rows[row_main][ri];
                   if (inter > main) {
-                    printf("checking pairwise %ld,%ld,%d\n", main, main, inter); //TOOD: maintain separate lists so we can solve them in order
-                    sum_with_col[pair_to_val(std::make_tuple(main, inter), p)] += rowsum_diff;
+                    printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
+                    sum_with_col[inter] += rowsum_diff;
                     for (int ri2 = ri+1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                       int inter2 = relevant_row_set.rows[row_main][ri2];
                       long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
@@ -580,7 +636,7 @@ char update_working_set_cpu(
         //    }
         //}
         if (main == interesting_col) {
-          printf("interesting column sum (%ld,%d): %f\n", main, interesting_col, sum_with_col[pair_to_val(std::make_tuple(interesting_col, interesting_col), p)]);
+          printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
         }
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
@@ -592,19 +648,46 @@ char update_working_set_cpu(
             // long inter = get_num(pair.first, p).i;
             long tuple_val = curr_inter->first;
             float sum = std::abs(curr_inter->second);
-            std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
-            printf("%d,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
+            if (tuple_val == main) {
+              printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
+            } else if (tuple_val < p) {
+              printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
+            } else {
+              g_assert_true(tuple_val < p*p);
+              std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
+              printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
+            }
             max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
             if (sum > lambda) {
-                // long inter = get_num(pair.first, p).i;
+                int a, b, c;
+                long k;
                 std::tuple<long,long> inter_pair = val_to_pair(tuple_val, p);
+                if (tuple_val == main) {
+                  a = main;
+                  b = main; //TODO: unnecessary
+                  c = main;
+                  // k = pair_to_val(std::make_tuple(a, b), p);
+                  k = main;
+                } else if (tuple_val < p) {
+                  a = main;
+                  b = tuple_val;
+                  c = main; //TODO: unnecessary
+                  k = pair_to_val(std::make_tuple(a, b), p);
+                  if (k < p) {
+                    printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
+                  }
+                  g_assert_true(k >= p || k < p*p);
+                } else {
+                  g_assert_true(tuple_val <= p*p);
+                  a = main;
+                  b = std::get<0>(inter_pair);
+                  c = std::get<1>(inter_pair);
+                  k = triplet_to_val(std::make_tuple(a, b, c), p);
+                }
+                // long inter = get_num(pair.first, p).i;
                 long inter = std::get<0>(inter_pair);
                 // int k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                int a = main;
-                int b = std::get<0>(inter_pair);
-                int c = std::get<1>(inter_pair);
-                int k = triplet_to_val(std::make_tuple(a, b, c), p);
 
                 // host_append_sets[omp_get_thread_num()].insert(k);
 
@@ -690,9 +773,10 @@ char update_working_set_cpu(
                 //}
                 //long inter_len = pos;
 
-                if (main == interesting_col && inter == interesting_col) {
-                  printf("appending interesting col %d (%d,%d)\n", k, main, inter);
-                }
+                // if (main == interesting_col && inter == interesting_col) {
+                // if (main == interesting_col) {
+                  printf("appending interesting col %d (%ld)\n", k, main);
+                // }
                 active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
                 total++;

@@ -1,8 +1,8 @@
-Active_Set active_set_new(int max_length);
+Active_Set active_set_new(int max_length, int p);
 void active_set_free(Active_Set as);
-void active_set_append(Active_Set *as, int value, int *col, int len);
-void active_set_remove(Active_Set *as, int index);
-int active_set_get_index(Active_Set *as, int index);
+void active_set_append(Active_Set *as, long value, int *col, int len);
+void active_set_remove(Active_Set *as, long value);
+bool active_set_present(Active_Set *as, long value);
 
 char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc,

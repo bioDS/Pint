@@ -1,8 +1,8 @@
 // #define interesting_col 58
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
-#define interesting_col 54
-// #define interesting_col 0
+// #define interesting_col 54
+#define interesting_col 2
 #include <errno.h>
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_randist.h>
@@ -100,10 +100,13 @@ typedef struct {
   // int *entries;
   // struct AS_Properties *properties;
   // struct AS_Entry *entries;
-  robin_hood::unordered_flat_map<long, struct AS_Entry> entries;
+  robin_hood::unordered_flat_map<long, struct AS_Entry> entries1;
+  robin_hood::unordered_flat_map<long, struct AS_Entry> entries2;
+  robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
   int length;
   int max_length;
   gsl_permutation *permutation;
+  int p;
   // S8bCol *compressed_cols;
 } Active_Set;
 
@@ -117,11 +120,18 @@ struct AS_Entry {
 };
 
 typedef struct {
+  robin_hood::unordered_flat_map<long, float> beta1;
+  robin_hood::unordered_flat_map<long, float> beta2;
+  robin_hood::unordered_flat_map<long, float> beta3;
+} Beta_Value_Sets;
+
+typedef struct {
   XMatrixSparse Xc;
   float **last_rowsum;
   Thread_Cache *thread_caches;
   int n;
-  robin_hood::unordered_flat_map<long, float> *beta;
+  // robin_hood::unordered_flat_map<long, float> *beta;
+  Beta_Value_Sets *beta_sets;
   float *last_max;
   bool *wont_update;
   int p;
