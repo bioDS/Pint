@@ -1,15 +1,14 @@
 #include "robin_hood.h"
+#include <glib-2.0/glib.h>
 #include <omp.h>
 #include <stdlib.h>
-#include <glib-2.0/glib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
-#include "liblasso.h"
 #include "flat_hash_map.hpp"
+#include "liblasso.h"
 
 #define TRUE 1
 #define FALSE 0
-
 
 struct CL_Source {
     char* buffer;
@@ -61,22 +60,22 @@ Active_Set active_set_new(int max_length, int p)
 void active_set_free(Active_Set as)
 {
     for (auto c = as.entries1.begin(); c != as.entries1.end(); c++) {
-      struct AS_Entry e = c->second;
-      if (NULL != e.col.compressed_indices) {
-          free(e.col.compressed_indices);
-      }
+        struct AS_Entry e = c->second;
+        if (NULL != e.col.compressed_indices) {
+            free(e.col.compressed_indices);
+        }
     }
     for (auto c = as.entries2.begin(); c != as.entries2.end(); c++) {
-      struct AS_Entry e = c->second;
-      if (NULL != e.col.compressed_indices) {
-          free(e.col.compressed_indices);
-      }
+        struct AS_Entry e = c->second;
+        if (NULL != e.col.compressed_indices) {
+            free(e.col.compressed_indices);
+        }
     }
     for (auto c = as.entries3.begin(); c != as.entries3.end(); c++) {
-      struct AS_Entry e = c->second;
-      if (NULL != e.col.compressed_indices) {
-          free(e.col.compressed_indices);
-      }
+        struct AS_Entry e = c->second;
+        if (NULL != e.col.compressed_indices) {
+            free(e.col.compressed_indices);
+        }
     }
     as.entries1.clear();
     as.entries2.clear();
@@ -85,72 +84,73 @@ void active_set_free(Active_Set as)
         gsl_permutation_free(as.permutation);
 }
 
-bool active_set_present(Active_Set *as, long value) {
-  robin_hood::unordered_flat_map<long, AS_Entry> *entries;
-  int p = as->p;
-  if (value < p) {
-    entries = &as->entries1;
-  } else if (value < p*p) {
-    entries = &as->entries2;
-  } else {
-    entries = &as->entries3;
-  }
+bool active_set_present(Active_Set* as, long value)
+{
+    robin_hood::unordered_flat_map<long, AS_Entry>* entries;
+    int p = as->p;
+    if (value < p) {
+        entries = &as->entries1;
+    } else if (value < p * p) {
+        entries = &as->entries2;
+    } else {
+        entries = &as->entries3;
+    }
 
-  return (entries->contains(value) &&  entries->at(value).present);
+    return (entries->contains(value) && entries->at(value).present);
 }
 
 void active_set_append(Active_Set* as, long value, int* col, int len)
 {
-  //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
-  //  printf("appending interesting col %d to as\n", value);
-  //}
-  // printf("as, adding val %ld as ", value);
-  robin_hood::unordered_flat_map<long, AS_Entry> *entries;
-  int p = as->p;
-  if (p % 5 != 0) {
-    // printf("\np = %d\n", p);
-    g_assert_true(p % 5 == 0);
-  }
-  if (value < p) {
-    // printf("[%ld < %d]: main\n", value, p);
-    entries = &as->entries1;
-  } else if (value < p*p) {
-    // printf("[%ld < %d]: pair\n", value, p*p);
-    entries = &as->entries2;
-  } else {
-    // printf("triple\n");
-    entries = &as->entries3;
-  }
-  if (entries->contains(value)) {
-    struct AS_Entry e = entries->at(value);
-    if (e.present)
-      return;
-    if (e.was_present) {
-        e.present = TRUE;
+    //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
+    //  printf("appending interesting col %d to as\n", value);
+    //}
+    // printf("as, adding val %ld as ", value);
+    robin_hood::unordered_flat_map<long, AS_Entry>* entries;
+    int p = as->p;
+    if (p % 5 != 0) {
+        // printf("\np = %d\n", p);
+        g_assert_true(p % 5 == 0);
     }
-    entries->insert_or_assign(value, e);
-  } else {
-    struct AS_Entry e;
-    e.val = value;
-    e.present = TRUE;
-    e.was_present = TRUE;
-    e.col = col_to_s8b_col(len, col);
-    int i = as->length;
-    entries->insert_or_assign(value, e);
-  }
-  as->length++;
+    if (value < p) {
+        // printf("[%ld < %d]: main\n", value, p);
+        entries = &as->entries1;
+    } else if (value < p * p) {
+        // printf("[%ld < %d]: pair\n", value, p*p);
+        entries = &as->entries2;
+    } else {
+        // printf("triple\n");
+        entries = &as->entries3;
+    }
+    if (entries->contains(value)) {
+        struct AS_Entry e = entries->at(value);
+        if (e.present)
+            return;
+        if (e.was_present) {
+            e.present = TRUE;
+        }
+        entries->insert_or_assign(value, e);
+    } else {
+        struct AS_Entry e;
+        e.val = value;
+        e.present = TRUE;
+        e.was_present = TRUE;
+        e.col = col_to_s8b_col(len, col);
+        int i = as->length;
+        entries->insert_or_assign(value, e);
+    }
+    as->length++;
 }
 
 void active_set_remove(Active_Set* as, long value)
 {
-    robin_hood::unordered_flat_map<long, AS_Entry> *entries;
+    robin_hood::unordered_flat_map<long, AS_Entry>* entries;
     int p = as->p;
     if (value < p) {
-      entries = &as->entries1;
-    } else if (value < p*p) {
-      entries = &as->entries2;
+        entries = &as->entries1;
+    } else if (value < p * p) {
+        entries = &as->entries2;
     } else {
-      entries = &as->entries3;
+        entries = &as->entries3;
     }
     entries->at(value).present = FALSE; //TODO does this work?
     as->length--;
@@ -166,12 +166,11 @@ void active_set_remove(Active_Set* as, long value)
 //    }
 //}
 
-
 char update_working_set_cpu(
-    struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache *thread_caches, Active_Set *as,
+    struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache* thread_caches, Active_Set* as,
     struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
-    float lambda, robin_hood::unordered_flat_map<long, float> *beta, int* updateable_items, int count_may_update,
-    float *last_max)
+    float lambda, robin_hood::unordered_flat_map<long, float>* beta, int* updateable_items, int count_may_update,
+    float* last_max)
 {
     int* host_X = Xu.host_X;
     int* host_col_nz = Xu.host_col_nz;
@@ -183,12 +182,13 @@ char update_working_set_cpu(
 
     long total_inter_cols = 0;
     int correct_k = 0;
-#pragma omp parallel for reduction(+: total_inter_cols, total, skipped) schedule(static)
+#pragma omp parallel for reduction(+ \
+                                   : total_inter_cols, total, skipped) schedule(static)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
-        int *col_i_cache = thread_cache.col_i;
-        int *col_j_cache = thread_cache.col_j;
+        int* col_i_cache = thread_cache.col_i;
+        int* col_j_cache = thread_cache.col_j;
         long main = updateable_items[main_i];
         float max_inter_val = 0;
         int inter_cols = 0;
@@ -198,55 +198,55 @@ char update_working_set_cpu(
         //robin_hood::unordered_flat_map<std::pair<long, long>, float> sum_with_col2;
         int main_col_len = 0;
 
-        int *column_entries = col_i_cache;
+        int* column_entries = col_i_cache;
         long col_entry_pos = 0;
         long entry = -1;
         for (int r = 0; r < Xc.cols[main].nwords; r++) {
-          S8bWord word = Xc.cols[main].compressed_indices[r];
-          unsigned long values = word.values;
-          for (int j = 0; j <= group_size[word.selector]; j++) {
-            int diff = values & masks[word.selector];
-            if (diff != 0) {
-                entry += diff;
+            S8bWord word = Xc.cols[main].compressed_indices[r];
+            unsigned long values = word.values;
+            for (int j = 0; j <= group_size[word.selector]; j++) {
+                int diff = values & masks[word.selector];
+                if (diff != 0) {
+                    entry += diff;
 
-                int row_main = entry;
-                float rowsum_diff = rowsum[row_main];
+                    int row_main = entry;
+                    float rowsum_diff = rowsum[row_main];
 
-                // Do thing per entry here:
+                    // Do thing per entry here:
 
-                // Iterate through matrix of remaining pairs, checking three-way interactions.
-                // printf("checking main: %ld\n", main); //TOOD: maintain separate lists so we can solve them in order
-                sum_with_col[main] += rowsum_diff;
-                for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
-                  int inter = relevant_row_set.rows[row_main][ri];
-                  if (inter > main) {
-                    // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
-                    sum_with_col[inter] += rowsum_diff;
-                    for (int ri2 = ri+1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
-                      int inter2 = relevant_row_set.rows[row_main][ri2];
-                      long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                      // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
-                      if (row_main == 0 && inter == 1 && inter2 == 2) {
-                        // printf("interesting col ind == %ld", inter_ind);
-                      }
-                      sum_with_col[inter_ind] += rowsum_diff;
-                      if (main == interesting_col && inter == interesting_col) {
-                        // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
-                      }
+                    // Iterate through matrix of remaining pairs, checking three-way interactions.
+                    // printf("checking main: %ld\n", main); //TOOD: maintain separate lists so we can solve them in order
+                    sum_with_col[main] += rowsum_diff;
+                    for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                        int inter = relevant_row_set.rows[row_main][ri];
+                        if (inter > main) {
+                            // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
+                            sum_with_col[inter] += rowsum_diff;
+                            for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
+                                int inter2 = relevant_row_set.rows[row_main][ri2];
+                                long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
+                                // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
+                                if (row_main == 0 && inter == 1 && inter2 == 2) {
+                                    // printf("interesting col ind == %ld", inter_ind);
+                                }
+                                sum_with_col[inter_ind] += rowsum_diff;
+                                if (main == interesting_col && inter == interesting_col) {
+                                    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                                }
+                            }
+                        }
                     }
-                  }
-                }
 
-                column_entries[col_entry_pos] = entry;
-                col_entry_pos++;
+                    column_entries[col_entry_pos] = entry;
+                    col_entry_pos++;
+                }
+                values >>= item_width[word.selector];
             }
-            values >>= item_width[word.selector];
-          }
         }
         main_col_len = col_entry_pos;
 
         if (VERBOSE && main == interesting_col) {
-          printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
+            printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
         }
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
@@ -256,68 +256,68 @@ char update_working_set_cpu(
             long tuple_val = curr_inter->first;
             float sum = std::abs(curr_inter->second);
             if (tuple_val == main) {
-              // printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
+                // printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
             } else if (tuple_val < p) {
-              // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
+                // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
             } else {
-              g_assert_true(tuple_val < p*p);
-              // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
-              // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
+                g_assert_true(tuple_val < p * p);
+                // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
+                // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
             }
             max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
             if (sum > lambda) {
                 int a, b, c;
                 long k;
-                std::tuple<long,long> inter_pair = val_to_pair(tuple_val, p);
+                std::tuple<long, long> inter_pair = val_to_pair(tuple_val, p);
                 if (tuple_val == main) {
-                  a = main;
-                  b = main; //TODO: unnecessary
-                  c = main;
-                  // k = pair_to_val(std::make_tuple(a, b), p);
-                  k = main;
+                    a = main;
+                    b = main; //TODO: unnecessary
+                    c = main;
+                    // k = pair_to_val(std::make_tuple(a, b), p);
+                    k = main;
                 } else if (tuple_val < p) {
-                  a = main;
-                  b = tuple_val;
-                  c = main; //TODO: unnecessary
-                  k = pair_to_val(std::make_tuple(a, b), p);
-                  if (k < p) {
-                    printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
-                  }
-                  g_assert_true(k >= p || k < p*p);
+                    a = main;
+                    b = tuple_val;
+                    c = main; //TODO: unnecessary
+                    k = pair_to_val(std::make_tuple(a, b), p);
+                    if (k < p) {
+                        printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
+                    }
+                    g_assert_true(k >= p || k < p * p);
                 } else {
-                  g_assert_true(tuple_val <= p*p);
-                  a = main;
-                  b = std::get<0>(inter_pair);
-                  c = std::get<1>(inter_pair);
-                  k = triplet_to_val(std::make_tuple(a, b, c), p);
+                    g_assert_true(tuple_val <= p * p);
+                    a = main;
+                    b = std::get<0>(inter_pair);
+                    c = std::get<1>(inter_pair);
+                    k = triplet_to_val(std::make_tuple(a, b, c), p);
                 }
                 long inter = std::get<0>(inter_pair);
 
-                int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
-                int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
-                int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
+                int* colA = &Xu.host_X[Xu.host_col_offsets[a]];
+                int* colB = &Xu.host_X[Xu.host_col_offsets[b]];
+                int* colC = &Xu.host_X[Xu.host_col_offsets[c]];
                 int ib = 0, ic = 0;
                 long inter_len = 0;
                 for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
-                  int cur_row = colA[ia];
-                  //if (a == b && a == c) {
-                  //  printf("%d: %d ", ia, cur_row);
-                  //}
-                  while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
-                    ib++;
-                  while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
-                    ic++;
-                  if (cur_row == colB[ib] && cur_row == colC[ic]) {
+                    int cur_row = colA[ia];
                     //if (a == b && a == c) {
-                    //  printf("\n%d,%d,%d\n", ia, ib, ic);
+                    //  printf("%d: %d ", ia, cur_row);
                     //}
-                    col_j_cache[inter_len] = cur_row;
-                    inter_len++;
-                  }
+                    while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+                        ib++;
+                    while (colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
+                        ic++;
+                    if (cur_row == colB[ib] && cur_row == colC[ic]) {
+                        //if (a == b && a == c) {
+                        //  printf("\n%d,%d,%d\n", ia, ib, ic);
+                        //}
+                        col_j_cache[inter_len] = cur_row;
+                        inter_len++;
+                    }
                 }
                 // if (main == interesting_col) {
-                  // printf("appending interesting col %d (%ld)\n", k, main);
+                // printf("appending interesting col %d (%ld)\n", k, main);
                 // }
                 active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
@@ -326,19 +326,19 @@ char update_working_set_cpu(
             curr_inter++;
         }
         if (main == interesting_col)
-          printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
+            printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
         last_max[main] = max_inter_val;
         sum_with_col.clear();
     }
-    
+
     // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
     return increased_set;
 }
 
 char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, bool* wont_update, int p, int n,
-    float lambda, robin_hood::unordered_flat_map<long, float> *beta, int* updateable_items, int count_may_update, Active_Set* as,
-    Thread_Cache *thread_caches, struct OpenCL_Setup *setup, float* last_max)
+    float lambda, robin_hood::unordered_flat_map<long, float>* beta, int* updateable_items, int count_may_update, Active_Set* as,
+    Thread_Cache* thread_caches, struct OpenCL_Setup* setup, float* last_max)
 {
     int p_int = p * (p + 1) / 2;
 
@@ -364,14 +364,13 @@ char update_working_set(
     //}
     char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
     for (int i = 0; i < n; i++) {
-      free(new_row_set.rows[i]);
+        free(new_row_set.rows[i]);
     }
     free(new_row_set.rows);
     free(new_row_set.row_lengths);
 
     return increased_set;
 }
-
 
 //struct OpenCL_Setup setup_working_set_kernel(
 //    struct X_uncompressed Xu, int n, int p)

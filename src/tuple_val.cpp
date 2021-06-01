@@ -1,30 +1,34 @@
 #include "liblasso.h"
 //TODO: test these
 
-std::tuple<long, long> val_to_pair(long val, long range) {
+std::tuple<long, long> val_to_pair(long val, long range)
+{
     int a = val / range;
     int b = val % range;
     a -= 1;
     return std::make_tuple(a, b);
 }
 
-std::tuple<long, long, long> val_to_triplet(long val, long range) {
-    int a = val / (range*range);
-    int b = (val-(a*range*range)) / (range);
+std::tuple<long, long, long> val_to_triplet(long val, long range)
+{
+    int a = val / (range * range);
+    int b = (val - (a * range * range)) / (range);
     int c = val % range;
     a -= 1;
     return std::make_tuple(a, b, c);
 }
 
-long pair_to_val(std::tuple<long,long> tp, long range) {
+long pair_to_val(std::tuple<long, long> tp, long range)
+{
     int a = std::get<0>(tp);
     int b = std::get<1>(tp);
-    return (a+1)*range + b;
+    return (a + 1) * range + b;
 }
 
-long triplet_to_val(std::tuple<long,long,long> tp, long range) {
+long triplet_to_val(std::tuple<long, long, long> tp, long range)
+{
     int a = std::get<0>(tp);
     int b = std::get<1>(tp);
     int c = std::get<2>(tp);
-    return (a+1)*range*range + b*range + c;
+    return (a + 1) * range * range + b * range + c;
 }

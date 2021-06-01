@@ -7,12 +7,12 @@
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_rng.h>
+#include <limits.h>
 #include <math.h>
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 // #include <CL/opencl.h>
 #include <math.h>
@@ -33,40 +33,40 @@ extern "C" {
 #endif
 
 typedef struct {
-  int *col_i;
-  int *col_j;
-  // robin_hood::unordered_flat_map<long, float> lf_map;
+    int* col_i;
+    int* col_j;
+    // robin_hood::unordered_flat_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
-  long val;
-  // disable padding for now, pretty sure we don't need it.
-  // alignas(64) long val;
-  // char padding[64 - sizeof(long)];
+    long val;
+    // disable padding for now, pretty sure we don't need it.
+    // alignas(64) long val;
+    // char padding[64 - sizeof(long)];
 } pad_int;
 
 typedef struct {
-  int i;
-  int j;
+    int i;
+    int j;
 } int_pair;
 
 enum LOG_LEVEL {
-  ITER,
-  LAMBDA,
-  NONE,
+    ITER,
+    LAMBDA,
+    NONE,
 };
 
 struct X_uncompressed {
-  int* host_X;
-  int* host_col_nz;
-  int* host_col_offsets;
-  int* host_X_row;
-  int* host_row_nz;
-  int* host_row_offsets;
-  size_t total_size;
+    int* host_X;
+    int* host_col_nz;
+    int* host_col_offsets;
+    int* host_X_row;
+    int* host_row_nz;
+    int* host_row_offsets;
+    size_t total_size;
 };
 struct AS_Properties {
-  int was_present : 1;
-  int present : 1;
+    int was_present : 1;
+    int present : 1;
 };
 
 struct OpenCL_Setup {
@@ -97,51 +97,51 @@ struct OpenCL_Setup {
 #include "tuple_val.h"
 
 typedef struct {
-  // int *entries;
-  // struct AS_Properties *properties;
-  // struct AS_Entry *entries;
-  robin_hood::unordered_flat_map<long, struct AS_Entry> entries1;
-  robin_hood::unordered_flat_map<long, struct AS_Entry> entries2;
-  robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
-  int length;
-  int max_length;
-  gsl_permutation *permutation;
-  int p;
-  // S8bCol *compressed_cols;
+    // int *entries;
+    // struct AS_Properties *properties;
+    // struct AS_Entry *entries;
+    robin_hood::unordered_flat_map<long, struct AS_Entry> entries1;
+    robin_hood::unordered_flat_map<long, struct AS_Entry> entries2;
+    robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
+    int length;
+    int max_length;
+    gsl_permutation* permutation;
+    int p;
+    // S8bCol *compressed_cols;
 } Active_Set;
 
 struct AS_Entry {
-  long val : 62; //TODO: change this to a tuple.
-  int was_present : 1;
-  int present : 1;
-  S8bCol col;
-  // TODO: shouldn't need this
-  // char padding[39];
+    long val : 62; //TODO: change this to a tuple.
+    int was_present : 1;
+    int present : 1;
+    S8bCol col;
+    // TODO: shouldn't need this
+    // char padding[39];
 };
 
 typedef struct {
-  robin_hood::unordered_flat_map<long, float> beta1;
-  robin_hood::unordered_flat_map<long, float> beta2;
-  robin_hood::unordered_flat_map<long, float> beta3;
+    robin_hood::unordered_flat_map<long, float> beta1;
+    robin_hood::unordered_flat_map<long, float> beta2;
+    robin_hood::unordered_flat_map<long, float> beta3;
 } Beta_Value_Sets;
 
 typedef struct {
-  XMatrixSparse Xc;
-  float **last_rowsum;
-  Thread_Cache *thread_caches;
-  int n;
-  // robin_hood::unordered_flat_map<long, float> *beta;
-  Beta_Value_Sets *beta_sets;
-  float *last_max;
-  bool *wont_update;
-  int p;
-  long p_int;
-  XMatrixSparse X2c;
-  float *Y;
-  float *max_int_delta;
-  int_pair *precalc_get_num;
-  gsl_permutation *iter_permutation;
-  struct X_uncompressed Xu;
+    XMatrixSparse Xc;
+    float** last_rowsum;
+    Thread_Cache* thread_caches;
+    int n;
+    // robin_hood::unordered_flat_map<long, float> *beta;
+    Beta_Value_Sets* beta_sets;
+    float* last_max;
+    bool* wont_update;
+    int p;
+    long p_int;
+    XMatrixSparse X2c;
+    float* Y;
+    float* max_int_delta;
+    int_pair* precalc_get_num;
+    gsl_permutation* iter_permutation;
+    struct X_uncompressed Xu;
 } Iter_Vars;
 
 #include "csv.h"
@@ -150,17 +150,16 @@ typedef struct {
 #include "regression.h"
 #include "update_working_set.h"
 
-
-int **X2_from_X(int **X, int n, int p);
-float *read_y_csv(char *fn, int n);
-XMatrix read_x_csv(char *fn, int n, int p);
+int** X2_from_X(int** X, int n, int p);
+float* read_y_csv(char* fn, int n);
+XMatrix read_x_csv(char* fn, int n, int p);
 int_pair get_num(long num, long p);
 void free_static_resources();
 void initialise_static_resources();
-void parallel_shuffle(gsl_permutation *permutation, long split_size,
-                      long final_split_size, long splits);
+void parallel_shuffle(gsl_permutation* permutation, long split_size,
+    long final_split_size, long splits);
 long get_p_int(long p, long max_interaction_distance);
-int_pair *get_all_nums(int p, int max_interaction_distance);
+int_pair* get_all_nums(int p, int max_interaction_distance);
 
 #define TRUE 1
 #define FALSE 0
@@ -191,8 +190,8 @@ extern int skipped_updates_entries;
 extern int total_updates_entries;
 extern int zero_updates;
 extern int zero_updates_entries;
-extern int *colsum;
-extern float *col_ysum;
+extern int* colsum;
+extern float* col_ysum;
 extern int max_size_given_entries[61];
 extern long total_beta_updates;
 extern long total_beta_nz_updates;
@@ -201,7 +200,7 @@ extern float halt_error_diff;
 #define NUM_MAX_ROWSUMS 1
 extern float max_rowsums[NUM_MAX_ROWSUMS];
 extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
-extern gsl_permutation *global_permutation;
-extern gsl_permutation *global_permutation_inverse;
-extern int_pair *cached_nums;
+extern gsl_permutation* global_permutation;
+extern gsl_permutation* global_permutation_inverse;
+extern int_pair* cached_nums;
 extern int VERBOSE;
