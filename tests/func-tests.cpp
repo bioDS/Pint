@@ -414,7 +414,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture *fixture,
     printf("\nusing small test case\n");
     fixture->n = 1000;
     fixture->p = 100;
-    LAMBDA_MIN = 0.1*fixture->n/2;
+    LAMBDA_MIN = 0.0001*fixture->n/2;
     //xfile = "../testX.csv";
     //yfile = "../testY.csv";
     xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
@@ -1058,7 +1058,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
   robin_hood::unordered_flat_map<long, float> *beta1 = &beta_sets->beta1;
   robin_hood::unordered_flat_map<long, float> *beta2 = &beta_sets->beta2;
   robin_hood::unordered_flat_map<long, float> *beta3 = &beta_sets->beta3;
-  robin_hood::unordered_flat_map<long, float> *beta = &beta_sets->beta3; //TODO: dont
+  robin_hood::unordered_flat_map<long, float> *beta = &beta_sets->beta2; //TODO: dont
   float *last_max = vars->last_max;
   bool *wont_update = vars->wont_update;
   int p = vars->p;
@@ -1081,7 +1081,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
 
     parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
                      permutation_splits);
-#pragma omp parallel for num_threads(NumCores)                                 \
+// #pragma omp parallel for num_threads(NumCores)                                 \
     shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static) reduction(+:total_basic_beta_updates, total_basic_beta_nz_updates)
     for (int k = 0; k < p_int; k++) {
       // for (int main_effect = 0; main_effect < p; main_effect++) {
@@ -1227,10 +1227,13 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   robin_hood::unordered_flat_map<long, float> pruning_beta2;
   robin_hood::unordered_flat_map<long, float> pruning_beta3;
   Beta_Value_Sets pruning_beta_sets = {pruning_beta1, pruning_beta2, pruning_beta3};
-  // robin_hood::unordered_flat_map<long, float> beta
+
+  for (long i = 0; i < p_int; i++) {
+    beta_sets.beta2[i] = 0.0;
+  }
+
   float *Y = fixture->Y;
-  printf("test\n");
-  //TODO: breaks at 0.5?
+
   const int MAX_NZ_BETA = 2000;
   gsl_permutation *iter_permutation = gsl_permutation_alloc(p_int);
 
@@ -1312,9 +1315,15 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   clock_gettime(CLOCK_MONOTONIC_RAW, &start);
   // for (int lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
   for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
-    long nz_beta = beta_sets.beta1.size()
-                  +beta_sets.beta2.size()
-                  +beta_sets.beta3.size();
+    //long nz_beta = beta_sets.beta1.size()
+                  //+beta_sets.beta2.size()
+                  //+beta_sets.beta3.size();
+    long nz_beta = 0;
+    for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end(); it++) {
+      if (fabs(it->second) !=  0.0) {
+          nz_beta++;
+      }
+    }
 
     if (nz_beta > MAX_NZ_BETA) {
       break;
@@ -1326,7 +1335,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
     int last_iter_count = 0;
 
     if (Xc.p <= 1000) {
-      // run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+      run_lambda_iters(&iter_vars_basic, lambda, rowsum);
     }
   }
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1334,7 +1343,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
                         (end.tv_sec - start.tv_sec);
   printf("time: %f s\n", basic_cpu_time_used);
 
-  robin_hood::unordered_flat_map<long, float> beta_pruning;
 #pragma omp parallel for schedule(static)
   for (int i = 0; i < p; i++) {
     memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
@@ -1343,9 +1351,6 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   }
   for (int i = 0; i < n; i++) {
     rowsum[i] = -Y[i];
-  }
-  for (int i = 0; i < p_int; i++) {
-    beta_pruning[i] = 0;
   }
   XMatrixSparse X2c_fake;
   Iter_Vars iter_vars_pruned = {
@@ -1380,11 +1385,12 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   for (float lambda = 10000*fixture->n/2; lambda > LAMBDA_MIN; lambda *= 0.9) {
     long nz_beta = 0;
     // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
-    for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
-      if (it->second != 0) {
-        nz_beta++;
-      }
-    }
+    //for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
+    //  if (it->second != 0) {
+    //    nz_beta++;
+    //  }
+    //}
+    nz_beta = pruning_beta_sets.beta1.size() + pruning_beta_sets.beta2.size() + pruning_beta_sets.beta3.size();
     if (nz_beta > MAX_NZ_BETA) {
       break;
     }
@@ -1438,6 +1444,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   long nz_beta_basic = 0;
   long nz_beta_pruning = 0;
   for (int k = 0; k < p_int; k++) {
+    nz_beta_basic += beta_sets.beta2[k] != 0.0;
     int entry = -1;
     for (int i = 0; i < X2c.cols[k].nwords; i++) {
       S8bWord word = X2c.cols[k].compressed_indices[i];
@@ -1448,8 +1455,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
           entry += diff;
 
           // do whatever we need here with the index below:
-          basic_rowsum[entry] += beta3[k];
-          nz_beta_basic += beta3[k] != 0.0;
+          basic_rowsum[entry] += beta_sets.beta2[k];
           // nz_beta_pruning += beta_pruning[k] != 0.0;
           // pruned_rowsum[entry] += beta_pruning[k];
           //if (basic_rowsum[entry] > 1e20) {
@@ -1465,52 +1471,63 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   //}
   long total_effects = 0;
   printf("reading beta values\n");
-  for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
-    total_effects++;
-    long value = it->first;
-    float bv = it->second;
-    auto tuple = val_to_triplet(value, p);
-    long a = std::get<0>(tuple);
-    long b = std::get<1>(tuple);
-    long c = std::get<2>(tuple);
-    // printf("%d,%d,%d\n", a, b, c);
 
-    if (bv == 0.0)
-      continue;
-    // printf("found %d, (%d,%d,%d) bv = %f\n", value, a, b, c, bv);
 
-    if (bv != 0.0) {
-      nz_beta_pruning++;
-    }
 
-    int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
-    int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
-    int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
-    int ib = 0, ic = 0;
-    long total_entries_found = 0;
-    // printf("checking col %d, has %d entries\n", a, Xu.host_col_nz[a]);
-    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
-      int cur_row = colA[ia];
-      //if (a == b && a == c) {
-      //  printf("%d: %d ", ia, cur_row);
-      //}
-      while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
-        ib++;
-      while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
-        ic++;
-      if (cur_row == colB[ib] && cur_row == colC[ic]) {
-        //if (a == b && a == c) {
-        //  printf("\n%d,%d,%d\n", ia, ib, ic);
-        //}
-        pruned_rowsum[cur_row] += bv;
-        total_entries_found++;
+
+  auto check_beta_set = [&](auto beta_set) {
+    for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
+      long val = it->first;
+      float bv = it->second;
+      if (fabs(bv) != 0.0) {
+          nz_beta_pruning++;
+      }
+      auto check_columns = [&](int a, int b, int c) {
+          int *colA = &Xu.host_X[Xu.host_col_offsets[a]];
+          int *colB = &Xu.host_X[Xu.host_col_offsets[b]];
+          int *colC = &Xu.host_X[Xu.host_col_offsets[c]];
+          int ib = 0, ic = 0;
+          long total_entries_found = 0;
+          for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
+            int cur_row = colA[ia];
+            while(colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+              ib++;
+            while(colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
+              ic++;
+            if (cur_row == colB[ib] && cur_row == colC[ic]) {
+              pruned_rowsum[cur_row] += bv;
+              total_entries_found++;
+            }
+          }
+          if (a == b && a == c) {
+           g_assert_true(total_entries_found == Xu.host_col_nz[a]);
+          }
+      };
+      if (val < p) {
+        check_columns(val, val, val);
+      } else if (val < p*p) {
+        auto pair = val_to_pair(val, p);
+        int a = std::get<0>(pair);
+        int b = std::get<1>(pair);
+        g_assert_true(a < b);
+        check_columns(a, a, b);
+      } else {
+        g_assert_true(val < p*p*p);
+        auto triple = val_to_triplet(val, p);
+        int a = std::get<0>(triple);
+        int b = std::get<1>(triple);
+        int c = std::get<2>(triple);
+        g_assert_true(a < b);
+        g_assert_true(b < c);
+        check_columns(a, b, c);
       }
     }
-    if (a == b && a == c) {
-    //  printf("found %d out of %d potential entries\n", total_entries_found, Xu.host_col_nz[a]);
-     g_assert_true(total_entries_found == Xu.host_col_nz[a]);
-    }
-  }
+  };
+
+  check_beta_set(&pruning_beta_sets.beta1);
+  check_beta_set(&pruning_beta_sets.beta2);
+  check_beta_set(&pruning_beta_sets.beta3);
+
   printf("found %d effects\n", total_effects);
   // g_assert_true(nz_beta_pruning >= beta_pruning.size() /2);
   float basic_error = 0.0;

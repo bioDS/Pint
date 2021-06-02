@@ -850,6 +850,12 @@ update_beta_cyclic_old(XMatrixSparse xmatrix_sparse,
     int* column_entry_cache)
 {
     float sumk = xmatrix_sparse.cols[k].nz;
+    //float bk = 0.0;
+    //printf("checking beta for %ld\n", k);
+    //if (beta->contains(k)) {
+    //    printf("beta contains %ld\n", k);
+    //    bk = beta->at(k);
+    //}
     float sumn = xmatrix_sparse.cols[k].nz * beta->at(k);
     int* column_entries = column_entry_cache;
 
