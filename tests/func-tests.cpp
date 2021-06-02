@@ -1584,7 +1584,7 @@ void test_row_list_without_columns() {
   struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
 
   g_assert_true(rs.row_lengths[0] == 1);
-  g_assert_true(rs.row_lengths[1] == 1);
+  g_assert_true(rs.row_lengths[1] == 2);
   g_assert_true(rs.row_lengths[4] == 3);
 
   
