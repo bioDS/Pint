@@ -183,7 +183,7 @@ char update_working_set_cpu(
     long total_inter_cols = 0;
     int correct_k = 0;
 #pragma omp parallel for reduction(+ \
-                                   : total_inter_cols, total, skipped) schedule(static)
+                                   : total_inter_cols, total, skipped)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
@@ -193,8 +193,8 @@ char update_working_set_cpu(
         float max_inter_val = 0;
         int inter_cols = 0;
         // ska::flat_hash_set<long> inters_found;
-        robin_hood::unordered_flat_map<long, float> sum_with_col;
-        // robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
+        // robin_hood::unordered_flat_map<long, float> sum_with_col;
+        robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
         //robin_hood::unordered_flat_map<std::pair<long, long>, float> sum_with_col2;
         int main_col_len = 0;
 

@@ -35,7 +35,7 @@ extern "C" {
 typedef struct {
     int* col_i;
     int* col_j;
-    // robin_hood::unordered_flat_map<long, float> lf_map;
+    robin_hood::unordered_flat_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
     long val;
