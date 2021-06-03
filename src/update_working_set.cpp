@@ -170,7 +170,7 @@ char update_working_set_cpu(
     struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache* thread_caches, Active_Set* as,
     struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
     float lambda, robin_hood::unordered_flat_map<long, float>* beta, int* updateable_items, int count_may_update,
-    float* last_max)
+    float* last_max, int depth)
 {
     int* host_X = Xu.host_X;
     int* host_col_nz = Xu.host_col_nz;
@@ -217,23 +217,27 @@ char update_working_set_cpu(
                     // Iterate through matrix of remaining pairs, checking three-way interactions.
                     // printf("checking main: %ld\n", main); //TOOD: maintain separate lists so we can solve them in order
                     sum_with_col[main] += rowsum_diff;
-                    for (int ri = 0; ri < relevant_row_set.row_lengths[row_main]; ri++) {
-                        int inter = relevant_row_set.rows[row_main][ri];
-                        if (inter > main) {
+                    if (depth > 1) {
+                        int ri = 0;
+                        while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
+                            ri++;
+                        for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                            int inter = relevant_row_set.rows[row_main][ri];
                             // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
                             sum_with_col[inter] += rowsum_diff;
-                            for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
-                                int inter2 = relevant_row_set.rows[row_main][ri2];
-                                long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                                // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
-                                if (row_main == 0 && inter == 1 && inter2 == 2) {
-                                    // printf("interesting col ind == %ld", inter_ind);
+                            if (depth > 2)
+                                for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
+                                    int inter2 = relevant_row_set.rows[row_main][ri2];
+                                    long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
+                                    // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
+                                    if (row_main == 0 && inter == 1 && inter2 == 2) {
+                                        // printf("interesting col ind == %ld", inter_ind);
+                                    }
+                                    sum_with_col[inter_ind] += rowsum_diff;
+                                    if (main == interesting_col && inter == interesting_col) {
+                                        // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                                    }
                                 }
-                                sum_with_col[inter_ind] += rowsum_diff;
-                                if (main == interesting_col && inter == interesting_col) {
-                                    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
-                                }
-                            }
                         }
                     }
 
@@ -338,7 +342,7 @@ char update_working_set_cpu(
 char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc, float* rowsum, bool* wont_update, int p, int n,
     float lambda, robin_hood::unordered_flat_map<long, float>* beta, int* updateable_items, int count_may_update, Active_Set* as,
-    Thread_Cache* thread_caches, struct OpenCL_Setup* setup, float* last_max)
+    Thread_Cache* thread_caches, struct OpenCL_Setup* setup, float* last_max, int depth)
 {
     int p_int = p * (p + 1) / 2;
 
@@ -362,7 +366,7 @@ char update_working_set(
     //      g_assert_true(new_row_set.rows[row][inter_i] == col);
     //  }
     //}
-    char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max);
+    char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, depth);
     for (int i = 0; i < n; i++) {
         free(new_row_set.rows[i]);
     }

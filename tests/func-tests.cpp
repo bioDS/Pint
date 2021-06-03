@@ -20,7 +20,7 @@ using namespace std;
 struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int run_lambda_iters_pruned(Iter_Vars *vars, float lambda, float *rowsum,
-                            float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup);
+                            float *old_rowsum, Active_Set *active_set, struct OpenCL_Setup* ocl_setup, int depth);
 static long total_basic_beta_updates = 0;
 static long total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 15.0;
@@ -1402,7 +1402,7 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
 
   //TODO: probably best to remove lambda scalling in all the tests too.
     run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-                            &active_set, &ocl_setup);
+                            &active_set, &ocl_setup, 2);
   }
 
   clock_gettime(CLOCK_MONOTONIC_RAW, &end);

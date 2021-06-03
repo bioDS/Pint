@@ -115,7 +115,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
     float* rowsum,
     float* old_rowsum,
     Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup)
+    struct OpenCL_Setup* ocl_setup,
+    int depth)
 {
     XMatrixSparse Xc = vars->Xc;
     float** last_rowsum = vars->last_rowsum;
@@ -250,7 +251,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
             active_set,
             thread_caches,
             ocl_setup,
-            last_max);
+            last_max,
+            depth);
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -307,7 +309,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                             }
                         }
                         total_beta_updates++;
-                        Changes changes = update_beta_cyclic(entries->at(k).col,
+                        Changes changes = update_beta_cyclic(entry.col,
                             Y,
                             rowsum,
                             n,
@@ -664,7 +666,7 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
         if (VERBOSE)
             printf("nz_beta %ld\n", nz_beta);
         nz_beta += run_lambda_iters_pruned(
-            &iter_vars_pruned, lambda, rowsum, old_rowsum, &active_set, &ocl_setup);
+            &iter_vars_pruned, lambda, rowsum, old_rowsum, &active_set, &ocl_setup, 3);
 
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();

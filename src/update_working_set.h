@@ -8,7 +8,7 @@ char update_working_set(
     struct X_uncompressed Xu, XMatrixSparse Xc,
     float* rowsum, bool* wont_update, int p, int n,
     float lambda, robin_hood::unordered_flat_map<long, float>* beta, int* updateable_items, int count_may_update, Active_Set* as,
-    Thread_Cache* thread_caches, struct OpenCL_Setup* setup, float* last_max);
+    Thread_Cache* thread_caches, struct OpenCL_Setup* setup, float* last_max, int depth);
 
 //struct OpenCL_Setup setup_working_set_kernel(
 //  struct X_uncompressed Xu, int n, int p);
