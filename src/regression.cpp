@@ -468,7 +468,7 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
     robin_hood::unordered_flat_map<long, float> beta1;
     robin_hood::unordered_flat_map<long, float> beta2;
     robin_hood::unordered_flat_map<long, float> beta3;
-    Beta_Value_Sets beta_sets = { beta1, beta2, beta3 };
+    Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
     // beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
     // memset(beta, 0, p_int * sizeof(float));
 

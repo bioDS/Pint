@@ -91,7 +91,6 @@ struct OpenCL_Setup {
  * Fits 6 to a cache line. As long as schedule is static, this should be fine.
  */
 
-#include "log.h"
 #include "s8b.h"
 #include "sparse_matrix.h"
 #include "tuple_val.h"
@@ -123,6 +122,7 @@ typedef struct {
     robin_hood::unordered_flat_map<long, float> beta1;
     robin_hood::unordered_flat_map<long, float> beta2;
     robin_hood::unordered_flat_map<long, float> beta3;
+    int p;
 } Beta_Value_Sets;
 
 typedef struct {
@@ -149,6 +149,7 @@ typedef struct {
 #include "queue.h"
 #include "regression.h"
 #include "update_working_set.h"
+#include "log.h"
 
 int** X2_from_X(int** X, int n, int p);
 float* read_y_csv(char* fn, int n);

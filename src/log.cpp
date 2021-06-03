@@ -1,11 +1,14 @@
 #include "liblasso.h"
+#include <cstdio>
 
 static long log_file_offset;
+static int int_print_len;
 
 // print to log: metadata required to resume from the log
 FILE* init_log(char* filename, int n, int p, int num_betas, char** job_args,
     int job_args_num)
 {
+    int_print_len = std::log10(p*p*p) + 1;
     FILE* log_file = fopen(filename, "w+");
     fprintf(log_file, "still running\n");
     for (int i = 0; i < job_args_num; i++) {
@@ -14,8 +17,8 @@ FILE* init_log(char* filename, int n, int p, int num_betas, char** job_args,
     fprintf(log_file, "\n");
     fprintf(log_file, "lasso log file. metadata follows on the next few lines.\n \
 The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, $beta_2 ... $beta_k");
-    fprintf(log_file, "num_rows, num_cols, num_betas\n");
-    fprintf(log_file, "%d, %d, %d\n", n, p, num_betas);
+    fprintf(log_file, "num_rows, num_cols\n");
+    fprintf(log_file, "%d, %d\n", n, p);
     log_file_offset = ftell(log_file);
     return log_file;
 }
@@ -23,30 +26,45 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 static int log_pos = 0;
 // save the current beta values to a log, so the program can be resumed if it is
 // interrupted
-void save_log(int iter, float lambda_value, int lambda_count, robin_hood::unordered_flat_map<long, float> beta,
-    int n_betas, FILE* log_file)
+void save_log(int iter, float lambda_value, int lambda_count, Beta_Value_Sets* beta_sets,
+    FILE* log_file)
 {
+    int real_n_betas = beta_sets->beta1.size() + beta_sets->beta2.size() + beta_sets->beta3.size();
     // Rather than filling the log with beta values, we want to only keep two
     // copies. The current one, and a backup in case we stop while writing the
     // current one.
+    // returns to the begginning if we wrote to the end last time.
     if (log_pos % 2 == 0) {
         fseek(log_file, log_file_offset, SEEK_SET);
     }
     log_pos = (log_pos + 1) % 2;
 
-    // n.b. Each log line will be the same number of bytes regardless of the
-    // actual values here.
-    long line_start_pos = ftell(log_file);
+    // indicate that this entry is a work in progress
+    long log_entry_start_pos = ftell(log_file);
     fprintf(log_file, "w");
-    fprintf(log_file, "%.5d, %.5d, %+.6e\n", iter, lambda_count, lambda_value);
-    for (int i = 0; i < n_betas; i++) {
-        fprintf(log_file, "%+.6e, ", beta[i]);
+
+    // write num beta1/2/3 values
+    fprintf(log_file, "%.*d, %.*d, %.*d\n", int_print_len, beta_sets->beta1.size(), int_print_len, beta_sets->beta2.size(), int_print_len, beta_sets->beta3.size());
+
+    // print beta 1/2/3 values each on a new line.
+    fprintf(log_file, "%.*d, %.*d, %+.6e\n", int_print_len, iter, int_print_len, lambda_count, lambda_value);
+    for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end(); it++) {
+        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
     }
     fprintf(log_file, "\n");
-    long line_end_pos = ftell(log_file);
-    fseek(log_file, line_start_pos, SEEK_SET);
+    for (auto it = beta_sets->beta2.begin(); it != beta_sets->beta2.end(); it++) {
+        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
+    }
+    fprintf(log_file, "\n");
+    for (auto it = beta_sets->beta3.begin(); it != beta_sets->beta3.end(); it++) {
+        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
+    }
+    fprintf(log_file, "\n");
+
+    long log_entry_end_pos = ftell(log_file);
+    fseek(log_file, log_entry_start_pos, SEEK_SET);
     fprintf(log_file, " ");
-    fseek(log_file, line_end_pos, SEEK_SET);
+    fseek(log_file, log_entry_end_pos, SEEK_SET);
 }
 
 void close_log(FILE* log_file)

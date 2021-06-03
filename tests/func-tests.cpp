@@ -1222,11 +1222,11 @@ static void check_branch_pruning_faster(UpdateFixture *fixture,
   robin_hood::unordered_flat_map<long, float> beta1;
   robin_hood::unordered_flat_map<long, float> beta2;
   robin_hood::unordered_flat_map<long, float> beta3;
-  Beta_Value_Sets beta_sets = {beta1, beta2, beta3};
+  Beta_Value_Sets beta_sets = {beta1, beta2, beta3, p};
   robin_hood::unordered_flat_map<long, float> pruning_beta1;
   robin_hood::unordered_flat_map<long, float> pruning_beta2;
   robin_hood::unordered_flat_map<long, float> pruning_beta3;
-  Beta_Value_Sets pruning_beta_sets = {pruning_beta1, pruning_beta2, pruning_beta3};
+  Beta_Value_Sets pruning_beta_sets = {pruning_beta1, pruning_beta2, pruning_beta3, p};
 
   for (long i = 0; i < p_int; i++) {
     beta_sets.beta2[i] = 0.0;
@@ -1774,6 +1774,27 @@ void test_tuple_vals() {
   }
 }
 
+void save_restore_log() {
+  Beta_Value_Sets beta_sets;
+  beta_sets.beta1[2] = 0.3;
+  beta_sets.beta1[7] = 0.3;
+  beta_sets.beta2[12] = 0.7;
+  beta_sets.beta2[22] = 1231231.4;
+  beta_sets.beta3[101] = 123.1;
+  beta_sets.beta3[121] = -0.001;
+  beta_sets.beta3[999] = -1231.4;
+  int num_betas = 7;
+  int n = 12;
+  int p = 11;
+  char *job_args[] = {"arg1", "arg2", "longer_argument_3", "4"};
+  int job_args_num = 4;
+
+  char* log_filename = "testlog";
+
+  FILE* logfile = init_log(log_filename, n, p, num_betas, job_args, job_args_num);
+  save_log(1, 1000.0, 0, &beta_sets, logfile);
+}
+
 int main(int argc, char *argv[]) {
   initialise_static_resources();
   setlocale(LC_ALL, "");
@@ -1818,6 +1839,7 @@ int main(int argc, char *argv[]) {
   g_test_add_func("/func/trivial-3way", trivial_3way_test);
   g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
   g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
+  g_test_add_func("/func/test_save_restore_log", save_restore_log);
   // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
   // test_simple_coordinate_descent_set_up,
   // test_simple_coordinate_descent_int,
