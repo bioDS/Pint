@@ -1779,20 +1779,98 @@ void save_restore_log() {
   beta_sets.beta1[2] = 0.3;
   beta_sets.beta1[7] = 0.3;
   beta_sets.beta2[12] = 0.7;
-  beta_sets.beta2[22] = 1231231.4;
+  beta_sets.beta2[22] = 123123.4;
   beta_sets.beta3[101] = 123.1;
   beta_sets.beta3[121] = -0.001;
   beta_sets.beta3[999] = -1231.4;
   int num_betas = 7;
   int n = 12;
   int p = 11;
+  int iter = 1;
+  float lambda_value = 1000.0;
+  int lambda_count = 5;
   char *job_args[] = {"arg1", "arg2", "longer_argument_3", "4"};
+  char *not_job_args[] = {"arg1", "arg2", "longer_argument_7", "4"};
   int job_args_num = 4;
 
   char* log_filename = "testlog";
 
   FILE* logfile = init_log(log_filename, n, p, num_betas, job_args, job_args_num);
-  save_log(1, 1000.0, 0, &beta_sets, logfile);
+  save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
+
+  printf("\nchecking can_restore_from_log... ");
+  g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, job_args, job_args_num) == TRUE);
+  printf("true\n");
+  g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, not_job_args, job_args_num) == FALSE);
+
+
+  int restored_iter = -1;
+  int restored_lambda_count = -1;
+  float restored_lambda_value = -1.0;
+  Beta_Value_Sets restored_beta_sets;
+  
+  printf("\t - restoring from log... \n");
+  restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+  printf("\t - done\n");
+
+  auto check = [&](auto* set1, auto* set2) {
+    for (auto it = set1->begin(); it != set1->end(); it++) {
+      int key = it->first;
+      float val = it->second;
+      if (!set2->contains(key))
+        printf("%d not present in set2\n", key);
+      if (!(fabs(set2->at(key) - val) < 0.00001))
+        printf("%d: %f != %f \n", key, set2->at(key), val);
+      g_assert_true(fabs(set2->at(key) - val) < 0.00001);
+    }
+    for (auto it = set2->begin(); it != set2->end(); it++) {
+      int key = it->first;
+      float val = it->second;
+      if (!set1->contains(key))
+        printf("%d not present in set1\n", key);
+      if (!(fabs(set1->at(key) - val) < 0.00001))
+        printf("%d: %f != %f \n", key, set2->at(key), val);
+      g_assert_true(fabs(set1->at(key) - val) < 0.00001);
+    }
+  };
+
+  printf("checking beta1\n");
+  check(&beta_sets.beta1, &restored_beta_sets.beta1);
+  printf("checking beta2\n");
+  check(&beta_sets.beta2, &restored_beta_sets.beta2);
+  printf("checking beta3\n");
+  check(&beta_sets.beta3, &restored_beta_sets.beta3);
+
+  g_assert_true(restored_lambda_count == lambda_count);
+  g_assert_true(restored_lambda_value == lambda_value);
+  g_assert_true(restored_iter == iter);
+
+  iter += 3;
+  lambda_count += 2;
+  lambda_value *= 0.75;
+  beta_sets.beta3[101] = 103.1;
+  beta_sets.beta3[131] = 3.17;
+  beta_sets.beta2[21] = 0.17;
+
+  save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
+  g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, job_args, job_args_num) == TRUE);
+  restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+
+  printf("checking beta1\n");
+  check(&beta_sets.beta1, &restored_beta_sets.beta1);
+  printf("checking beta2\n");
+  check(&beta_sets.beta2, &restored_beta_sets.beta2);
+  printf("checking beta3\n");
+  check(&beta_sets.beta3, &restored_beta_sets.beta3);
+
+  g_assert_true(restored_lambda_count == lambda_count);
+  g_assert_true(restored_lambda_value == lambda_value);
+  g_assert_true(restored_iter == iter);
+
+  //TODO: test unfinished log entry
+  //TODO: test second entry more recent
+
+  close_log(logfile);
 }
 
 int main(int argc, char *argv[]) {
