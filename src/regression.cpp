@@ -436,7 +436,8 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
     char** job_args,
     int job_args_num,
     int use_adaptive_calibration,
-    int max_nz_beta)
+    int max_nz_beta,
+    char *log_filename)
 {
     halt_error_diff = hed;
     printf("using halt_error_diff of %f\n", halt_error_diff);
@@ -538,7 +539,6 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
     }
 
     FILE* log_file;
-    char* log_filename = "lasso_log.log";
     int iter = 0;
     // if (check_can_restore_from_log(log_filename, n, p, p_int, job_args,
     //                               job_args_num)) {
