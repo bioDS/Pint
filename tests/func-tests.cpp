@@ -1081,7 +1081,7 @@ float run_lambda_iters(Iter_Vars *vars, float lambda, float *rowsum) {
 
     parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
                      permutation_splits);
-// #pragma omp parallel for num_threads(NumCores)                                 \
+#pragma omp parallel for num_threads(NumCores)                                 \
     shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static) reduction(+:total_basic_beta_updates, total_basic_beta_nz_updates)
     for (int k = 0; k < p_int; k++) {
       // for (int main_effect = 0; main_effect < p; main_effect++) {
