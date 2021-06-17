@@ -1957,14 +1957,6 @@ int main(int argc, char *argv[]) {
   g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
   g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
   g_test_add_func("/func/test_save_restore_log", save_restore_log);
-  // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
-  // test_simple_coordinate_descent_set_up,
-  // test_simple_coordinate_descent_int,
-  // test_simple_coordinate_descent_tear_down);
-  // g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
-  // test_simple_coordinate_descent_set_up,
-  // test_simple_coordinate_descent_int,
-  // test_simple_coordinate_descent_tear_down);
 
   return g_test_run();
 }
