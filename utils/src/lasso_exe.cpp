@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 
     printf("begginning coordinate descent\n");
     auto beta_sets = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
-        100, lambda, 300, VERBOSE, overlap, 1.0001, log_level, argv, argc, TRUE, -1, "exe.log");
+        5000, lambda, 300, VERBOSE, overlap, 1.0001, log_level, argv, argc, FALSE, 20, "exe.log", 2);
     int nbeta_int = nbeta;
     auto beta = beta_sets.beta3;
     nbeta_int = get_p_int(nbeta, max_interaction_distance);
@@ -117,17 +117,37 @@ int main(int argc, char** argv)
     printf("freeing X/Y\n");
     switch (output_mode) {
     case terminal:
-        for (int i = 0; i < nbeta_int && printed < 100; i++) {
-            if (fabs((beta)[i]) > 0) {
-                printed++;
-                sig_beta_count++;
-                int_pair ip = get_num(i, nbeta);
-                if (ip.i == ip.j)
-                    printf("main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
-                else
-                    printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
-            }
+        printf("main:\n");
+        for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end(); it++) {
+            long val = it->first;
+            float coef = it->second;
+            printf("%ld: %f\n", val, coef);
         }
+        printf("int:\n");
+        for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end(); it++) {
+            long val = it->first;
+            auto ij = val_to_pair(val, nbeta);
+            float coef = it->second;
+            printf("%ld,%ld: %f\n", std::get<0>(ij), std::get<1>(ij), coef);
+        }
+        printf("trip:\n");
+        for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end(); it++) {
+            long val = it->first;
+            auto abc = val_to_triplet(val, nbeta);
+            float coef = it->second;
+            printf("%ld,%ld,%ld: %f\n", std::get<0>(abc), std::get<1>(abc), std::get<2>(abc), coef);
+        }
+        //for (int i = 0; i < nbeta_int && printed < 100; i++) {
+        //    if (fabs((beta)[i]) > 0) {
+        //        printed++;
+        //        sig_beta_count++;
+        //        int_pair ip = get_num(i, nbeta);
+        //        if (ip.i == ip.j)
+        //            printf("main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
+        //        else
+        //            printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
+        //    }
+        //}
         break;
     case file:
         for (int i = 0; i < nbeta_int; i++) {

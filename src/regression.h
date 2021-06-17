@@ -26,7 +26,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     float lambda_min, float lambda_max, int max_iter, int VERBOSE,
     float frac_overlap_allowed, float halt_beta_diff,
     enum LOG_LEVEL log_level, char** job_args, int job_args_num,
-    int use_adaptive_calibration, int max_nz_beta, char* log_filename);
+    int use_adaptive_calibration, int max_nz_beta, char* log_filename, int depth);
 float update_intercept_cyclic(float intercept, int** X, float* Y,
     robin_hood::unordered_flat_map<long, float>* beta, int n, int p);
 // Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, float *Y,

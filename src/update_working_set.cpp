@@ -1,11 +1,13 @@
 #include "robin_hood.h"
-#include <glib-2.0/glib.h>
 #include <omp.h>
 #include <stdlib.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "flat_hash_map.hpp"
 #include "liblasso.h"
+#ifdef NOT_R
+#include <glib-2.0/glib.h>
+#endif
 
 #define TRUE 1
 #define FALSE 0
@@ -109,10 +111,13 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
     int p = as->p;
     if (p % 5 != 0) {
         // printf("\np = %d\n", p);
+#ifdef NOT_R
         g_assert_true(p % 5 == 0);
+#endif
     }
     if (value < p) {
-        // printf("[%ld < %d]: main\n", value, p);
+        if (value == interesting_col)
+            printf("[%ld < %d]: main\n", value, p);
         entries = &as->entries1;
     } else if (value < p * p) {
         // printf("[%ld < %d]: pair\n", value, p*p);
@@ -193,8 +198,8 @@ char update_working_set_cpu(
         float max_inter_val = 0;
         int inter_cols = 0;
         // ska::flat_hash_set<long> inters_found;
-        // robin_hood::unordered_flat_map<long, float> sum_with_col;
-        robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
+        robin_hood::unordered_flat_map<long, float> sum_with_col;
+        // robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
         //robin_hood::unordered_flat_map<std::pair<long, long>, float> sum_with_col2;
         int main_col_len = 0;
 
@@ -259,12 +264,14 @@ char update_working_set_cpu(
         while (curr_inter != last_inter) {
             long tuple_val = curr_inter->first;
             float sum = std::abs(curr_inter->second);
-            if (tuple_val == main) {
-                // printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
+            if (tuple_val == main && main == interesting_col) {
+                printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
             } else if (tuple_val < p) {
                 // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
             } else {
+#ifdef NOT_R
                 g_assert_true(tuple_val < p * p);
+#endif
                 // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
                 // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
             }
@@ -288,9 +295,13 @@ char update_working_set_cpu(
                     if (k < p) {
                         printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
                     }
+#ifdef NOT_R
                     g_assert_true(k >= p || k < p * p);
+#endif
                 } else {
+#ifdef NOT_R
                     g_assert_true(tuple_val <= p * p);
+#endif
                     a = main;
                     b = std::get<0>(inter_pair);
                     c = std::get<1>(inter_pair);
@@ -320,9 +331,10 @@ char update_working_set_cpu(
                         inter_len++;
                     }
                 }
-                // if (main == interesting_col) {
-                // printf("appending interesting col %d (%ld)\n", k, main);
-                // }
+                if (main == 0 && tuple_val == 1) {
+                    printf("appending interesting col %d of length %d (%ld)\n", k, inter_len, main);
+                }
+#pragma omp critical
                 active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
                 total++;

@@ -422,6 +422,8 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
     Xu.host_row_nz = host_row_nz;
     Xu.host_row_offsets = host_row_offsets;
     Xu.host_X_row = host_X_row;
+    Xu.n = n;
+    Xu.p = p;
 
     return Xu;
 }

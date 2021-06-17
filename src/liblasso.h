@@ -2,7 +2,8 @@
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
 // #define interesting_col 54
-#define interesting_col 2
+// #define interesting_col 2
+#define interesting_col 101
 #include <errno.h>
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_randist.h>
@@ -62,6 +63,8 @@ struct X_uncompressed {
     int* host_X_row;
     int* host_row_nz;
     int* host_row_offsets;
+    int n;
+    int p;
     size_t total_size;
 };
 struct AS_Properties {

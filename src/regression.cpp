@@ -1,6 +1,8 @@
 #include "liblasso.h"
 #include "robin_hood.h"
+#ifdef NOT_R
 #include <glib-2.0/glib.h>
+#endif
 #include <gsl/gsl_complex.h>
 #include <time.h>
 #include <unistd.h>
@@ -13,7 +15,8 @@ struct timespec start_time, end_time;
 long total_beta_updates = 0;
 long total_beta_nz_updates = 0;
 
-void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta, int p)
+void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta,
+    int p)
 {
     for (auto it = beta->begin(); it != beta->end(); it++) {
         long value = it->first;
@@ -26,18 +29,17 @@ void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta, int p)
         if (a > b || b > c) {
             printf("problem! %ld,%ld,%ld: %f\n", a, b, c, bv);
         }
+#ifdef NOT_R
         g_assert_true(a <= b);
         g_assert_true(b <= c);
+#endif
     }
 }
 
 // check a particular pair of betas in the adaptive calibration scheme
-int adaptive_calibration_check_beta(float c_bar,
-    float lambda_1,
-    Sparse_Betas* beta_1,
-    float lambda_2,
-    Sparse_Betas* beta_2,
-    int beta_length,
+int adaptive_calibration_check_beta(float c_bar, float lambda_1,
+    Sparse_Betas* beta_1, float lambda_2,
+    Sparse_Betas* beta_2, int beta_length,
     int n)
 {
     float max_diff = 0.0;
@@ -72,18 +74,16 @@ int adaptive_calibration_check_beta(float c_bar,
 // checks whether the last element in the beta_sequence is the one we should
 // stop at, according to Chichignoud et als 'Adaptive Calibration Scheme'
 // returns TRUE if we are finished, FALSE if we should continue.
-int check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence, int n)
+int check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence,
+    int n)
 {
     // printf("\nchecking %d betas\n", beta_sequence.count);
     for (int i = 0; i < beta_sequence->count; i++) {
         int this_result = adaptive_calibration_check_beta(
-            c_bar,
-            beta_sequence->lambdas[beta_sequence->count - 1],
+            c_bar, beta_sequence->lambdas[beta_sequence->count - 1],
             &beta_sequence->betas[beta_sequence->count - 1],
-            beta_sequence->lambdas[i],
-            &beta_sequence->betas[i],
-            beta_sequence->vec_length,
-            n);
+            beta_sequence->lambdas[i], &beta_sequence->betas[i],
+            beta_sequence->vec_length, n);
         // printf("result: %d\n", this_result);
         if (this_result == 0) {
             return TRUE;
@@ -92,13 +92,8 @@ int check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence, int n)
     return FALSE;
 }
 
-float calculate_error(int n,
-    long p_int,
-    float* Y,
-    int** X,
-    float p,
-    float intercept,
-    float* rowsum)
+float calculate_error(int n, long p_int, float* Y, int** X, float p,
+    float intercept, float* rowsum)
 {
     float error = 0.0;
     for (int row = 0; row < n; row++) {
@@ -110,15 +105,12 @@ float calculate_error(int n,
 
 static float halt_error_diff;
 
-int run_lambda_iters_pruned(Iter_Vars* vars,
-    float lambda,
-    float* rowsum,
-    float* old_rowsum,
-    Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup,
-    int depth)
+int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
+    float* old_rowsum, Active_Set* active_set,
+    struct OpenCL_Setup* ocl_setup, int depth)
 {
     XMatrixSparse Xc = vars->Xc;
+    X_uncompressed Xu = vars->Xu;
     float** last_rowsum = vars->last_rowsum;
     Thread_Cache* thread_caches = vars->thread_caches;
     int n = vars->n;
@@ -145,7 +137,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
     }
 
     if (VERBOSE)
-        printf("\nrunning lambda %f\n", lambda);
+        printf("\nrunning lambda %f w/ depth %d\n", lambda, depth);
     // run several iterations of will_update to make sure we catch any new
     // columns
     /*TODO: in principle we should allow more than one, but it seems to
@@ -179,12 +171,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                                                     : new_active_branches)
         for (int j = 0; j < p; j++) {
             bool old_wont_update = wont_update[j];
-            wont_update[j] = wont_update_effect(Xc,
-                lambda,
-                j,
-                last_max[j],
-                last_rowsum[j],
-                rowsum,
+            wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
             char new_active_branch = old_wont_update && !wont_update[j];
             if (new_active_branch)
@@ -202,8 +189,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                 // if the branch hasn't been pruned then we'll get an accurate estimate
                 // for this rowsum from update_working_set.
                 if (!wont_update[j]) {
-                    memcpy(last_rowsum[j],
-                        rowsum,
+                    memcpy(last_rowsum[j], rowsum,
                         sizeof *rowsum * n); // TODO: probably overkill
                     active_branches++;
                     used_branches++;
@@ -215,8 +201,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
         // if (VERBOSE)
-        printf(
-            "(%ld active branches, %ld new)\n", active_branches, new_active_branches);
+        printf("(%ld active branches, %ld new)\n", active_branches,
+            new_active_branches);
         // if (new_active_branches == 0) {
         //  break;
         //}
@@ -238,21 +224,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
         // if (VERBOSE)
         printf("\nthere were %d updateable items\n", count_may_update);
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
-        char increased_set = update_working_set(vars->Xu,
-            Xc,
-            rowsum,
-            wont_update,
-            p,
-            n,
-            lambda,
-            beta,
-            updateable_items,
-            count_may_update,
-            active_set,
-            thread_caches,
-            ocl_setup,
-            last_max,
-            depth);
+        char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
+            beta, updateable_items, count_may_update, active_set,
+            thread_caches, ocl_setup, last_max, depth);
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -269,8 +243,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
         // TODO: two steps: read active set columns into an array, parallel shuffled
         // run on these.
         if (VERBOSE)
-            printf("active set size: %d, or %.2f \%\n",
-                active_set->length,
+            printf("active set size: %d, or %.2f \%\n", active_set->length,
                 100 * (float)active_set->length / (float)p_int);
         if (VERBOSE)
             printf("solving subproblem.\n");
@@ -299,8 +272,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                         int was_zero = TRUE;
                         auto count = beta->count(k);
                         // printf("found %ld entries for (%ld)\n", count, k);
-                        if (beta->contains(k)) {
-                            // printf("beta contains (%ld)\n", k);
+                        if (k == interesting_col && beta->contains(k)) {
+                            printf("beta contains (%ld)\n", k);
                         }
                         if (count > 0) {
                             // printf("found %d entries for key %d\n", count, k);
@@ -309,17 +282,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                             }
                         }
                         total_beta_updates++;
-                        Changes changes = update_beta_cyclic(entry.col,
-                            Y,
-                            rowsum,
-                            n,
-                            p,
-                            lambda,
-                            current_beta_set,
-                            k,
-                            0,
-                            precalc_get_num,
-                            thread_caches[omp_get_thread_num()].col_i);
+                        Changes changes = update_beta_cyclic(
+                            entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                            precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
                         if (changes.actual_diff == 0.0) {
                             total_unchanged++;
                         } else {
@@ -327,14 +292,19 @@ int run_lambda_iters_pruned(Iter_Vars* vars,
                             total_changed++;
                         }
                         if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
-                            // printf("(%ld) was zero and changed by %.30f\n", k,
-                            // changes.actual_diff);
+                            if (k == interesting_col) {
+                                printf("(%ld) was zero and changed by %.30f\n", k,
+                                    changes.actual_diff);
+                            }
+#ifdef NOT_R
                             g_assert_true(fabs(0.0) == 0.0);
                             g_assert_true(fabs(-0.0) == 0.0);
+#endif
                             new_nz_beta++;
                         }
                         if (!was_zero && changes.removed) {
-                            // printf("(%ld) set to zero\n", k);
+                            if (k == interesting_col)
+                                printf("(%ld) set to zero\n", k);
                             new_nz_beta--;
                         }
                     } else {
@@ -420,25 +390,14 @@ long copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
     return count;
 }
 
-Beta_Value_Sets
-simple_coordinate_descent_lasso(XMatrix xmatrix,
-    float* Y,
-    int n,
-    int p,
-    long max_interaction_distance,
-    float lambda_min,
-    float lambda_max,
-    int max_iter,
-    int verbose,
-    float frac_overlap_allowed,
-    float hed,
-    enum LOG_LEVEL log_level,
-    char** job_args,
-    int job_args_num,
-    int use_adaptive_calibration,
-    int max_nz_beta,
-    char *log_filename)
+Beta_Value_Sets simple_coordinate_descent_lasso(
+    XMatrix xmatrix, float* Y, int n, int p, long max_interaction_distance,
+    float lambda_min, float lambda_max, int max_iter, int verbose,
+    float frac_overlap_allowed, float hed, enum LOG_LEVEL log_level,
+    char** job_args, int job_args_num, int use_adaptive_calibration,
+    int max_nz_beta, char* log_filename, int depth)
 {
+    printf("n: %d, p: %d\n", n, p);
     halt_error_diff = hed;
     printf("using halt_error_diff of %f\n", halt_error_diff);
     long num_nz_beta = 0;
@@ -665,8 +624,8 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
 
         if (VERBOSE)
             printf("nz_beta %ld\n", nz_beta);
-        nz_beta += run_lambda_iters_pruned(
-            &iter_vars_pruned, lambda, rowsum, old_rowsum, &active_set, &ocl_setup, 3);
+        nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
+            old_rowsum, &active_set, &ocl_setup, depth);
 
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
@@ -691,14 +650,13 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
                 }
                 printf("}\n");
             }
+#ifdef NOT_R
             g_assert_true(nonzero == nz_beta);
+#endif
         }
         double prev_error = error;
         error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
-        printf("lambda %d = %f, error %.1f, nz_beta %ld\n",
-            iter,
-            lambda,
-            error,
+        printf("lambda %d = %f, error %.1f, nz_beta %ld\n", iter, lambda, error,
             nz_beta);
         if (use_adaptive_calibration && nz_beta > 0) {
             Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
@@ -829,8 +787,7 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
     // for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end(); it++)
     //  g_assert_true(it->second != 0.0);
     printf("%ld found\n", nonzero);
-    printf("nz = %d, became_zero = %d\n",
-        num_nz_beta,
+    printf("nz = %d, became_zero = %d\n", num_nz_beta,
         became_zero); // TODO: disable for release
 
     return beta_sets;
@@ -838,23 +795,15 @@ simple_coordinate_descent_lasso(XMatrix xmatrix,
 
 static int firstchanged = FALSE;
 
-Changes
-update_beta_cyclic_old(XMatrixSparse xmatrix_sparse,
-    float* Y,
-    float* rowsum,
-    int n,
-    int p,
-    float lambda,
-    robin_hood::unordered_flat_map<long, float>* beta,
-    long k,
-    float intercept,
-    int_pair* precalc_get_num,
-    int* column_entry_cache)
+Changes update_beta_cyclic_old(
+    XMatrixSparse xmatrix_sparse, float* Y, float* rowsum, int n, int p,
+    float lambda, robin_hood::unordered_flat_map<long, float>* beta, long k,
+    float intercept, int_pair* precalc_get_num, int* column_entry_cache)
 {
     float sumk = xmatrix_sparse.cols[k].nz;
-    //float bk = 0.0;
-    //printf("checking beta for %ld\n", k);
-    //if (beta->contains(k)) {
+    // float bk = 0.0;
+    // printf("checking beta for %ld\n", k);
+    // if (beta->contains(k)) {
     //    printf("beta contains %ld\n", k);
     //    bk = beta->at(k);
     //}
@@ -878,10 +827,11 @@ update_beta_cyclic_old(XMatrixSparse xmatrix_sparse,
         }
     }
 
-    // if (k == interesting_col) {
-    //    printf("lambda * n / 2 = %f\n", lambda * n / 2);
-    //    printf("sumn: %f\n", sumn);
-    //}
+    if (k == interesting_col) {
+        printf("lambda: %f\n", lambda);
+        printf("sumn: %f\n", sumn);
+        printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
+    }
 
     // TODO: This is probably slower than necessary.
     float Bk_diff = beta->at(k);
@@ -896,10 +846,7 @@ update_beta_cyclic_old(XMatrixSparse xmatrix_sparse,
         if (!firstchanged) {
             firstchanged = TRUE;
             printf("first changed on col %ld (%d,%d), lambda %f ******************\n",
-                k,
-                precalc_get_num[k].i,
-                precalc_get_num[k].j,
-                lambda);
+                k, precalc_get_num[k].i, precalc_get_num[k].j, lambda);
         }
         for (int e = 0; e < xmatrix_sparse.cols[k].nz; e++) {
             int i = column_entries[e];
@@ -917,17 +864,10 @@ update_beta_cyclic_old(XMatrixSparse xmatrix_sparse,
 
     return changes;
 }
-Changes
-update_beta_cyclic(S8bCol col,
-    float* Y,
-    float* rowsum,
-    int n,
-    int p,
+Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int n, int p,
     float lambda,
     robin_hood::unordered_flat_map<long, float>* beta,
-    long k,
-    float intercept,
-    int_pair* precalc_get_num,
+    long k, float intercept, int_pair* precalc_get_num,
     int* column_entry_cache)
 {
     float sumk = col.nz;
@@ -956,6 +896,11 @@ update_beta_cyclic(S8bCol col,
     }
 
     float new_value = soft_threshold(sumn, lambda) / sumk;
+    if (k == interesting_col) {
+        printf("lambda: %f\n", lambda);
+        printf("sumn: %f\n", sumn);
+        printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
+    }
     float Bk_diff = new_value - bk;
     Changes changes;
     changes.removed = false;
@@ -985,12 +930,9 @@ update_beta_cyclic(S8bCol col,
     return changes;
 }
 
-float update_intercept_cyclic(float intercept,
-    int** X,
-    float* Y,
+float update_intercept_cyclic(float intercept, int** X, float* Y,
     robin_hood::unordered_flat_map<long, float> beta,
-    int n,
-    int p)
+    int n, int p)
 {
     float new_intercept = 0.0;
     float sumn = 0.0, sumx = 0.0;
