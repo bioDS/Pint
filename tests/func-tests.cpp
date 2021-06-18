@@ -1905,8 +1905,29 @@ void save_restore_log()
     g_assert_true(restored_lambda_value == lambda_value);
     g_assert_true(restored_iter == iter);
 
+    iter += 1;
+    lambda_count = 0;
+    lambda_value *= 0.75;
+    beta_sets.beta3[101] = 102.1;
+    beta_sets.beta3[131] = 4.17;
+    beta_sets.beta2[21] = 0.17;
+
+    save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
+    g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, job_args, job_args_num) == TRUE);
+    restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+
+    printf("checking beta1\n");
+    check(&beta_sets.beta1, &restored_beta_sets.beta1);
+    printf("checking beta2\n");
+    check(&beta_sets.beta2, &restored_beta_sets.beta2);
+    printf("checking beta3\n");
+    check(&beta_sets.beta3, &restored_beta_sets.beta3);
+
+    g_assert_true(restored_lambda_count == lambda_count);
+    g_assert_true(restored_lambda_value == lambda_value);
+    g_assert_true(restored_iter == iter);
+
     //TODO: test unfinished log entry
-    //TODO: test second entry more recent
 
     close_log(logfile);
 }

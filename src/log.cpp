@@ -42,8 +42,10 @@ void save_log(int iter, float lambda_value, int lambda_count, Beta_Value_Sets* b
     // copies. The current one, and a backup in case we stop while writing the
     // current one.
     // returns to the begginning if we wrote to the end last time.
+    bool use_first_entry = false;
     if (log_pos % 2 == 0) {
         fseek(log_file, log_file_offset, SEEK_SET);
+        use_first_entry = true;
     }
     log_pos = (log_pos + 1) % 2;
 
@@ -70,6 +72,9 @@ void save_log(int iter, float lambda_value, int lambda_count, Beta_Value_Sets* b
     fprintf(log_file, "\n");
 
     long log_entry_end_pos = ftell(log_file);
+    // make sure second entry is invalid (we might have overwritten bits of it)
+    if (use_first_entry)
+        fprintf(log_file, "w");
     fseek(log_file, log_entry_start_pos, SEEK_SET);
     fprintf(log_file, " ");
     fseek(log_file, log_entry_end_pos, SEEK_SET);
@@ -200,23 +205,29 @@ FILE* restore_from_log(char* filename, int n, int p,
         // check the second entry, but only if it exists.
         if (!feof(log_file)) {
             printf("second entry exists\n");
-            read_beta_sizes(); // skip over second entry beta sizes.
-            fgets(buffer, buf_size, log_file);
-
-            printf("**** buf: '%s'\n", buffer);
-            sscanf(buffer, " %d, %d, %e\n", &second_iter, &second_lambda_count,
-                &second_lambda_value);
-            printf(": first_lambda_count: %d\n", first_lambda_count);
-            printf(": second_lambda_count: %d\n", second_lambda_count);
-            if (strncmp(buffer, "w", 1) == 0 || first_lambda_count > second_lambda_count || (first_lambda_count == second_lambda_count && first_iter > second_iter)) {
-                printf(": first entry > second_entry\n");
-                // but we can't/shouldn't use this one, go back to the first
+            if (strncmp(buffer, "w", 1) == 0) {
+                printf("second entry unusable\n");
                 fseek(log_file, first_pos, SEEK_SET);
                 fgets(buffer, buf_size, log_file);
             } else {
-                printf("seeking to beginning of second entry\n");
-                fseek(log_file, second_pos, SEEK_SET);
+                read_beta_sizes(); // skip over second entry beta sizes.
                 fgets(buffer, buf_size, log_file);
+
+                printf("**** buf: '%s'\n", buffer);
+                sscanf(buffer, " %d, %d, %e\n", &second_iter, &second_lambda_count,
+                    &second_lambda_value);
+                printf(": first_lambda_count: %d\n", first_lambda_count);
+                printf(": second_lambda_count: %d\n", second_lambda_count);
+                if (strncmp(buffer, "w", 1) == 0 || first_lambda_count > second_lambda_count || (first_lambda_count == second_lambda_count && first_iter > second_iter)) {
+                    printf(": first entry > second_entry\n");
+                    // but we can't/shouldn't use this one, go back to the first
+                    fseek(log_file, first_pos, SEEK_SET);
+                    fgets(buffer, buf_size, log_file);
+                } else {
+                    printf("seeking to beginning of second entry\n");
+                    fseek(log_file, second_pos, SEEK_SET);
+                    fgets(buffer, buf_size, log_file);
+                }
             }
         } else {
             printf("log file has no second entry\n");
