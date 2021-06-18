@@ -1932,6 +1932,57 @@ void save_restore_log()
     close_log(logfile);
 }
 
+static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
+{
+    int depth = 2;
+    char *log_filename = "adcal_test.log";
+    remove(log_filename);
+    int max_interaction_distance = -1;
+    float lambda_min = 0.01;
+    float lambda_max = 10000;
+    long max_iter = 200;
+    int VERBOSE = FALSE;
+    float frac_overlap_allowed = -1;
+    float halt_beta_diff = 1.01;
+    LOG_LEVEL log_level = LOG_LEVEL::LAMBDA;
+    char *job_args[] = {"adcal", "test", "args"};
+    int job_args_num = 3;
+    int use_adaptive_calibration = TRUE;
+    long max_nz_beta = -1;
+
+    Sparse_Betas beta1;
+    beta1.count = 5;
+    beta1.indices = new long[5] {1, 4, 7, 21, 35};
+    beta1.values = new float[5] {1.2, -2.1, 2.1, 13.0, -11.2};
+
+    Sparse_Betas beta2;
+    beta2.count = 6;
+    beta2.indices = new long[6] {1, 4, 7, 21, 35, 107};
+    beta2.values = new float[6] {1.7, -2.1, 2.3, 12.0, -11.3, 0.8};
+
+    g_assert_true(beta2.indices[1] == 4);
+    g_assert_true(fabs(beta2.values[2] - 2.3) < 0.001);
+
+    int result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2);
+    g_assert_true(result == 1);
+
+    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth);
+
+    int final_iter, final_lambda_count;
+    float final_lambda_value;
+    Beta_Value_Sets final_beta_sets;
+    restore_from_log(log_filename, fixture->n, fixture->p, job_args, job_args_num, &final_iter, &final_lambda_count, &final_lambda_value, &final_beta_sets);
+
+    printf("finished at lambda %d: %f\n", final_lambda_count, final_lambda_value);
+    g_assert_true(fabs(final_lambda_value - 0.556171) < 0.001);
+    g_assert_true(final_lambda_count == 192);
+
+    free(beta1.indices);
+    free(beta1.values);
+    free(beta2.indices);
+    free(beta2.values);
+}
+
 int main(int argc, char* argv[])
 {
     initialise_static_resources();
@@ -1978,6 +2029,9 @@ int main(int argc, char* argv[])
     g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
     g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
     g_test_add_func("/func/test_save_restore_log", save_restore_log);
+    g_test_add("/func/test-adcal", UpdateFixture, 0,
+        pruning_fixture_set_up, test_adcal,
+        pruning_fixture_tear_down);
 
     return g_test_run();
 }

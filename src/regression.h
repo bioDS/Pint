@@ -1,15 +1,17 @@
 //TODO: no reason this can't be an array
 typedef struct {
-    robin_hood::unordered_flat_map<long, float> betas;
+    // robin_hood::unordered_flat_map<long, float> betas;
     // Beta_Value_Sets *beta_sets;
-    int* indices;
-    int count;
+    long* indices;
+    float* values;
+    long count;
 } Sparse_Betas;
 
 // TODO: maybe this should be sparse?
 typedef struct {
     long count;
     Sparse_Betas* betas;
+    // long* values;
     float* lambdas;
     long vec_length;
 } Beta_Sequence;
@@ -39,3 +41,7 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float* Y,
     robin_hood::unordered_flat_map<long, float>* beta, long k, float intercept,
     int_pair* precalc_get_num, int* column_cache);
 float soft_threshold(float z, float gamma);
+
+int adaptive_calibration_check_beta(float c_bar, float lambda_1,
+    Sparse_Betas* beta_1, float lambda_2,
+    Sparse_Betas* beta_2);

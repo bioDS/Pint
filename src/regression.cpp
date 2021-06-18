@@ -39,8 +39,7 @@ void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta,
 // check a particular pair of betas in the adaptive calibration scheme
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
     Sparse_Betas* beta_1, float lambda_2,
-    Sparse_Betas* beta_2, int beta_length,
-    int n)
+    Sparse_Betas* beta_2)
 {
     float max_diff = 0.0;
     float adjusted_max_diff = 0.0;
@@ -54,7 +53,8 @@ int adaptive_calibration_check_beta(float c_bar, float lambda_1,
         while (beta_2->indices[b2_ind] < beta_1->indices[b1_ind] && b2_ind < beta_2->count)
             b2_ind++;
         if (b1_ind < beta_1->count && b2_ind < beta_2->count && beta_1->indices[b1_ind] == beta_2->indices[b2_ind]) {
-            float diff = fabs(beta_1->betas.at(b1_ind) - beta_2->betas.at(b2_ind));
+            // float diff = fabs(beta_1->betas.at(b1_ind) - beta_2->betas.at(b2_ind));
+            float diff = fabs(beta_1->values[b1_ind] - beta_2->values[b2_ind]);
             if (diff > max_diff)
                 max_diff = diff;
             b1_ind++;
@@ -82,8 +82,7 @@ int check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence,
         int this_result = adaptive_calibration_check_beta(
             c_bar, beta_sequence->lambdas[beta_sequence->count - 1],
             &beta_sequence->betas[beta_sequence->count - 1],
-            beta_sequence->lambdas[i], &beta_sequence->betas[i],
-            beta_sequence->vec_length, n);
+            beta_sequence->lambdas[i], &beta_sequence->betas[i]);
         // printf("result: %d\n", this_result);
         if (this_result == 0) {
             return TRUE;
@@ -373,20 +372,30 @@ long copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
 {
     long count = 0;
     auto from_beta = from_set->beta1;
+    long total_size = from_set->beta1.size() + from_set->beta2.size() + from_set->beta3.size();
+    to_set->indices = new long[total_size];
+    to_set->values = new float[total_size];
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        to_set->betas.insert_or_assign(c->first, c->second);
+        // to_set->betas.insert_or_assign(c->first, c->second);
+        to_set->indices[count] = c->first;
+        to_set->values[count] = c->second;
         count++;
     }
     from_beta = from_set->beta2;
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        to_set->betas.insert_or_assign(c->first, c->second);
+        // to_set->betas.insert_or_assign(c->first, c->second);
+        to_set->indices[count] = c->first;
+        to_set->values[count] = c->second;
         count++;
     }
     from_beta = from_set->beta3;
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        to_set->betas.insert_or_assign(c->first, c->second);
+        // to_set->betas.insert_or_assign(c->first, c->second);
+        to_set->indices[count] = c->first;
+        to_set->values[count] = c->second;
         count++;
     }
+    to_set->count = count;
     return count;
 }
 
@@ -640,56 +649,39 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
-            if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
-                printf("nonzero %ld == nz_beta %ld ?\n", nonzero, nz_beta);
-                printf("beta 1 contains: { ");
-                for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end();
-                     it++) {
-                    printf("%d[%.2f], ", it->first, beta_sets.beta1.at(it->first));
-                }
-                printf("}\n");
-                printf("beta 2 contains: { ");
-                for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end();
-                     it++) {
-                    printf("%d[%.2f], ", it->first, beta_sets.beta2.at(it->first));
-                }
-                printf("}\n");
-                printf("beta 3 contains: { ");
-                for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end();
-                     it++) {
-                    printf("%d[%.2f], ", it->first, beta_sets.beta3.at(it->first));
-                }
-                printf("}\n");
-            }
+            //if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
+            //    printf("nonzero %ld == nz_beta %ld ?\n", nonzero, nz_beta);
+            //    printf("beta 1 contains: { ");
+            //    for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end();
+            //         it++) {
+            //        printf("%d[%.2f], ", it->first, beta_sets.beta1.at(it->first));
+            //    }
+            //    printf("}\n");
+            //    printf("beta 2 contains: { ");
+            //    for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end();
+            //         it++) {
+            //        printf("%d[%.2f], ", it->first, beta_sets.beta2.at(it->first));
+            //    }
+            //    printf("}\n");
+            //    printf("beta 3 contains: { ");
+            //    for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end();
+            //         it++) {
+            //        printf("%d[%.2f], ", it->first, beta_sets.beta3.at(it->first));
+            //    }
+            //    printf("}\n");
+            //}
 #ifdef NOT_R
-            g_assert_true(nonzero == nz_beta);
+            // g_assert_true(nonzero == nz_beta);
 #endif
         }
         double prev_error = error;
         error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
-        printf("lambda %d = %f, error %.1f, nz_beta %ld\n", iter, lambda, error,
+        printf("lambda %d = %f, error %.1f, nz_beta %ld\n", lambda_count, lambda, error,
             nz_beta);
         if (use_adaptive_calibration && nz_beta > 0) {
             Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
             // TODO: it should be possible to do something more like memcpy here
-            long count = copy_beta_sets(&beta_sets, sparse_betas);
-            // for (int b = 0; b < p_int; b++) {
-            //  if ( beta[b] != 0) {
-            //    beta_cache[count] = beta[b];
-            //    index_cache[count] = b;
-            //    count++;
-            //  }
-            //}
-            // if (count != nz_beta) {
-            // printf("count (%d) or nz_beta (%d) is wrong\n", count, nz_beta);
-            //}
-            // sparse_betas.betas = (float*)malloc(count * sizeof(float));
-            // sparse_betas.indices = (int*)malloc(count * sizeof(int));
-            // memcpy(sparse_betas.betas, beta_cache, count * sizeof(float));
-            // memcpy(sparse_betas.indices, index_cache, count * sizeof(int));
-            // sparse_betas.betas.
-
-            sparse_betas->count = count;
+            copy_beta_sets(&beta_sets, sparse_betas);
 
             if (beta_sequence.count >= max_lambda_count) {
                 printf(
@@ -697,7 +689,6 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
                     "things will now break. ***************************************\n");
             }
             beta_sequence.lambdas[beta_sequence.count] = lambda;
-            // beta_sequence.betas[beta_sequence.count] = sparse_betas;
             beta_sequence.count++;
 
             printf("checking adaptive cal\n");
@@ -710,6 +701,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         if (nz_beta > 0) {
             iter++;
         }
+        lambda_count++;
     }
     iter_count = iter;
     if (log_level != NONE)
@@ -767,8 +759,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     if (use_adaptive_calibration) {
         for (int i = 0; i < beta_sequence.count; i++) {
-            beta_sequence.betas[i].betas.clear();
+            // beta_sequence.betas[i].betas.clear();
             free(beta_sequence.betas[i].indices);
+            free(beta_sequence.betas[i].values);
         }
         free(beta_sequence.betas);
         free(beta_sequence.lambdas);
