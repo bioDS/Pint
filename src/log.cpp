@@ -133,7 +133,7 @@ FILE* restore_from_log(char* filename, int n, int p,
 
     int num_betas = 1;
     FILE* log_file = fopen(filename, "r+");
-    int buf_size = num_betas * 16 + 500;
+    long buf_size = num_betas * 16 + 500;
     char* buffer = malloc(buf_size);
     int beta1_size = -1, beta2_size = -1, beta3_size = -1;
     Rprintf("restoring from log\n");
@@ -151,12 +151,13 @@ FILE* restore_from_log(char* filename, int n, int p,
         // buffer contains ' %d, %d, %d' [entries in row 1,2,3]
         sscanf(buffer, " %d, %d, %d\n", &beta1_size, &beta2_size, &beta3_size);
         printf(": beta sizes: %d, %d, %d\n", beta1_size, beta2_size, beta3_size);
-        int max_size = std::max(beta1_size, std::max(beta2_size, beta3_size));
+        int max_size = std::max(beta1_size, std::max(beta2_size, beta3_size))*(16+int_print_len);
         if (max_size > buf_size) {
             printf("setting new buf size for %d entries\n", max_size);
             buf_size = max_size;
-            buffer = (char*)realloc(buffer, buf_size*16 + 500);
+            buffer = (char*)realloc(buffer, buf_size*(16+int_print_len) + 500);
         }
+        printf(": using buf size: %ld\n", buf_size);
     };
 
     auto skip_entries = [&]() {
@@ -199,6 +200,7 @@ FILE* restore_from_log(char* filename, int n, int p,
         printf(": first_iter, lambda_count, lambda_value: %d,%d,%f\n", first_iter, first_lambda_count, first_lambda_value);
 
         skip_entries();
+        fgets(buffer, buf_size, log_file); //there's a newline between the two
         long second_pos = ftell(log_file);
         fgets(buffer, buf_size, log_file);
 
@@ -210,6 +212,7 @@ FILE* restore_from_log(char* filename, int n, int p,
                 fseek(log_file, first_pos, SEEK_SET);
                 fgets(buffer, buf_size, log_file);
             } else {
+                printf("**** 2nd beta size buf: '%s'\n", buffer);
                 read_beta_sizes(); // skip over second entry beta sizes.
                 fgets(buffer, buf_size, log_file);
 
@@ -256,7 +259,7 @@ FILE* restore_from_log(char* filename, int n, int p,
             long offset = 0;
             fgets(buffer, buf_size, log_file);
             for (int i = 0; i < beta_size; i++) {
-                printf("values_buf: '%s'\n", buffer + offset);
+                // printf("values_buf: '%s'\n", buffer + offset);
                 int beta_no = -1;
                 float beta_val = -1.0;
                 int ret = sscanf(buffer + offset, "%d,%e, ", &beta_no, &beta_val);
@@ -264,7 +267,7 @@ FILE* restore_from_log(char* filename, int n, int p,
                     fprintf(stderr, "failed to match value in log, bad things will now happen\n");
                     fprintf(stderr, "log value was '%s'\n", buffer + offset);
                 }
-                printf(": beta: %d,%f\n", beta_no, beta_val);
+                // printf(": beta: %d,%f\n", beta_no, beta_val);
                 beta_set->insert_or_assign(beta_no, beta_val);
                 offset += 16 + int_print_len;
             }
