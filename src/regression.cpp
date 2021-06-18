@@ -199,17 +199,17 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
-        // if (VERBOSE)
-        printf("(%ld active branches, %ld new)\n", active_branches,
-            new_active_branches);
+        if (VERBOSE)
+            printf("(%ld active branches, %ld new)\n", active_branches,
+                new_active_branches);
         // if (new_active_branches == 0) {
         //  break;
         //}
         //********** Identify Working Set *******************
         // TODO: is it worth constructing a new set with no 'blank'
         // elements?
-        // if (VERBOSE)
-        printf("updating working set.\n");
+        if (VERBOSE)
+            printf("updating working set.\n");
         int count_may_update = 0;
         int* updateable_items = calloc(p, sizeof *updateable_items); // TODO: keep between iters
         for (int i = 0; i < p; i++) {
@@ -220,8 +220,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
             }
         }
 
-        // if (VERBOSE)
-        printf("\nthere were %d updateable items\n", count_may_update);
+        if (VERBOSE)
+            printf("\nthere were %d updateable items\n", count_may_update);
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             beta, updateable_items, count_may_update, active_set,
@@ -249,7 +249,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         int iter = 0;
         for (iter = 0; iter < 100; iter++) {
-            printf("iter %d\n", iter);
+            if (VERBOSE)
+                printf("iter %d\n", iter);
             float prev_error = error;
             // update entire working set
             // #pragma omp parallel for num_threads(NumCores) schedule(static)
@@ -271,7 +272,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                         int was_zero = TRUE;
                         auto count = beta->count(k);
                         // printf("found %ld entries for (%ld)\n", count, k);
-                        if (k == interesting_col && beta->contains(k)) {
+                        if (k == interesting_col && beta->contains(k) && VERBOSE) {
                             printf("beta contains (%ld)\n", k);
                         }
                         if (count > 0) {
@@ -291,7 +292,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                             total_changed++;
                         }
                         if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
-                            if (k == interesting_col) {
+                            if (k == interesting_col && VERBOSE) {
                                 printf("(%ld) was zero and changed by %.30f\n", k,
                                     changes.actual_diff);
                             }
@@ -302,7 +303,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                             new_nz_beta++;
                         }
                         if (!was_zero && changes.removed) {
-                            if (k == interesting_col)
+                            if (VERBOSE && k == interesting_col)
                                 printf("(%ld) set to zero\n", k);
                             new_nz_beta--;
                         }
@@ -342,9 +343,11 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                 error += rowsum[i] * rowsum[i];
             }
             error = sqrt(error);
-            printf("error: %f\n", error);
+            if (VERBOSE)
+                printf("error: %f\n", error);
             if (prev_error / error < halt_error_diff) {
-                printf("done after %d iters\n", lambda, iter + 1);
+                if (VERBOSE)
+                    printf("done after %d iters\n", lambda, iter + 1);
                 break;
             }
         }
@@ -364,7 +367,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     }
 
     gsl_rng_free(rng);
-    printf("new nz beta: %ld\n", new_nz_beta);
+    if (VERBOSE)
+        printf("new nz beta: %ld\n", new_nz_beta);
     return new_nz_beta;
 }
 
@@ -511,7 +515,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     if (check_can_restore_from_log(log_filename, n, p, p_int, job_args,
             job_args_num)) {
         Rprintf("We can restore from a partial log!\n");
-        restore_from_log(log_filename, n, p, job_args, job_args_num, &iter,
+        restore_from_log(log_filename, true, n, p, job_args, job_args_num, &iter,
             &lambda_count, &lambda, &beta_sets);
         // we need to recalculate the rowsums
         auto update_beta_set = [&](auto beta_set) {
@@ -691,7 +695,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
             beta_sequence.lambdas[beta_sequence.count] = lambda;
             beta_sequence.count++;
 
-            printf("checking adaptive cal\n");
+            if (VERBOSE)
+                printf("checking adaptive cal\n");
             if (check_adaptive_calibration(0.75, &beta_sequence, n)) {
                 printf("Halting as reccommended by adaptive calibration\n");
                 final_lambda = lambda;

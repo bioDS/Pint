@@ -126,47 +126,18 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     return all_effects;
 }
 
-SEXP read_log(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
-    SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
-    SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_)
+SEXP read_log_(SEXP log_filename_)
 {
-    double* x = REAL(X_);
-    double* y = REAL(Y_);
-    SEXP dim = getAttrib(X_, R_DimSymbol);
-    int n = INTEGER(dim)[0];
-    int p = INTEGER(dim)[1];
-    float frac_overlap_allowed = asReal(frac_overlap_allowed_);
-    int max_interaction_distance = asInteger(max_interaction_distance_);
-    int p_int = get_p_int(p, max_interaction_distance);
-    int max_nz_beta = asInteger(max_nz_beta_);
-    bool verbose = asLogical(verbose_);
-    int max_lambdas = asInteger(max_lambdas_);
     char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
-
-    int job_args_num = 4;
-    char **job_args = malloc(job_args_num *sizeof(*job_args));
-    for (int i = 0; i < job_args_num; i++) {
-        job_args[i] = malloc(100);
-    }
-    sprintf(job_args[0], "%d", n);
-    sprintf(job_args[1], "%d", p);
-    sprintf(job_args[2], "%d", max_interaction_distance);
-    sprintf(job_args[3], "%d", max_lambdas);
 
     int restored_iter = -1;
     int restored_lambda_count = -1;
     float restored_lambda_value = -1.0;
     Beta_Value_Sets restored_beta_sets;
 
-    restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+    restore_from_log(log_filename, false, 0, 0, 0, 0, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
 
     SEXP all_effects = process_beta(&restored_beta_sets);
-
-    for (int i = 0; i < job_args_num; i++) {
-        free(job_args[i]);
-    }
-    free(job_args);
 
     return all_effects;
 }
@@ -214,7 +185,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.actual_cols = n;
     xmatrix.X = X;
 
-    enum LOG_LEVEL log_level = NONE;
+    enum LOG_LEVEL log_level = LAMBDA;
 
     Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
 
@@ -237,6 +208,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 }
 
 static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 7 },
+    { "read_log_", (DL_FUNC)&read_log_, 1 },
     { NULL, NULL, 0 } };
 
 void R_init_Pint(DllInfo* info)

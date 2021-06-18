@@ -125,21 +125,29 @@ int check_can_restore_from_log(char* filename, int n, int p, int num_betas,
 }
 
 // returns the opened log for future use.
-FILE* restore_from_log(char* filename, int n, int p, 
+FILE* restore_from_log(char* filename, bool check_args, int n, int p, 
     char** job_args, int job_args_num, int* actual_iter,
     int* actual_lambda_count, float* actual_lambda_value,
     Beta_Value_Sets *actual_beta_sets)
 {
 
-    int num_betas = 1;
+    int num_betas = 100;
     FILE* log_file = fopen(filename, "r+");
-    long buf_size = num_betas * 16 + 500;
-    char* buffer = malloc(buf_size);
+    long buf_size = num_betas * (16+int_print_len) + 500;
+    char* buffer = new char[buf_size];
     int beta1_size = -1, beta2_size = -1, beta3_size = -1;
     Rprintf("restoring from log\n");
 
-    // (none of this actually changes, we just need to set the log_file_offset)
-    init_print(log_file, n, p, num_betas, job_args, job_args_num);
+    // the first 5 rows are commentary & X size.
+    fgets(buffer, buf_size, log_file);
+    fgets(buffer, buf_size, log_file);
+    fgets(buffer, buf_size, log_file);
+    fgets(buffer, buf_size, log_file);
+    fgets(buffer, buf_size, log_file); // contains n, p
+    sscanf(buffer, "%d, %d", &n, &p);
+    int_print_len = std::log10(p*p*p) + 1;
+    log_file_offset = ftell(log_file);
+    // init_print(log_file, n, p, num_betas, job_args, job_args_num);
 
     // now we're at the first saved line, check whether it's a complete
     // checkpoint.

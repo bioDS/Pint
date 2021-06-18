@@ -116,7 +116,7 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
 #endif
     }
     if (value < p) {
-        if (value == interesting_col)
+        if (VERBOSE && value == interesting_col)
             printf("[%ld < %d]: main\n", value, p);
         entries = &as->entries1;
     } else if (value < p * p) {
@@ -264,7 +264,7 @@ char update_working_set_cpu(
         while (curr_inter != last_inter) {
             long tuple_val = curr_inter->first;
             float sum = std::abs(curr_inter->second);
-            if (tuple_val == main && main == interesting_col) {
+            if (VERBOSE && tuple_val == main && main == interesting_col) {
                 printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
             } else if (tuple_val < p) {
                 // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
@@ -341,7 +341,7 @@ char update_working_set_cpu(
             }
             curr_inter++;
         }
-        if (main == interesting_col)
+        if (VERBOSE && main == interesting_col)
             printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
         last_max[main] = max_inter_val;
         sum_with_col.clear();

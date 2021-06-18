@@ -1848,7 +1848,7 @@ void save_restore_log()
     Beta_Value_Sets restored_beta_sets;
 
     printf("\t - restoring from log... \n");
-    restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+    restore_from_log(log_filename, true, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
     printf("\t - done\n");
 
     auto check = [&](auto* set1, auto* set2) {
@@ -1892,7 +1892,7 @@ void save_restore_log()
 
     save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
     g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, job_args, job_args_num) == TRUE);
-    restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+    restore_from_log(log_filename, true, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
 
     printf("checking beta1\n");
     check(&beta_sets.beta1, &restored_beta_sets.beta1);
@@ -1914,7 +1914,7 @@ void save_restore_log()
 
     save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
     g_assert_true(check_can_restore_from_log(log_filename, n, p, num_betas, job_args, job_args_num) == TRUE);
-    restore_from_log(log_filename, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+    restore_from_log(log_filename, true, n, p, job_args, job_args_num, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
 
     printf("checking beta1\n");
     check(&beta_sets.beta1, &restored_beta_sets.beta1);
@@ -1971,7 +1971,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int final_iter, final_lambda_count;
     float final_lambda_value;
     Beta_Value_Sets final_beta_sets;
-    restore_from_log(log_filename, fixture->n, fixture->p, job_args, job_args_num, &final_iter, &final_lambda_count, &final_lambda_value, &final_beta_sets);
+    restore_from_log(log_filename, true, fixture->n, fixture->p, job_args, job_args_num, &final_iter, &final_lambda_count, &final_lambda_value, &final_beta_sets);
 
     printf("finished at lambda %d: %f\n", final_lambda_count, final_lambda_value);
     g_assert_true(fabs(final_lambda_value - 0.556171) < 0.001);
