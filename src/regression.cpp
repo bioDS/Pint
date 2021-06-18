@@ -499,52 +499,60 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     FILE* log_file;
     int iter = 0;
-    // if (check_can_restore_from_log(log_filename, n, p, p_int, job_args,
-    //                               job_args_num)) {
-    //  Rprintf("We can restore from a partial log!\n");
-    //  restore_from_log(log_filename, n, p, p_int, job_args, job_args_num, &iter,
-    //                   &lambda_count, &lambda, beta);
-    //  // we need to recalculate the rowsums
-    //  //for (int col = 0; col < p_int; col++) {
-    //  //  int *col_entries = &Xu.host_X[Xu.host_col_offsets[col]];
-    //  //  for (int i = 0; i < n; i++) {
-    //  //    int entry = col_entries[i];
-    //  //    rowsum[entry] += beta[col];
-    //  //  }
-    //  //}
-    //  for (int col_i = 0; col_i < p_int; col_i++) {
-    //    int *col_i_entries = &Xu.host_X[Xu.host_col_offsets[col_i]];
-    //    for (int i = 0; i < n; i++) {
-    //      int row = col_i_entries[i];
-    //      int *inter_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
-    //      int row_nz = Xu.host_row_nz[row];
-    //      for (int col_j_ind = 0; col_j_ind < row_nz; col_j_ind++) {
-    //        int col_j = inter_row[col_j_ind];
-    //        int k = (2 * (p - 1) + 2 * (p - 1) * (col_i - 1) - (col_i - 1) *
-    //        (col_i - 1) - (col_i - 1)) / 2 + col_j; rowsum[row] += beta[k];
-    //      }
-    //    }
-    //  }
-    //  //for (int col = 0; col < p_int; col++) {
-    //  //  int entry = -1;
-    //  //  for (int i = 0; i < X2.cols[col].nwords; i++) {
-    //  //    S8bWord word = X2.cols[col].compressed_indices[i];
-    //  //    unsigned long values = word.values;
-    //  //    for (int j = 0; j <= group_size[word.selector]; j++) {
-    //  //      int diff = values & masks[word.selector];
-    //  //      if (diff != 0) {
-    //  //        entry += diff;
-    //  //        rowsum[entry] += beta[col];
-    //  //      }
-    //  //      values >>= item_width[word.selector];
-    //  //    }
-    //  //  }
-    //  //}
-    //} else {
-    //  Rprintf("no partial log for current job found\n");
-    //}
-    // if (log_level != NONE)
-    //  log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
+    if (check_can_restore_from_log(log_filename, n, p, p_int, job_args,
+            job_args_num)) {
+        Rprintf("We can restore from a partial log!\n");
+        restore_from_log(log_filename, n, p, job_args, job_args_num, &iter,
+            &lambda_count, &lambda, &beta_sets);
+        // we need to recalculate the rowsums
+        auto update_beta_set = [&](auto beta_set) {
+            for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
+                long val = it->first;
+                float bv = it->second;
+                auto update_columns = [&](int a, int b, int c) {
+                    int* colA = &Xu.host_X[Xu.host_col_offsets[a]];
+                    int* colB = &Xu.host_X[Xu.host_col_offsets[b]];
+                    int* colC = &Xu.host_X[Xu.host_col_offsets[c]];
+                    int ib = 0, ic = 0;
+                    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
+                        int cur_row = colA[ia];
+                        while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+                            ib++;
+                        while (colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
+                            ic++;
+                        if (cur_row == colB[ib] && cur_row == colC[ic]) {
+                            rowsum[cur_row] += bv;
+                        }
+                    }
+                };
+                if (val < p) {
+                    update_columns(val, val, val);
+                } else if (val < p * p) {
+                    auto pair = val_to_pair(val, p);
+                    int a = std::get<0>(pair);
+                    int b = std::get<1>(pair);
+                    update_columns(a, a, b);
+                } else {
+                    if (val >= p * p * p) {
+                        printf("broken val: %ld\n", val);
+                    }
+                    auto triple = val_to_triplet(val, p);
+                    int a = std::get<0>(triple);
+                    int b = std::get<1>(triple);
+                    int c = std::get<2>(triple);
+                    update_columns(a, b, c);
+                }
+            }
+        };
+
+        update_beta_set(&beta_sets.beta1);
+        update_beta_set(&beta_sets.beta2);
+        update_beta_set(&beta_sets.beta3);
+    } else {
+        Rprintf("no partial log for current job found\n");
+    }
+    if (log_level != NONE)
+        log_file = init_log(log_filename, n, p, p_int, job_args, job_args_num);
 
     // set-up beta_sequence struct
     robin_hood::unordered_flat_map<long, float> beta_cache;
@@ -611,6 +619,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
     printf("initial error: %f\n", error);
     while (lambda > final_lambda && iter < max_lambda_count) {
+        if (log_level == LAMBDA) {
+            save_log(0, lambda, lambda_count, &beta_sets, log_file);
+        }
         if (nz_beta >= max_nz_beta) {
             printf("reached max_nz_beta of %d\n", max_nz_beta);
             break;
