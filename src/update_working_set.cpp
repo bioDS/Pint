@@ -197,62 +197,40 @@ char update_working_set_cpu(
         long main = updateable_items[main_i];
         float max_inter_val = 0;
         int inter_cols = 0;
-        // ska::flat_hash_set<long> inters_found;
         robin_hood::unordered_flat_map<long, float> sum_with_col;
         // robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
-        //robin_hood::unordered_flat_map<std::pair<long, long>, float> sum_with_col2;
-        int main_col_len = 0;
 
-        int* column_entries = col_i_cache;
-        long col_entry_pos = 0;
-        long entry = -1;
-        for (int r = 0; r < Xc.cols[main].nwords; r++) {
-            S8bWord word = Xc.cols[main].compressed_indices[r];
-            unsigned long values = word.values;
-            for (int j = 0; j <= group_size[word.selector]; j++) {
-                int diff = values & masks[word.selector];
-                if (diff != 0) {
-                    entry += diff;
+        int main_col_len = Xu.host_col_nz[main];
+        int* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
 
-                    int row_main = entry;
-                    float rowsum_diff = rowsum[row_main];
-
-                    // Do thing per entry here:
-
-                    // Iterate through matrix of remaining pairs, checking three-way interactions.
-                    // printf("checking main: %ld\n", main); //TOOD: maintain separate lists so we can solve them in order
-                    sum_with_col[main] += rowsum_diff;
-                    if (depth > 1) {
-                        int ri = 0;
-                        while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
-                            ri++;
-                        for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
-                            int inter = relevant_row_set.rows[row_main][ri];
-                            // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
-                            sum_with_col[inter] += rowsum_diff;
-                            if (depth > 2)
-                                for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
-                                    int inter2 = relevant_row_set.rows[row_main][ri2];
-                                    long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                                    // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
-                                    if (row_main == 0 && inter == 1 && inter2 == 2) {
-                                        // printf("interesting col ind == %ld", inter_ind);
-                                    }
-                                    sum_with_col[inter_ind] += rowsum_diff;
-                                    if (main == interesting_col && inter == interesting_col) {
-                                        // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
-                                    }
-                                }
+        for (int entry_i = 0; entry_i < main_col_len; entry_i++) {
+            int row_main = column_entries[entry_i];
+            float rowsum_diff = rowsum[row_main];
+            sum_with_col[main] += rowsum_diff;
+            if (depth > 1) {
+                int ri = 0;
+                while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
+                    ri++;
+                for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                    int inter = relevant_row_set.rows[row_main][ri];
+                    // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
+                    sum_with_col[inter] += rowsum_diff;
+                    if (depth > 2)
+                        for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
+                            int inter2 = relevant_row_set.rows[row_main][ri2];
+                            long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
+                            // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
+                            if (row_main == 0 && inter == 1 && inter2 == 2) {
+                                // printf("interesting col ind == %ld", inter_ind);
+                            }
+                            sum_with_col[inter_ind] += rowsum_diff;
+                            if (main == interesting_col && inter == interesting_col) {
+                                // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                            }
                         }
-                    }
-
-                    column_entries[col_entry_pos] = entry;
-                    col_entry_pos++;
                 }
-                values >>= item_width[word.selector];
             }
         }
-        main_col_len = col_entry_pos;
 
         if (VERBOSE && main == interesting_col) {
             printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
