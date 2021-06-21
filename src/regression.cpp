@@ -680,7 +680,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         }
         double prev_error = error;
         error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
-        printf("lambda %d = %f, error %.1f, nz_beta %ld\n", lambda_count, lambda, error,
+        printf("lambda %d = %f, error %.4e, nz_beta %ld\n", lambda_count, lambda, error,
             nz_beta);
         if (use_adaptive_calibration && nz_beta > 0) {
             Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
