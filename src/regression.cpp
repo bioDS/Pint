@@ -196,6 +196,11 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                     pruned_branches++;
                 }
             }
+            //// we'll also update last_rowums for the active set
+            //for (auto it = active_set->entries2.begin(); it != active_set->entries2.end(); it++) {
+            //    AS_Entry *entry = &it->second;
+            //    memcpy(entry->last_rowsum, rowsum, sizeof *rowsum * n);
+            //}
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);

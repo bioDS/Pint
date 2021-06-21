@@ -1,6 +1,6 @@
 Active_Set active_set_new(int max_length, int p);
 void active_set_free(Active_Set as);
-void active_set_append(Active_Set* as, long value, int* col, int len);
+// void active_set_append(Active_Set* as, long value, int* col, int len, int n);
 void active_set_remove(Active_Set* as, long value);
 bool active_set_present(Active_Set* as, long value);
 

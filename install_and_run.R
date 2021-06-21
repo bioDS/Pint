@@ -31,7 +31,7 @@ d <- readRDS(f)
 X <- d$X
 Y <- d$Y
 
-result <- pairwise_lasso(X, Y, lambda_min = 0.0001, max_interaction_distance=-1, use_adaptive_calibration=TRUE, max_nz_beta=1000, depth=2)
+result <- pairwise_lasso(X, Y, lambda_min = 0.0001, max_interaction_distance=-1, use_adaptive_calibration=TRUE, max_nz_beta=1000, depth=3)
 
 result
 

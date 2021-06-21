@@ -101,7 +101,7 @@ bool active_set_present(Active_Set* as, long value)
     return (entries->contains(value) && entries->at(value).present);
 }
 
-void active_set_append(Active_Set* as, long value, int* col, int len)
+void active_set_append(Active_Set* as, long value, int* col, int len, int n, float* rowsum, float last_max)
 {
     //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
     //  printf("appending interesting col %d to as\n", value);
@@ -133,6 +133,11 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
         if (e.was_present) {
             e.present = TRUE;
         }
+        // pairwise entries also have a last_rowsum*
+        if (value > p && value < p*p) {
+            memcpy(e.last_rowsum, rowsum, n * sizeof *rowsum);
+            e.last_max = last_max;
+        }
         entries->insert_or_assign(value, e);
     } else {
         struct AS_Entry e;
@@ -141,6 +146,12 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
         e.was_present = TRUE;
         e.col = col_to_s8b_col(len, col);
         int i = as->length;
+        // pairwise entries also have a last_rowsum*
+        if (value > p && value < p*p) {
+            e.last_rowsum = new float[n];
+            memcpy(e.last_rowsum, rowsum, n * sizeof *rowsum);
+            e.last_max = last_max;
+        }
         entries->insert_or_assign(value, e);
     }
     as->length++;
@@ -184,11 +195,12 @@ char update_working_set_cpu(
     long length_increase = 0;
     int total = 0, skipped = 0;
     int p_int = p * (p + 1) / 2;
+    long int2_used = 0, int2_skipped = 0;
 
     long total_inter_cols = 0;
     int correct_k = 0;
 #pragma omp parallel for reduction(+ \
-                                   : total_inter_cols, total, skipped)
+                                   : total_inter_cols, total, skipped, int2_used, int2_skipped)
     for (long main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
@@ -199,6 +211,7 @@ char update_working_set_cpu(
         int inter_cols = 0;
         robin_hood::unordered_flat_map<long, float> sum_with_col;
         // robin_hood::unordered_flat_map<long, float> sum_with_col = thread_cache.lf_map;
+        // robin_hood::unordered_flat_map<long, >
 
         int main_col_len = Xu.host_col_nz[main];
         int* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
@@ -215,23 +228,31 @@ char update_working_set_cpu(
                     int inter = relevant_row_set.rows[row_main][ri];
                     // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
                     sum_with_col[inter] += rowsum_diff;
-                    if (depth > 2)
-                        for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
-                            int inter2 = relevant_row_set.rows[row_main][ri2];
-                            long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                            // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
-                            if (row_main == 0 && inter == 1 && inter2 == 2) {
-                                // printf("interesting col ind == %ld", inter_ind);
+                    if (depth > 2) {
+                        int k = pair_to_val(std::make_tuple(main, inter), p);
+                        if (!as->entries2.contains(k) || !as_wont_update(Xu, lambda, as->entries2[k].last_max, as->entries2[k].last_rowsum, rowsum, as->entries2[k].col, thread_caches[omp_get_thread_num()].col_j)) {
+                            int2_used++;
+                            for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
+                                int inter2 = relevant_row_set.rows[row_main][ri2];
+                                long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
+                                // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
+                                if (row_main == 0 && inter == 1 && inter2 == 2) {
+                                    // printf("interesting col ind == %ld", inter_ind);
+                                }
+                                sum_with_col[inter_ind] += rowsum_diff;
+                                if (main == interesting_col && inter == interesting_col) {
+                                    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                                }
                             }
-                            sum_with_col[inter_ind] += rowsum_diff;
-                            if (main == interesting_col && inter == interesting_col) {
-                                // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
-                            }
+                        } else {
+                            int2_skipped++;
                         }
+                    }
                 }
             }
         }
 
+        robin_hood::unordered_flat_map<long, float> last_inter_max;
         if (VERBOSE && main == interesting_col) {
             printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
         }
@@ -280,9 +301,11 @@ char update_working_set_cpu(
 #ifdef NOT_R
                     g_assert_true(tuple_val <= p * p);
 #endif
+                    // this is a three way interaction, update the last_inter_max of the relevant pair as well
                     a = main;
                     b = std::get<0>(inter_pair);
                     c = std::get<1>(inter_pair);
+                    last_inter_max[b] = std::max(last_inter_max[b], sum); //TODO: assumes that non-entries return 0.0
                     k = triplet_to_val(std::make_tuple(a, b, c), p);
                 }
                 long inter = std::get<0>(inter_pair);
@@ -313,7 +336,7 @@ char update_working_set_cpu(
                     printf("appending interesting col %d of length %d (%ld)\n", k, inter_len, main);
                 }
 #pragma omp critical
-                active_set_append(as, k, col_j_cache, inter_len);
+                active_set_append(as, k, col_j_cache, inter_len, n, rowsum, last_inter_max[tuple_val]);
                 increased_set = TRUE;
                 total++;
             }
@@ -326,6 +349,7 @@ char update_working_set_cpu(
     }
 
     // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
+    printf("int2 used: %ld, skipped %ld\n", int2_used, int2_skipped);
     return increased_set;
 }
 

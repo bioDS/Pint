@@ -23,11 +23,11 @@ struct pe_params {
 // TODO: we know every interaction after the first iter, can we give a better
 // estimate?
 float pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
-    X_uncompressed X, int k)
+    int* col, long col_nz)
 {
-    int *col = &X.host_X[X.host_col_offsets[k]];
+    // int *col = &X.host_X[X.host_col_offsets[k]];
     float pos_max = 0.0, neg_max = 0.0;
-    for (int ind = 0; ind < X.host_col_nz[k]; ind++) {
+    for (int ind = 0; ind < col_nz; ind++) {
         int i = col[ind];
         #ifdef NOT_R
             g_assert_true(i >= 0);
@@ -48,7 +48,7 @@ float exact_multiple() {}
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
 float l2_combined_estimate(X_uncompressed X, float lambda, int k,
     float last_max, float* last_rowsum,
-    float* rowsum, int* column_cache)
+    float* rowsum)
 {
     float alpha = 0.0;
     // read through the compressed column
@@ -72,7 +72,7 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int k,
     if (verbose && k == interesting_col)
         printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
 
-    float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, X, k);
+    float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, col, X.host_col_nz[k]);
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     if (verbose && k == interesting_col)
@@ -95,8 +95,8 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int k,
 bool wont_update_effect(X_uncompressed X, float lambda, int k, float last_max,
     float* last_rowsum, float* rowsum, int* column_cache)
 {
-    int* cache = malloc(X.n * sizeof *column_cache);
-    float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, cache);
+    // int* cache = malloc(X.n * sizeof *column_cache);
+    float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum);
     if (verbose && k == interesting_col) {
         // printf("beta[%d] = %f\n", k, beta[k]);
         printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound,
@@ -105,6 +105,54 @@ bool wont_update_effect(X_uncompressed X, float lambda, int k, float last_max,
             printf("may update %d\n", k);
         }
     }
-    free(cache);
+    // free(cache);
     return upper_bound <= lambda;
+}
+
+float as_combined_estimate(float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int *cache)
+{
+    float alpha = 0.0;
+    // read through the compressed column
+    // TODO: make these an aligned struct?
+    float estimate_squared = 0.0;
+    float real_squared = 0.0;
+    int col_entry_pos = 0;
+
+    int entry = -1;
+    for (int i = 0; i < col.nwords; i++) {
+      S8bWord word = col.compressed_indices[i];
+      unsigned long values = word.values;
+      for (int j = 0; j <= group_size[word.selector]; j++) {
+        int diff = values & masks[word.selector];
+        if (diff != 0) {
+            entry += diff;
+
+            // do thing here
+            cache[col_entry_pos] = entry;
+            estimate_squared += rowsum[entry] * last_rowsum[entry];
+            real_squared += last_rowsum[entry] * last_rowsum[entry];
+            col_entry_pos++;
+        }
+        values >>= item_width[word.selector];
+      }
+    }
+
+    if (real_squared != 0.0)
+        alpha = fabs(estimate_squared / real_squared);
+    else
+        alpha = 0.0;
+
+    float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, cache, col_entry_pos);
+
+    float total_estimate = fabs(last_max * alpha) + remainder;
+    return total_estimate;
+}
+
+bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int* column_cache) {
+    float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache);
+    return upper_bound <= lambda;
+}
+
+bool as_pessimistic_est() {
+
 }

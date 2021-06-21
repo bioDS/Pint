@@ -113,12 +113,12 @@ typedef struct {
 } Active_Set;
 
 struct AS_Entry {
-    long val : 62; //TODO: change this to a tuple.
+    long val : 62;
     int was_present : 1;
     int present : 1;
     S8bCol col;
-    // TODO: shouldn't need this
-    // char padding[39];
+    float *last_rowsum;
+    float last_max;
 };
 
 typedef struct {
