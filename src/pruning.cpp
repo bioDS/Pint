@@ -106,6 +106,5 @@ bool wont_update_effect(X_uncompressed X, float lambda, int k, float last_max,
         }
     }
     free(cache);
-    // return upper_bound <= lambda;
-    return false;
+    return upper_bound <= lambda;
 }
