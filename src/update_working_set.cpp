@@ -101,7 +101,7 @@ bool active_set_present(Active_Set* as, long value)
     return (entries->contains(value) && entries->at(value).present);
 }
 
-void active_set_append(Active_Set* as, long value, int* col, int len, int n, float* rowsum, float last_max)
+void active_set_append(Active_Set* as, long value, int* col, int len)
 {
     //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
     //  printf("appending interesting col %d to as\n", value);
@@ -174,7 +174,6 @@ void active_set_remove(Active_Set* as, long value)
 typedef struct IC_Entry {
     bool skipped_this_iter;
     bool checked_this_iter;
-    float val_this_iter;
     bool present;
     float last_max;
     float* last_rowsum;
@@ -223,19 +222,21 @@ char update_working_set_cpu(
     int p_int = p * (p + 1) / 2;
     long int2_used = 0, int2_skipped = 0;
 
-    //TODO: quite a hack
-    if (unlikely(!inter_cache_init_done)) {
-        // init inter cache
-        inter_cache = malloc(p_int * sizeof(IC_Entry)); //TODO: free
-        for (int i = 0; i < p_int; i++) {
-            inter_cache[i].present = false;
-            // inter_cache[i].skipped_this_iter = false; //TODO: try true, see what happens?
+    if (depth > 2) {
+        //TODO: quite a hack
+        if (unlikely(!inter_cache_init_done)) {
+            // init inter cache
+            inter_cache = malloc(p_int * sizeof(IC_Entry)); //TODO: free
+            for (int i = 0; i < p_int; i++) {
+                inter_cache[i].present = false;
+                // inter_cache[i].skipped_this_iter = false; //TODO: try true, see what happens?
+            }
+            inter_cache_init_done = true;
         }
-        inter_cache_init_done = true;
-    }
-    for (int i = 0; i < p_int; i++) {
-        inter_cache[i].skipped_this_iter = false;
-        inter_cache[i].checked_this_iter = false;
+        for (int i = 0; i < p_int; i++) {
+            inter_cache[i].skipped_this_iter = false;
+            inter_cache[i].checked_this_iter = false;
+        }
     }
 
     long total_inter_cols = 0;
@@ -411,11 +412,11 @@ char update_working_set_cpu(
                     printf("appending interesting col %d of length %d (%ld)\n", k, inter_len, main);
                 }
 #pragma omp critical
-                active_set_append(as, k, col_j_cache, inter_len, n, rowsum, last_inter_max[tuple_val]);
+                active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
                 total++;
             }
-            if (tuple_val != main && tuple_val < p) {
+            if (depth > 2 && tuple_val != main && tuple_val < p) {
                 long ik = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + tuple_val;
                 if (!inter_cache[ik].present) {
                     int a = main;
