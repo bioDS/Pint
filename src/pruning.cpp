@@ -1,4 +1,5 @@
 #include "liblasso.h"
+#include "robin_hood.h"
 #include <stdalign.h>
 #define verbose FALSE
 // #define verbose TRUE
@@ -109,6 +110,28 @@ bool wont_update_effect(X_uncompressed X, float lambda, int k, float last_max,
     return upper_bound <= lambda;
 }
 
+// float as_pessimistic_estimate(float alpha, robin_hood::unordered_flat_map<long, float>* last_rowsum, float* rowsum,
+float as_pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
+    int* col, long col_nz)
+{
+    // int *col = &X.host_X[X.host_col_offsets[k]];
+    float pos_max = 0.0, neg_max = 0.0;
+    for (int ind = 0; ind < col_nz; ind++) {
+        int i = col[ind];
+        #ifdef NOT_R
+            g_assert_true(i >= 0);
+        #endif
+        float diff_i = rowsum[i] - alpha * last_rowsum[ind];
+        if (diff_i > 0) {
+            pos_max += diff_i;
+        } else {
+            neg_max += diff_i;
+        }
+    }
+    float estimate = fmaxf(pos_max, fabs(neg_max));
+    return estimate;
+}
+
 float as_combined_estimate(float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int *cache)
 {
     float alpha = 0.0;
@@ -129,8 +152,8 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
 
             // do thing here
             cache[col_entry_pos] = entry;
-            estimate_squared += rowsum[entry] * last_rowsum[entry];
-            real_squared += last_rowsum[entry] * last_rowsum[entry];
+            estimate_squared += rowsum[entry] * last_rowsum[i];
+            real_squared += last_rowsum[i] * last_rowsum[i];
             col_entry_pos++;
         }
         values >>= item_width[word.selector];
@@ -142,12 +165,12 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
     else
         alpha = 0.0;
 
-    float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, cache, col_entry_pos);
+    float remainder = as_pessimistic_estimate(alpha, last_rowsum, rowsum, cache, col_entry_pos);
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     return total_estimate;
 }
-
+// bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, robin_hood::unordered_flat_map<long, float>* last_rowsum, float* rowsum, S8bCol col, int* column_cache) {
 bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int* column_cache) {
     float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache);
     return upper_bound <= lambda;
