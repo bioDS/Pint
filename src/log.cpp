@@ -289,7 +289,7 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
         read_beta(beta3_size, &actual_beta_sets->beta3);
     }
 
-    free(buffer);
+    delete [] buffer;
     Rprintf("done restoring from log\n");
     return log_file;
 }

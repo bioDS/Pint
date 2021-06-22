@@ -133,11 +133,6 @@ void active_set_append(Active_Set* as, long value, int* col, int len, int n, flo
         if (e.was_present) {
             e.present = TRUE;
         }
-        // pairwise entries also have a last_rowsum*
-        if (value > p && value < p*p) {
-            memcpy(e.last_rowsum, rowsum, n * sizeof *rowsum);
-            e.last_max = last_max;
-        }
         entries->insert_or_assign(value, e);
     } else {
         struct AS_Entry e;
@@ -146,12 +141,6 @@ void active_set_append(Active_Set* as, long value, int* col, int len, int n, flo
         e.was_present = TRUE;
         e.col = col_to_s8b_col(len, col);
         int i = as->length;
-        // pairwise entries also have a last_rowsum*
-        if (value > p && value < p*p) {
-            e.last_rowsum = new float[n];
-            memcpy(e.last_rowsum, rowsum, n * sizeof *rowsum);
-            e.last_max = last_max;
-        }
         entries->insert_or_assign(value, e);
     }
     as->length++;
@@ -182,6 +171,30 @@ void active_set_remove(Active_Set* as, long value)
 //    }
 //}
 
+typedef struct IC_Entry {
+    bool present;
+    float last_max;
+    float* last_rowsum;
+    S8bCol col;
+} IC_Entry;
+// static robin_hood::unordered_flat_map<long, IC_Entry> inter_cache;
+static IC_Entry* inter_cache;
+static bool inter_cache_init_done = false;
+
+void update_inter_cache(long k, int n, float* rowsum, float last_max, int* col, int col_len)
+{
+    if (!inter_cache[k].present) {
+        S8bCol comp_col = col_to_s8b_col(col_len, col);
+        inter_cache[k].last_rowsum = (float*)malloc(n * sizeof *rowsum);
+        inter_cache[k].col = comp_col;
+        inter_cache[k].present = true;
+    }
+    inter_cache[k].last_max = last_max;
+    memcpy(inter_cache[k].last_rowsum, rowsum, n * sizeof *rowsum);
+}
+
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 char update_working_set_cpu(
     struct XMatrixSparse Xc, struct row_set relevant_row_set, Thread_Cache* thread_caches, Active_Set* as,
     struct X_uncompressed Xu, float* rowsum, bool* wont_update, int p, int n,
@@ -196,6 +209,16 @@ char update_working_set_cpu(
     int total = 0, skipped = 0;
     int p_int = p * (p + 1) / 2;
     long int2_used = 0, int2_skipped = 0;
+
+    //TODO: quite a hack
+    if (unlikely(!inter_cache_init_done)) {
+        // init inter cache
+        inter_cache = malloc(p_int * sizeof(IC_Entry)); //TODO: free
+        for (int i = 0; i < p_int; i++) {
+            inter_cache[i].present = false;
+        }
+        inter_cache_init_done = true;
+    }
 
     long total_inter_cols = 0;
     int correct_k = 0;
@@ -229,8 +252,14 @@ char update_working_set_cpu(
                     // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
                     sum_with_col[inter] += rowsum_diff;
                     if (depth > 2) {
-                        int k = pair_to_val(std::make_tuple(main, inter), p);
-                        if (!as->entries2.contains(k) || !as_wont_update(Xu, lambda, as->entries2[k].last_max, as->entries2[k].last_rowsum, rowsum, as->entries2[k].col, thread_caches[omp_get_thread_num()].col_j)) {
+                        // int k = pair_to_val(std::make_tuple(main, inter), p);
+                        long k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
+                        // if (!inter_cache.contains(k) || !as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)) {
+                        // if (!inter_cache.contains(k) || !as_pessimistic_est(lambda, rowsum, inter_cache[k].col)) {
+                        // if (!inter_cache[k].present || !as_pessimistic_est(lambda, rowsum, inter_cache[k].col)) {
+                        if (!inter_cache[k].present || !as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)) {
+                        // if (true) {
+                            // if (true) {
                             int2_used++;
                             for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                                 int inter2 = relevant_row_set.rows[row_main][ri2];
@@ -340,6 +369,36 @@ char update_working_set_cpu(
                 increased_set = TRUE;
                 total++;
             }
+            if (tuple_val != main && tuple_val < p) {
+                long ik = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + tuple_val;
+                if (!inter_cache[ik].present) {
+                    int a = main;
+                    int b = tuple_val;
+                    int* colA = &Xu.host_X[Xu.host_col_offsets[a]];
+                    int* colB = &Xu.host_X[Xu.host_col_offsets[b]];
+                    int ib = 0, ic = 0;
+                    long inter_len = 0;
+                    for (int ia = 0; ia < Xu.host_col_nz[a]; ia++) {
+                        int cur_row = colA[ia];
+                        //if (a == b && a == c) {
+                        //  printf("%d: %d ", ia, cur_row);
+                        //}
+                        while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
+                            ib++;
+                        if (cur_row == colB[ib]) {
+                            //if (a == b && a == c) {
+                            //  printf("\n%d,%d,%d\n", ia, ib, ic);
+                            //}
+                            col_j_cache[inter_len] = cur_row;
+                            inter_len++;
+                        }
+                    }
+// #pragma omp critical
+                    update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val], col_j_cache, inter_len);
+                } else {
+                    update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val], col_j_cache, 0);
+                }
+            }
             curr_inter++;
         }
         if (VERBOSE && main == interesting_col)
@@ -349,7 +408,8 @@ char update_working_set_cpu(
     }
 
     // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
-    printf("int2 used: %ld, skipped %ld\n", int2_used, int2_skipped);
+    printf("int2 used: %ld, skipped %ld (%.0f\%)\n", int2_used, int2_skipped, 100.0 * (double)int2_skipped / (double)(int2_skipped+int2_used));
+    printf("as size: %d\n", as->entries1.size() + as->entries2.size() + as->entries3.size());
     return increased_set;
 }
 

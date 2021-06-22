@@ -153,6 +153,29 @@ bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last
     return upper_bound <= lambda;
 }
 
-bool as_pessimistic_est() {
+bool as_pessimistic_est(float lambda, float* rowsum, S8bCol col) {
+    int entry = -1;
+    float pos_max = 0.0, neg_max = 0.0;
+    for (int i = 0; i < col.nwords; i++) {
+      S8bWord word = col.compressed_indices[i];
+      unsigned long values = word.values;
+      for (int j = 0; j <= group_size[word.selector]; j++) {
+        int diff = values & masks[word.selector];
+        if (diff != 0) {
+            entry += diff;
 
+            // do thing here
+            float diff_i = rowsum[i];
+            if (diff_i > 0) {
+                pos_max += diff_i;
+            } else {
+                neg_max += diff_i;
+            }
+        }
+        values >>= item_width[word.selector];
+      }
+    }
+
+    float upper_bound = fmaxf(pos_max, fabs(neg_max));
+    return upper_bound <= lambda;
 }
