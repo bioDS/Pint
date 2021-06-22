@@ -1565,8 +1565,12 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     //       "updates, "
     //       "and %.2f subproblem time\n",
     //       pruning_time, working_set_update_time, subproblem_time);
-    g_assert_true(
-        fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
+    if (Xc.p > 100)
+        g_assert_true(
+            fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
+    else
+        g_assert_true(
+            fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 3.0);
 
     printf("working set upates were: %.2f main effect col, %.2f int col, %.2f "
            "reused col\n",
@@ -1935,7 +1939,7 @@ void save_restore_log()
 static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
 {
     int depth = 2;
-    char *log_filename = "adcal_test.log";
+    char* log_filename = "adcal_test.log";
     remove(log_filename);
     int max_interaction_distance = -1;
     float lambda_min = 0.01;
@@ -1945,20 +1949,20 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     float frac_overlap_allowed = -1;
     float halt_beta_diff = 1.01;
     LOG_LEVEL log_level = LOG_LEVEL::LAMBDA;
-    char *job_args[] = {"adcal", "test", "args"};
+    char* job_args[] = { "adcal", "test", "args" };
     int job_args_num = 3;
     int use_adaptive_calibration = TRUE;
     long max_nz_beta = -1;
 
     Sparse_Betas beta1;
     beta1.count = 5;
-    beta1.indices = new long[5] {1, 4, 7, 21, 35};
-    beta1.values = new float[5] {1.2, -2.1, 2.1, 13.0, -11.2};
+    beta1.indices = new long[5]{ 1, 4, 7, 21, 35 };
+    beta1.values = new float[5]{ 1.2, -2.1, 2.1, 13.0, -11.2 };
 
     Sparse_Betas beta2;
     beta2.count = 6;
-    beta2.indices = new long[6] {1, 4, 7, 21, 35, 107};
-    beta2.values = new float[6] {1.7, -2.1, 2.3, 12.0, -11.3, 0.8};
+    beta2.indices = new long[6]{ 1, 4, 7, 21, 35, 107 };
+    beta2.values = new float[6]{ 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
 
     g_assert_true(beta2.indices[1] == 4);
     g_assert_true(fabs(beta2.values[2] - 2.3) < 0.001);
