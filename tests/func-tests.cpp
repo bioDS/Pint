@@ -1629,7 +1629,7 @@ void test_row_list_without_columns()
     }
     for (int i = 0; i < n; i++)
         for (int j = 0; j < p; j++) {
-            xm[i][j] = xm_a[j][i];
+            xm[j][i] = xm_a[i][j];
         }
     XMatrixSparse Xc = sparsify_X(xm, n, p);
     X_uncompressed Xu = construct_host_X(&Xc);
@@ -1646,6 +1646,37 @@ void test_row_list_without_columns()
     g_assert_true(rs.row_lengths[0] == 1);
     g_assert_true(rs.row_lengths[1] == 2);
     g_assert_true(rs.row_lengths[4] == 3);
+
+    printf("returned rows:\n");
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < rs.row_lengths[i]; j++) {
+            int entry = rs.rows[i][j];
+            printf("%d, ", entry);
+        }
+        printf("\n");
+    }
+    printf("checking:\n");
+    for (int i = 0; i < n; i++) {
+        int found = 0;
+        for (int j = 0; j < p; j++) {
+            if (remove[j])
+                continue;
+            int entry = xm_a[i][j];
+            printf("%d, ", entry);
+            if (entry == 1) {
+                if (rs.rows[i][found] != j) {
+                    printf("!= found! (%d)\n", rs.rows[i][found]);
+                }
+                g_assert_true(rs.rows[i][found] == j);
+                found++;
+            }
+        }
+        if (found != rs.row_lengths[i]) {
+            printf("\nfound %d, row length %d\n", found, rs.row_lengths[i]);
+        }
+        g_assert_true(found == rs.row_lengths[i]);
+        printf("\n");
+    }
 
     for (int i = 0; i < NumCores; i++) {
         free(thread_caches[i].col_i);
