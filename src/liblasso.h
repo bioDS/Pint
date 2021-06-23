@@ -3,7 +3,10 @@
 #include "robin_hood.h"
 // #define interesting_col 54
 // #define interesting_col 2
-#define interesting_col 101
+//#define interesting_col 101
+//#define interesting_val 4194
+//#define interesting_col1 4  -1
+//#define interesting_col2 195 -1
 #include <errno.h>
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_randist.h>

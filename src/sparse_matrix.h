@@ -16,7 +16,7 @@ typedef struct Column_Set {
 struct row_set {
     int** rows;
     int* row_lengths;
-    S8bCol* s8b_rows;
+    // S8bCol* s8b_rows;
 };
 
 typedef struct XMatrixSparse {

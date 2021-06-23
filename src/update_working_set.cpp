@@ -116,8 +116,8 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
 #endif
     }
     if (value < p) {
-        if (VERBOSE && value == interesting_col)
-            printf("[%ld < %d]: main\n", value, p);
+        //if (VERBOSE && value == interesting_col)
+        //    printf("[%ld < %d]: main\n", value, p);
         entries = &as->entries1;
     } else if (value < p * p) {
         // printf("[%ld < %d]: pair\n", value, p*p);
@@ -258,7 +258,10 @@ char update_working_set_cpu(
         int main_col_len = Xu.host_col_nz[main];
         int* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
 
-
+        // bool checked_interesting_cols = false;
+        //if (main == interesting_col1) {
+        //    printf("checking main col %ld\n", main);
+        //}
 
         for (int entry_i = 0; entry_i < main_col_len; entry_i++) {
             int row_main = column_entries[entry_i];
@@ -272,18 +275,22 @@ char update_working_set_cpu(
                     int inter = relevant_row_set.rows[row_main][ri];
                     // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
                     sum_with_col[inter] += rowsum_diff;
+                    //if (!checked_interesting_cols && main == interesting_col1 && inter == interesting_col2) {
+                    //    // printf(" adding %f to sum %ld,%d. new total: %f\n", rowsum_diff, main, inter, sum_with_col[inter]);
+                    //    checked_interesting_cols = true;
+                    //}
                     if (depth > 2) {
                         long k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
-                        auto check_inter_cache = [&](long k) -> bool {                                
+                        auto check_inter_cache = [&](long k) -> bool {
                             // return true;
                             //bool res = as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j);
                             //return res;
                             if (!inter_cache[k].present)
                                 return true;
                             if (inter_cache[k].skipped_this_iter)
-                               return false;
+                                return false;
                             if (inter_cache[k].checked_this_iter)
-                               return true;
+                                return true;
                             //if (relevant_row_set.row_lengths[row_main] - ri < inter_cache[k].col.nz)
                             //    return true;
                             bool res = !as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j);
@@ -299,8 +306,8 @@ char update_working_set_cpu(
                         // if (!inter_cache[k].present || !as_pessimistic_est(lambda, rowsum, inter_cache[k].col)) {
                         // if (inter_cache[k].skip || !inter_cache[k].present || relevant_row_set.row_lengths[row_main] - ri < inter_cache[k].col.nz || !as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)) {
                         // if (!inter_cache[k].present || !inter_cache[k].skipped_this_iter && (relevant_row_set.row_lengths[row_main] - ri < inter_cache[k].col.nz || !as_wont_update(Xu, lambda, inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum, inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j))) {
-                            // if (true) {
-                            // if (true) {
+                        // if (true) {
+                        // if (true) {
                         if (check_inter_cache(k)) {
                             int2_used++;
                             for (int ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
@@ -311,9 +318,9 @@ char update_working_set_cpu(
                                     // printf("interesting col ind == %ld", inter_ind);
                                 }
                                 sum_with_col[inter_ind] += rowsum_diff;
-                                if (main == interesting_col && inter == interesting_col) {
-                                    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
-                                }
+                                //if (main == interesting_col && inter == interesting_col) {
+                                //    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                                //}
                             }
                         } else {
                             if (inter_cache[k].skipped_this_iter == true) {
@@ -329,9 +336,11 @@ char update_working_set_cpu(
         }
 
         robin_hood::unordered_flat_map<long, float> last_inter_max;
-        if (VERBOSE && main == interesting_col) {
-            printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
-        }
+        //if (VERBOSE && main == interesting_col) {
+        //    printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
+        //}
+        //if (main == interesting_col1)
+        //    printf(" %ld sum with col %d: %f\n", main, interesting_col2, sum_with_col[interesting_col2]);
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
         auto curr_inter = sum_with_col.cbegin();
@@ -339,17 +348,17 @@ char update_working_set_cpu(
         while (curr_inter != last_inter) {
             long tuple_val = curr_inter->first;
             float sum = std::abs(curr_inter->second);
-            if (VERBOSE && tuple_val == main && main == interesting_col) {
-                printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
-            } else if (tuple_val < p) {
-                // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
-            } else {
-#ifdef NOT_R
-                g_assert_true(tuple_val < p * p);
-#endif
-                // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
-                // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
-            }
+//            if (VERBOSE && tuple_val == main && main == interesting_col) {
+//                printf("%ld,sum: %f > %f (lambda)?\n", main, sum, lambda);
+//            } else if (tuple_val < p) {
+//                // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main, tuple_val, sum, lambda);
+//            } else {
+//#ifdef NOT_R
+//                g_assert_true(tuple_val < p * p);
+//#endif
+//                // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
+//                // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
+//            }
             max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
             if (sum > lambda) {
@@ -367,9 +376,11 @@ char update_working_set_cpu(
                     b = tuple_val;
                     c = main; //TODO: unnecessary
                     k = pair_to_val(std::make_tuple(a, b), p);
-                    if (k < p) {
-                        printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
-                    }
+                    //if (a == interesting_col1 && b == interesting_col2)
+                    //    printf("%d, %d: sum %f\n", a, b, sum);
+                    //if (k < p) {
+                    //    printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
+                    //}
 #ifdef NOT_R
                     g_assert_true(k >= p || k < p * p);
 #endif
@@ -448,15 +459,15 @@ char update_working_set_cpu(
             }
             curr_inter++;
         }
-        if (VERBOSE && main == interesting_col)
-            printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
+        //if (VERBOSE && main == interesting_col)
+        //    printf("largest inter found for effect %ld was %f\n", main, max_inter_val);
         last_max[main] = max_inter_val;
         sum_with_col.clear();
     }
 
     // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
-    printf("int2 used: %ld, skipped %ld (%.0f\%)\n", int2_used, int2_skipped, 100.0 * (double)int2_skipped / (double)(int2_skipped + int2_used));
-    printf("as size: %d,%d,%d\n", as->entries1.size(), as->entries2.size(), as->entries3.size());
+    // printf("int2 used: %ld, skipped %ld (%.0f\%)\n", int2_used, int2_skipped, 100.0 * (double)int2_skipped / (double)(int2_skipped + int2_used));
+    // printf("as size: %d,%d,%d\n", as->entries1.size(), as->entries2.size(), as->entries3.size());
     return increased_set;
 }
 
@@ -476,16 +487,58 @@ char update_working_set(
     //     printf("%d ", i);
     // }
     // printf("\n");
+    //long count = 0;
+    //for (int i = 0; i < p; i++)
+    //    if (!wont_update[i])
+    //        count++;
+    //if (count_may_update != count) {
+    //    printf("count_may_update was %d, should have been %d\n", count_may_update, count);
+    //}
+    //g_assert_true(count == count_may_update);
+    //if (!wont_update[interesting_col1] && !wont_update[interesting_col2])
+    //    printf(" both cols %d,%d may update\n", interesting_col1, interesting_col2);
+    //bool f1 = false, f2 = false;
+    //for (int i = 0; i < count_may_update; i++) {
+    //    if (updateable_items[count_may_update] == interesting_col1)
+    //        f1 = true;
+    //    if (updateable_items[count_may_update] == interesting_col2)
+    //        f2 = true;
+    //}
+    //printf("found: ");
+    //if (f1)
+    //    printf("f1, ");
+    //if (f2)
+    //    printf("f2, ");
+    //printf("\n");
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     // quick test:
+    //bool found_both = false;
     //for (int row = 0; row < n; row++) {
-    //  for (long inter_i = 0; inter_i < Xu.host_row_nz[row]; inter_i++) {
-    //      long col = Xu.host_X_row[Xu.host_row_offsets[row] + inter_i];
-    //      if (new_row_set.rows[row][inter_i] != col) {
-    //        printf("%d,%ld : %d != %ld\n", row, inter_i, new_row_set.rows[row][inter_i], col);
-    //      }
-    //      g_assert_true(new_row_set.rows[row][inter_i] == col);
-    //  }
+    //    int found = 0;
+    //    bool found1 = false, found2 = false;
+    //    int f1pos = -1, f2pos = -2;
+    //    for (long inter_i = 0; inter_i < Xu.host_row_nz[row]; inter_i++) {
+    //        int col = Xu.host_X_row[Xu.host_row_offsets[row] + inter_i];
+    //        if (!wont_update[col]) {
+    //            if (!found_both) {
+    //                if (!found_both && new_row_set.rows[row][found] == interesting_col1) {
+    //                    found1 = true;
+    //                    f1pos = found;
+    //                }
+    //                if (!found_both && new_row_set.rows[row][found] == interesting_col2) {
+    //                    found2 = true;
+    //                    f2pos = found;
+    //                }
+    //                if (found1 && found2) {
+    //                    // printf("found both in row %d at positions %d,%d\n", row, f1pos, f2pos);
+    //                    found_both = true;
+    //                }
+    //            }
+    //            g_assert_true(new_row_set.rows[row][found] == col);
+    //            found++;
+    //        }
+    //    }
+    //    g_assert_true(found == new_row_set.row_lengths[row]);
     //}
     char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, depth);
     for (int i = 0; i < n; i++) {

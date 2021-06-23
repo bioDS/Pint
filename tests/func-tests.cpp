@@ -5,9 +5,11 @@
 #include <locale.h>
 #include <omp.h>
 #include <stdlib.h>
+#include <tuple>
 #define _POSIX_C_SOURCE 199309L
 #include <iostream>
 #include <time.h>
+#include <vector>
 
 #include <algorithm>
 
@@ -408,10 +410,12 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
         //yfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/Y.csv";
     } else if ((long)use_big == 1) {
         printf("\nusing large test case\n");
-        fixture->n = 10000;
+        fixture->n = 2000;
         fixture->p = 1000;
-        xfile = "../X_nlethals50_v15803.csv";
-        yfile = "../Y_nlethals50_v15803.csv";
+        // xfile = "../X_nlethals50_v15803.csv";
+        // yfile = "../Y_nlethals50_v15803.csv";
+        xfile = "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv";
+        yfile = "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv";
         LAMBDA_MIN = 0.01 * fixture->n / 2;
         //xfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/X.csv";
         //yfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/Y.csv";
@@ -1214,6 +1218,117 @@ static unsigned int* target_col_nz;
 
 // struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
 
+static void check_branch_pruning_accuracy(UpdateFixture* fixture,
+    gconstpointer user_data)
+{
+    printf("starting accuracy test\n");
+    int use_adcal = TRUE;
+    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        -1, 0.01, 47504180,
+        200, FALSE, -1, 1.01,
+        NONE, NULL, 0, use_adcal,
+        77, "test.log", 2);
+
+    vector<pair<int, int>> true_effects = {
+        { 79, 432 },
+        { 107, 786 },
+        { 265, 522 },
+        { 265, 630 },
+        { 293, 432 },
+        { 314, 779 },
+        { 314, 812 },
+        { 382, 816 },
+        { 522, 811 },
+        { 585, 939 },
+        { 630, 786 },
+        { 630, 820 },
+        { 656, 812 },
+        { 107, 382 }
+    };
+
+    auto check_results = [&]() {
+        g_assert_true(beta_sets.beta3.size() == 0);
+
+        printf("found:\n");
+        for (auto& b1 : beta_sets.beta1) {
+            long val = b1.first;
+            printf(" %ld\n", val);
+        }
+        for (auto& b2 : beta_sets.beta2) {
+            long val = b2.first;
+            std::tuple<long, long> inter = val_to_pair(val, fixture->p);
+            printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
+        }
+
+        for (auto it = true_effects.begin(); it != true_effects.end(); it++) {
+            int first = it->first - 1;
+            int second = it->second - 1;
+            printf("checking %d,%d\n", first, second);
+            long val = pair_to_val(std::make_tuple(first, second), fixture->p);
+            printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
+            g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
+        }
+    };
+
+    check_results();
+
+    // these are the values that the previous version reliably finds
+    true_effects = {
+        { 4, 195 },
+        { 24, 109 },
+        { 52, 881 },
+        { 67, 778 },
+        { 79, 432 },
+        { 107, 786 },
+        { 121, 325 },
+        { 137, 347 },
+        { 141, 300 },
+        { 179, 246 },
+        { 197, 443 },
+        { 265, 522 },
+        { 265, 630 },
+        { 293, 432 },
+        { 293, 849 },
+        { 314, 779 },
+        { 314, 812 },
+        { 314, 990 },
+        { 352, 645 },
+        { 355, 560 },
+        { 382, 816 },
+        { 390, 600 },
+        { 415, 987 },
+        { 432, 586 },
+        { 506, 560 },
+        { 511, 642 },
+        { 522, 811 },
+        { 526, 905 },
+        { 544, 585 },
+        { 565, 881 },
+        { 585, 939 },
+        { 593, 630 },
+        { 602, 859 },
+        { 630, 786 },
+        { 630, 820 },
+        { 631, 704 },
+        { 656, 812 },
+        { 703, 952 },
+        { 973, 990 },
+        { 36, 195 },
+        { 93, 862 },
+        { 107, 382 },
+    };
+
+    beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        -1, 0.01, 47504180,
+        200, FALSE, -1, 1.01,
+        NONE, NULL, 0, use_adcal,
+        500, "test.log", 2);
+
+    check_results();
+    // beta_sets.beta2;
+    // g_assert_true(beta_sets.beta2[])
+}
+
 static void check_branch_pruning_faster(UpdateFixture* fixture,
     gconstpointer user_data)
 {
@@ -1565,12 +1680,8 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     //       "updates, "
     //       "and %.2f subproblem time\n",
     //       pruning_time, working_set_update_time, subproblem_time);
-    if (Xc.p > 100)
-        g_assert_true(
-            fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
-    else
-        g_assert_true(
-            fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 3.0);
+    g_assert_true(
+        fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
 
     printf("working set upates were: %.2f main effect col, %.2f int col, %.2f "
            "reused col\n",
@@ -1987,13 +2098,13 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
 
     Sparse_Betas beta1;
     beta1.count = 5;
-    beta1.indices = new long[5]{ 1, 4, 7, 21, 35 };
-    beta1.values = new float[5]{ 1.2, -2.1, 2.1, 13.0, -11.2 };
+    beta1.indices = new long[5] { 1, 4, 7, 21, 35 };
+    beta1.values = new float[5] { 1.2, -2.1, 2.1, 13.0, -11.2 };
 
     Sparse_Betas beta2;
     beta2.count = 6;
-    beta2.indices = new long[6]{ 1, 4, 7, 21, 35, 107 };
-    beta2.values = new float[6]{ 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
+    beta2.indices = new long[6] { 1, 4, 7, 21, 35, 107 };
+    beta2.values = new float[6] { 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
 
     g_assert_true(beta2.indices[1] == 4);
     g_assert_true(fabs(beta2.values[2] - 2.3) < 0.001);
@@ -2050,6 +2161,9 @@ int main(int argc, char* argv[])
     g_test_add_func("/func/test-permutation", check_permutation);
     g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
         pruning_fixture_set_up, check_branch_pruning,
+        pruning_fixture_tear_down);
+    g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, 1,
+        pruning_fixture_set_up, check_branch_pruning_accuracy,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-faster", UpdateFixture, 0,
         pruning_fixture_set_up, check_branch_pruning_faster,

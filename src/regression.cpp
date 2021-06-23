@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <random>
+#include <vector>
 
 using namespace std;
 
@@ -103,6 +105,7 @@ float calculate_error(int n, long p_int, float* Y, int** X, float p,
 }
 
 static float halt_error_diff;
+static auto rng = std::default_random_engine();
 
 int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
@@ -127,7 +130,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     int_pair* precalc_get_num = vars->precalc_get_num;
     long new_nz_beta = 0;
     gsl_permutation* iter_permutation = vars->iter_permutation;
-    gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
+    // gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
     gsl_permutation* perm;
 
     float error = 0.0;
@@ -218,7 +221,8 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         int count_may_update = 0;
         int* updateable_items = calloc(p, sizeof *updateable_items); // TODO: keep between iters
         for (int i = 0; i < p; i++) {
-            if (!wont_update[i] && !active_set_present(active_set, i)) {
+            // if (!wont_update[i] && !active_set_present(active_set, i)) {
+            if (!wont_update[i]) {
                 updateable_items[count_may_update] = i;
                 count_may_update++;
                 // printf("%d ", i);
@@ -252,6 +256,96 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         if (VERBOSE)
             printf("solving subproblem.\n");
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
+        //long total_size = active_set->entries1.size() + active_set->entries2.size() + active_set->entries3.size();
+        //std::vector<std::pair<long, AS_Entry>> entry_vec;
+        //entry_vec.reserve(total_size);
+
+        std::vector<std::pair<long, AS_Entry>> entry_vec1;
+        entry_vec1.reserve(active_set->entries1.size());
+        std::vector<std::pair<long, AS_Entry>> entry_vec2;
+        entry_vec2.reserve(active_set->entries2.size());
+        std::vector<std::pair<long, AS_Entry>> entry_vec3;
+        entry_vec3.reserve(active_set->entries3.size());
+
+
+        for (auto& e : active_set->entries1)
+            entry_vec1.push_back(std::make_pair(e.first, e.second));
+        for (auto& e : active_set->entries2)
+            entry_vec2.push_back(std::make_pair(e.first, e.second));
+        for (auto& e : active_set->entries3)
+            entry_vec3.push_back(std::make_pair(e.first, e.second));
+        
+        std::shuffle(entry_vec1.begin(), entry_vec1.end(), rng);
+        std::shuffle(entry_vec2.begin(), entry_vec2.end(), rng);
+        std::shuffle(entry_vec3.begin(), entry_vec3.end(), rng);
+
+        //auto run_beta = [&](robin_hood::unordered_flat_map<long, AS_Entry>* entries,
+        //                    robin_hood::unordered_flat_map<long, float>* current_beta_set) {
+            // get list of all entries so we can shuffle them
+            //std::vector<std::pair<long, AS_Entry>> entry_vec;
+            //entry_vec.reserve(entries->size());
+
+            //for (auto& e : *entries) {
+            //    entry_vec.push_back(std::make_pair(e.first, e.second));
+            //}
+            //std::shuffle(entry_vec.begin(), entry_vec.end(), rng);
+            // for (auto it = entries->begin(); it != entries->end(); it++) {
+        auto run_beta = [&](auto& entry_vec) {
+            for (const auto& it : entry_vec) {
+                long k = std::get<0>(it);
+                AS_Entry entry = std::get<1>(it);
+                // AS_Entry entry = it.second;
+                //if (k == interesting_val && !entry.present)
+                //    printf("entry %ld not present\n", k);
+                if (entry.present) {
+                    auto* current_beta_set = &beta_sets->beta1;
+                    if (k > p)
+                        current_beta_set = &beta_sets->beta2;
+                    else if (k > p*p)
+                        current_beta_set = &beta_sets->beta3;
+                    total_present++;
+                    int was_zero = TRUE;
+                    // auto count = current_beta_set->count(k);
+                    // printf("found %ld entries for (%ld)\n", count, k);
+                    //if (k == interesting_val && beta->contains(k) && VERBOSE) {
+                    //    printf("beta contains (%ld)\n", k);
+                    //}
+                    if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0)
+                        was_zero = FALSE;
+                    //if (count > 0) {
+                    //    // printf("found %d entries for key %d\n", count, k);
+                    //    if (beta->at(k) != 0.0) {
+                    //        was_zero = FALSE;
+                    //    }
+                    //}
+                    total_beta_updates++;
+                    Changes changes = update_beta_cyclic(
+                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                        precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+                    if (changes.actual_diff == 0.0) {
+                        total_unchanged++;
+                    } else {
+                        total_beta_nz_updates++;
+                        total_changed++;
+                    }
+                    if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
+                        // if (k == interesting_col && VERBOSE) {
+                            // printf("(%ld) was zero and changed by %.30f\n", k,
+                                // changes.actual_diff);
+                        // }
+                        new_nz_beta++;
+                        // printf("beta sizes: %d,%d,%d\n", beta_sets->beta1.size(), beta_sets->beta2.size(), beta_sets->beta3.size());
+                    }
+                    if (!was_zero && changes.removed) {
+                        //if (VERBOSE && k == interesting_col)
+                        //    printf("(%ld) set to zero\n", k);
+                        new_nz_beta--;
+                    }
+                } else {
+                    total_notpresent++;
+                }
+            }
+        };
         int iter = 0;
         for (iter = 0; iter < 100; iter++) {
             if (VERBOSE)
@@ -263,62 +357,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
             // reduction(+:total_unchanged, total_changed, total_present,
             // total_notpresent, new_nz_beta, total_beta_updates,
             // total_beta_nz_updates)
-            robin_hood::unordered_flat_map<long, AS_Entry>* entries;
-            robin_hood::unordered_flat_map<long, float>* current_beta_set;
 
-            auto run_beta = [&]() {
-                for (auto it = entries->begin(); it != entries->end(); it++) {
-                    beta = current_beta_set;
-                    long k = it->first;
-                    AS_Entry entry = it->second;
-                    if (entry.present) {
-                        // TODO: apply permutation here.
-                        total_present++;
-                        int was_zero = TRUE;
-                        auto count = beta->count(k);
-                        // printf("found %ld entries for (%ld)\n", count, k);
-                        if (k == interesting_col && beta->contains(k) && VERBOSE) {
-                            printf("beta contains (%ld)\n", k);
-                        }
-                        if (count > 0) {
-                            // printf("found %d entries for key %d\n", count, k);
-                            if (beta->at(k) != 0.0) {
-                                was_zero = FALSE;
-                            }
-                        }
-                        total_beta_updates++;
-                        Changes changes = update_beta_cyclic(
-                            entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
-                            precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
-                        if (changes.actual_diff == 0.0) {
-                            total_unchanged++;
-                        } else {
-                            total_beta_nz_updates++;
-                            total_changed++;
-                        }
-                        if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
-                            if (k == interesting_col && VERBOSE) {
-                                printf("(%ld) was zero and changed by %.30f\n", k,
-                                    changes.actual_diff);
-                            }
-#ifdef NOT_R
-                            g_assert_true(fabs(0.0) == 0.0);
-                            g_assert_true(fabs(-0.0) == 0.0);
-#endif
-                            new_nz_beta++;
-                        }
-                        if (!was_zero && changes.removed) {
-                            if (VERBOSE && k == interesting_col)
-                                printf("(%ld) set to zero\n", k);
-                            new_nz_beta--;
-                        }
-                    } else {
-                        total_notpresent++;
-                    }
-                }
-            };
-
-            auto print_entries = [&]() {
+            auto print_entries = [&](robin_hood::unordered_flat_map<long, AS_Entry>* entries,
+                                     robin_hood::unordered_flat_map<long, float>* current_beta_set) {
                 printf("set contains: { ");
                 for (auto it = entries->begin(); it != entries->end(); it++) {
                     printf("%ld, ", it->first);
@@ -326,21 +367,12 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                 printf("}\n");
             };
 
-            entries = &active_set->entries1;
-            current_beta_set = &beta_sets->beta1;
-            // printf("active set: 1, \n");
-            // print_entries();
-            run_beta();
-            entries = &active_set->entries2;
-            current_beta_set = &beta_sets->beta2;
-            // printf("set 2, \n");
-            // print_entries();
-            run_beta();
-            entries = &active_set->entries3;
-            current_beta_set = &beta_sets->beta3;
-            // printf("set 3, \n");
-            // print_entries();
-            run_beta();
+            run_beta(entry_vec1);
+            run_beta(entry_vec2);
+            run_beta(entry_vec3);
+            // run_beta(&active_set->entries1, &beta_sets->beta1);
+            // run_beta(&active_set->entries2, &beta_sets->beta2);
+            // run_beta(&active_set->entries3, &beta_sets->beta3);
 
             // check whether we need another iteration
             error = 0.0;
@@ -371,7 +403,7 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         }
     }
 
-    gsl_rng_free(rng);
+    // gsl_rng_free(rng);
     if (VERBOSE)
         printf("new nz beta: %ld\n", new_nz_beta);
     return new_nz_beta;
@@ -517,8 +549,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     FILE* log_file;
     int iter = 0;
-    if (log_level != NONE && check_can_restore_from_log(log_filename, n, p, p_int, job_args,
-            job_args_num)) {
+    if (log_level != NONE && check_can_restore_from_log(log_filename, n, p, p_int, job_args, job_args_num)) {
         Rprintf("We can restore from a partial log!\n");
         restore_from_log(log_filename, true, n, p, job_args, job_args_num, &iter,
             &lambda_count, &lambda, &beta_sets);
@@ -680,13 +711,13 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
             //    printf("}\n");
             //}
 #ifdef NOT_R
-            // g_assert_true(nonzero == nz_beta);
+            g_assert_true(nonzero == nz_beta);
 #endif
         }
         double prev_error = error;
         error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
-        printf("lambda %d = %f, error %.4e, nz_beta %ld\n", lambda_count, lambda, error,
-            nz_beta);
+        printf("lambda %d = %f, error %.4e, nz_beta %ld,%ld,%ld\n", lambda_count, lambda, error,
+             beta_sets.beta1.size(), beta_sets.beta2.size(), beta_sets.beta3.size());
         if (use_adaptive_calibration && nz_beta > 0) {
             Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
             // TODO: it should be possible to do something more like memcpy here
@@ -841,11 +872,11 @@ Changes update_beta_cyclic_old(
         }
     }
 
-    if (k == interesting_col) {
-        printf("lambda: %f\n", lambda);
-        printf("sumn: %f\n", sumn);
-        printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
-    }
+    //if (k == interesting_col) {
+    //    printf("lambda: %f\n", lambda);
+    //    printf("sumn: %f\n", sumn);
+    //    printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
+    //}
 
     // TODO: This is probably slower than necessary.
     float Bk_diff = beta->at(k);
@@ -910,11 +941,11 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int n, int p,
     }
 
     float new_value = soft_threshold(sumn, lambda) / sumk;
-    if (k == interesting_col) {
-        printf("lambda: %f\n", lambda);
-        printf("sumn: %f\n", sumn);
-        printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
-    }
+    //if (VERBOSE && k == interesting_val) {
+    //    printf("lambda: %f\n", lambda);
+    //    printf("sumn: %f\n", sumn);
+    //    printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
+    //}
     float Bk_diff = new_value - bk;
     Changes changes;
     changes.removed = false;
