@@ -290,19 +290,19 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
             //}
             //std::shuffle(entry_vec.begin(), entry_vec.end(), rng);
             // for (auto it = entries->begin(); it != entries->end(); it++) {
-        auto run_beta = [&](auto& entry_vec) {
-            for (const auto& it : entry_vec) {
+        auto run_beta = [&](auto* current_beta_set, auto& as_entries) {
+            for (const auto& it : as_entries) {
                 long k = std::get<0>(it);
                 AS_Entry entry = std::get<1>(it);
                 // AS_Entry entry = it.second;
                 //if (k == interesting_val && !entry.present)
                 //    printf("entry %ld not present\n", k);
                 if (entry.present) {
-                    auto* current_beta_set = &beta_sets->beta1;
-                    if (k > p)
-                        current_beta_set = &beta_sets->beta2;
-                    else if (k > p*p)
-                        current_beta_set = &beta_sets->beta3;
+                    //auto* current_beta_set = &beta_sets->beta1;
+                    //if (k > p)
+                    //    current_beta_set = &beta_sets->beta2;
+                    //else if (k > p*p)
+                    //    current_beta_set = &beta_sets->beta3;
                     total_present++;
                     int was_zero = TRUE;
                     // auto count = current_beta_set->count(k);
@@ -367,9 +367,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                 printf("}\n");
             };
 
-            run_beta(entry_vec1);
-            run_beta(entry_vec2);
-            run_beta(entry_vec3);
+            run_beta(&beta_sets->beta1, entry_vec1);
+            run_beta(&beta_sets->beta2, entry_vec2);
+            run_beta(&beta_sets->beta3, entry_vec3);
             // run_beta(&active_set->entries1, &beta_sets->beta1);
             // run_beta(&active_set->entries2, &beta_sets->beta2);
             // run_beta(&active_set->entries3, &beta_sets->beta3);
