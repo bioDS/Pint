@@ -145,7 +145,7 @@ SEXP read_log_(SEXP log_filename_)
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
     SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_)
+    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -160,8 +160,27 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     int max_lambdas = asInteger(max_lambdas_);
     char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
     int depth = asInteger(depth_);
-    printf("using log file %s\n", log_filename);
+    int log_level_enum = asInteger(log_level_);
+
     initialise_static_resources();
+
+    enum LOG_LEVEL log_level = NONE;
+    switch (log_level_enum) {
+        case 1:
+            log_level = LAMBDA;
+        case 2:
+            log_level = ITER;
+    }
+
+    if (log_level != NONE) {
+        printf("using log file %s, ", log_filename);
+    }
+    if (log_level == LAMBDA) {
+        printf("updating once per lambda value\n");
+
+    } else if (log_level == ITER) {
+        printf("updating once per iteration\n");
+    }
 
     int use_adaptive_calibration = asLogical(use_adaptive_calibration_);
 
@@ -185,7 +204,6 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.actual_cols = n;
     xmatrix.X = X;
 
-    enum LOG_LEVEL log_level = LAMBDA;
 
     Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
 

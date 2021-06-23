@@ -517,7 +517,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     FILE* log_file;
     int iter = 0;
-    if (check_can_restore_from_log(log_filename, n, p, p_int, job_args,
+    if (log_level != NONE && check_can_restore_from_log(log_filename, n, p, p_int, job_args,
             job_args_num)) {
         Rprintf("We can restore from a partial log!\n");
         restore_from_log(log_filename, true, n, p, job_args, job_args_num, &iter,
