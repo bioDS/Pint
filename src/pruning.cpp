@@ -156,8 +156,8 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
 
             // do thing here
             cache[col_entry_pos] = entry;
-            estimate_squared += rowsum[entry] * last_rowsum[i];
-            real_squared += last_rowsum[i] * last_rowsum[i];
+            estimate_squared += rowsum[entry] * last_rowsum[col_entry_pos];
+            real_squared += last_rowsum[col_entry_pos] * last_rowsum[col_entry_pos];
             col_entry_pos++;
         }
         values >>= item_width[word.selector];
