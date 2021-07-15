@@ -36,6 +36,7 @@ extern "C" {
 }
 #endif
 
+
 typedef struct {
     int* col_i;
     int* col_j;
@@ -211,3 +212,4 @@ extern gsl_permutation* global_permutation;
 extern gsl_permutation* global_permutation_inverse;
 extern int_pair* cached_nums;
 extern int VERBOSE;
+extern float total_sqrt_error;

@@ -2109,7 +2109,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     g_assert_true(beta2.indices[1] == 4);
     g_assert_true(fabs(beta2.values[2] - 2.3) < 0.001);
 
-    int result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2);
+    int result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
     Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth);

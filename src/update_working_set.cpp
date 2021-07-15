@@ -361,7 +361,7 @@ char update_working_set_cpu(
 //            }
             max_inter_val = std::max(max_inter_val, sum);
             // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
-            if (sum > lambda) {
+            if (sum > lambda*total_sqrt_error) {
                 int a, b, c;
                 long k;
                 std::tuple<long, long> inter_pair = val_to_pair(tuple_val, p);
