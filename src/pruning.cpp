@@ -111,7 +111,8 @@ bool wont_update_effect(X_uncompressed X, float lambda, int k, float last_max,
     //if (k == interesting_col2)
     //    printf(" col2 [%d] %f <= %f? : %d\n", k, upper_bound, lambda, upper_bound <= lambda);
     // free(cache);
-    return upper_bound <= lambda;
+    // return upper_bound <= lambda*X.n;
+    return upper_bound <= lambda * total_sqrt_error;
 }
 
 // float as_pessimistic_estimate(float alpha, robin_hood::unordered_flat_map<long, float>* last_rowsum, float* rowsum,
@@ -177,32 +178,5 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
 // bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, robin_hood::unordered_flat_map<long, float>* last_rowsum, float* rowsum, S8bCol col, int* column_cache) {
 bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int* column_cache) {
     float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache);
-    return upper_bound <= lambda;
-}
-
-bool as_pessimistic_est(float lambda, float* rowsum, S8bCol col) {
-    int entry = -1;
-    float pos_max = 0.0, neg_max = 0.0;
-    for (int i = 0; i < col.nwords; i++) {
-      S8bWord word = col.compressed_indices[i];
-      unsigned long values = word.values;
-      for (int j = 0; j <= group_size[word.selector]; j++) {
-        int diff = values & masks[word.selector];
-        if (diff != 0) {
-            entry += diff;
-
-            // do thing here
-            float diff_i = rowsum[i];
-            if (diff_i > 0) {
-                pos_max += diff_i;
-            } else {
-                neg_max += diff_i;
-            }
-        }
-        values >>= item_width[word.selector];
-      }
-    }
-
-    float upper_bound = fmaxf(pos_max, fabs(neg_max));
-    return upper_bound <= lambda;
+    return upper_bound <= lambda * total_sqrt_error;
 }

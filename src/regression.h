@@ -44,4 +44,4 @@ float soft_threshold(float z, float gamma);
 
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
     Sparse_Betas* beta_1, float lambda_2,
-    Sparse_Betas* beta_2);
+    Sparse_Betas* beta_2, int n);

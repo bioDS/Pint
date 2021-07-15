@@ -1,5 +1,7 @@
 #include "liblasso.h"
 #include "robin_hood.h"
+#include <cmath>
+#include <limits>
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
@@ -16,6 +18,10 @@ using namespace std;
 struct timespec start_time, end_time;
 long total_beta_updates = 0;
 long total_beta_nz_updates = 0;
+
+static float c_bar = 0.75;
+// static float c_bar = 0.001;
+// static float c_bar = 750;
 
 void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta,
     int p)
@@ -41,26 +47,57 @@ void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta,
 // check a particular pair of betas in the adaptive calibration scheme
 int adaptive_calibration_check_beta(float c_bar, float lambda_1,
     Sparse_Betas* beta_1, float lambda_2,
-    Sparse_Betas* beta_2)
+    Sparse_Betas* beta_2, int n)
 {
     float max_diff = 0.0;
     float adjusted_max_diff = 0.0;
 
+    int b1_count = 0;
+    int b2_count = 0;
+
     int b1_ind = 0;
     int b2_ind = 0;
 
-    while (b1_ind < beta_1->count && b2_ind < beta_2->count) {
-        while (beta_1->indices[b1_ind] < beta_2->indices[b2_ind] && b1_ind < beta_1->count)
-            b1_ind++;
-        while (beta_2->indices[b2_ind] < beta_1->indices[b1_ind] && b2_ind < beta_2->count)
-            b2_ind++;
-        if (b1_ind < beta_1->count && b2_ind < beta_2->count && beta_1->indices[b1_ind] == beta_2->indices[b2_ind]) {
-            // float diff = fabs(beta_1->betas.at(b1_ind) - beta_2->betas.at(b2_ind));
-            float diff = fabs(beta_1->values[b1_ind] - beta_2->values[b2_ind]);
+    // advance whichever is smaller, accounting for overlap
+    while (b1_count < beta_1->count && b2_count < beta_2->count) {
+        float b1v = beta_1->values[b1_count];
+        float b2v = beta_2->values[b2_count];
+        int b1_ind = beta_1->indices[b1_count];
+        int b2_ind = beta_2->indices[b2_count];
+
+        if (b1_ind < b2_ind) {
+            float diff = fabs(b1v);
             if (diff > max_diff)
                 max_diff = diff;
-            b1_ind++;
+            b1_count++;
+        } else if (b2_ind < b1_ind) {
+            float diff = fabs(b2v);
+            if (diff > max_diff)
+                max_diff = diff;
+            b2_count++;
+        } else if (b1_ind == b2_ind) {
+            float diff = fabs(b1v - b2v);
+            if (diff > max_diff)
+                max_diff = diff;
+            b1_count++;
+            b2_count++;
         }
+    }
+    // remaining b1
+    while (b1_count < beta_1->count) {
+        float b1v = beta_1->values[b1_ind];
+        float diff = fabs(b1v);
+        if (diff > max_diff)
+            max_diff = diff;
+        b1_count++;
+    }
+    // remaining b2
+    while (b2_count < beta_2->count) {
+        float b2v = beta_2->values[b2_ind];
+        float diff = fabs(b2v);
+        if (diff > max_diff)
+            max_diff = diff;
+        b2_count++;
     }
 
     // adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
@@ -84,7 +121,7 @@ int check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence,
         int this_result = adaptive_calibration_check_beta(
             c_bar, beta_sequence->lambdas[beta_sequence->count - 1],
             &beta_sequence->betas[beta_sequence->count - 1],
-            beta_sequence->lambdas[i], &beta_sequence->betas[i]);
+            beta_sequence->lambdas[i], &beta_sequence->betas[i], n);
         // printf("result: %d\n", this_result);
         if (this_result == 0) {
             return TRUE;
@@ -260,14 +297,13 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         std::vector<std::pair<long, AS_Entry>> entry_vec3;
         entry_vec3.reserve(active_set->entries3.size());
 
-
         for (auto& e : active_set->entries1)
             entry_vec1.push_back(std::make_pair(e.first, e.second));
         for (auto& e : active_set->entries2)
             entry_vec2.push_back(std::make_pair(e.first, e.second));
         for (auto& e : active_set->entries3)
             entry_vec3.push_back(std::make_pair(e.first, e.second));
-        
+
         std::shuffle(entry_vec1.begin(), entry_vec1.end(), rng);
         std::shuffle(entry_vec2.begin(), entry_vec2.end(), rng);
         std::shuffle(entry_vec3.begin(), entry_vec3.end(), rng);
@@ -393,6 +429,12 @@ long copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
     return count;
 }
 
+double phi_inv(double x)
+{
+    return std::sqrt(std::abs(2.0 * std::log(sqrt(2.0 * M_PI) * x)));
+}
+
+float total_sqrt_error = 0.0;
 Beta_Value_Sets simple_coordinate_descent_lasso(
     XMatrix xmatrix, float* Y, int n, int p, long max_interaction_distance,
     float lambda_min, float lambda_max, int max_iter, int verbose,
@@ -403,6 +445,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     printf("n: %d, p: %d\n", n, p);
     halt_error_diff = hed;
     printf("using halt_error_diff of %f\n", halt_error_diff);
+    printf("using depth: %d\n", depth);
     long num_nz_beta = 0;
     long became_zero = 0;
     float lambda = lambda_max;
@@ -410,11 +453,32 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     int_pair* precalc_get_num;
     int** X = xmatrix.X;
 
+    long real_p_int = -1;
+    switch (depth) {
+        case 1:
+            real_p_int = p;
+        case 2:
+            real_p_int = p*(p+1)/2;
+        case 3:
+            real_p_int = p*(p+1)*(p)/(2*3);
+        break;
+    }
+    double tmp = 396.952547477011765511e-3;
+    printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
+    printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95/(2.0*(double)real_p_int)));
+    double final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95/(2.0*(double)real_p_int));
+    final_lambda /= n; // not very well justified, but seems like it might be helping.
+    // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.
+    printf("using final lambda: %f\n", final_lambda);
+
+    // work out min lambda for sqrt lasso
+
     // Rprintf("using %d threads\n", NumCores);
 
     // XMatrixSparse X2 = sparse_X2_from_X(X, n, p, max_interaction_distance,
     // FALSE);
-    XMatrixSparse Xc = sparsify_X(X, n, p);
+    XMatrixSparse Xc
+        = sparsify_X(X, n, p);
     struct X_uncompressed Xu = construct_host_X(&Xc);
 
     for (int i = 0; i < NUM_MAX_ROWSUMS; i++) {
@@ -487,7 +551,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     gsl_rng* iter_rng;
     gsl_permutation_init(iter_permutation);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    float final_lambda = lambda_min;
+    // final_lambda = lambda_min;
     int max_lambda_count = max_iter;
     if (VERBOSE)
         Rprintf("running from lambda %.2f to lambda %.2f\n", lambda, final_lambda);
@@ -619,6 +683,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     float* old_rowsum = (float*)malloc(sizeof *old_rowsum * n);
     printf("final_lambda: %f\n", final_lambda);
     error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
+    total_sqrt_error = std::sqrt(error);
     printf("initial error: %f\n", error);
     while (lambda > final_lambda && iter < max_lambda_count) {
         if (log_level == LAMBDA) {
@@ -640,6 +705,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
             old_rowsum, &active_set, &ocl_setup, depth);
 
+        if (beta_sets.beta1.size() > 10 && main_removed > beta_sets.beta1.size() / 10) {
+            // c_bar = 0.0;
+        }
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
             //if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
@@ -669,8 +737,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         }
         double prev_error = error;
         error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
+        total_sqrt_error = std::sqrt(error);
         printf("lambda %d = %f, error %.4e, nz_beta %ld,%ld,%ld\n", lambda_count, lambda, error,
-             beta_sets.beta1.size(), beta_sets.beta2.size(), beta_sets.beta3.size());
+            beta_sets.beta1.size(), beta_sets.beta2.size(), beta_sets.beta3.size());
         if (use_adaptive_calibration && nz_beta > 0) {
             Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
             // TODO: it should be possible to do something more like memcpy here
@@ -686,7 +755,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
             if (VERBOSE)
                 printf("checking adaptive cal\n");
-            if (check_adaptive_calibration(0.75, &beta_sequence, n)) {
+            if (check_adaptive_calibration(c_bar, &beta_sequence, n)) {
                 printf("Halting as reccommended by adaptive calibration\n");
                 final_lambda = lambda;
             }
@@ -836,7 +905,7 @@ Changes update_beta_cyclic_old(
     if (sumk == 0.0) {
         // beta[k] = 0.0;
     } else {
-        beta->insert_or_assign(k, soft_threshold(sumn, lambda) / sumk);
+        beta->insert_or_assign(k, soft_threshold(sumn, lambda * n) / sumk);
     }
     Bk_diff = beta->at(k) - Bk_diff;
     // update every rowsum[i] w/ effects of beta change.
@@ -874,6 +943,7 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int n, int p,
         bk = beta->at(k);
     }
     float sumn = col.nz * bk;
+    // float relevant_sq_err = 0.0;
     int* column_entries = column_entry_cache;
 
     long col_entry_pos = 0;
@@ -886,14 +956,18 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int n, int p,
             if (diff != 0) {
                 entry += diff;
                 column_entries[col_entry_pos] = entry;
-                sumn += intercept - rowsum[entry];
+                sumn -= rowsum[entry];
+                // relevant_sq_err += rowsum[entry] * rowsum[entry];
                 col_entry_pos++;
             }
             values >>= item_width[word.selector];
         }
     }
+    // relevant_sq_err = std::sqrt(relevant_sq_err);
 
-    float new_value = soft_threshold(sumn, lambda) / sumk;
+    // float new_value = soft_threshold(sumn, lambda) / sumk;
+    // float new_value = soft_threshold(sumn, lambda*n) / sumk;
+    float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / sumk; // square root lasso
     //if (VERBOSE && k == interesting_val) {
     //    printf("lambda: %f\n", lambda);
     //    printf("sumn: %f\n", sumn);
