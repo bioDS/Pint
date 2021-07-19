@@ -705,9 +705,6 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
             old_rowsum, &active_set, &ocl_setup, depth);
 
-        if (beta_sets.beta1.size() > 10 && main_removed > beta_sets.beta1.size() / 10) {
-            // c_bar = 0.0;
-        }
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
             //if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
