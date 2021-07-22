@@ -224,18 +224,15 @@ char update_working_set_cpu(
 
     if (depth > 2) {
         //TODO: quite a hack
-        if (unlikely(!inter_cache_init_done)) {
+        if (unlikely(NULL == inter_cache)) {
             // init inter cache
-            inter_cache = malloc(p_int * sizeof(IC_Entry)); //TODO: free
+            inter_cache = (IC_Entry*)calloc(p_int, sizeof(IC_Entry)); //TODO: free
             for (int i = 0; i < p_int; i++) {
                 inter_cache[i].present = false;
-                // inter_cache[i].skipped_this_iter = false; //TODO: try true, see what happens?
             }
-            inter_cache_init_done = true;
         }
         for (int i = 0; i < p_int; i++) {
-            inter_cache[i].skipped_this_iter = false;
-            inter_cache[i].checked_this_iter = false;
+            inter_cache[i].present = false;
         }
     }
 
