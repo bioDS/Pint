@@ -10,7 +10,7 @@ S8bWord to_s8b(int count, int* vals)
     word.selector = 0;
     int t = 0;
     // TODO: improve on this
-    while (group_size[t] >= count && t < 16)
+    while (t < 16 && group_size[t] >= count)
         t++;
     word.selector = t - 1;
     unsigned long test = 0;
