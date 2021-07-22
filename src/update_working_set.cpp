@@ -416,9 +416,6 @@ char update_working_set_cpu(
                         inter_len++;
                     }
                 }
-                if (main == 0 && tuple_val == 1) {
-                    printf("appending interesting col %d of length %d (%ld)\n", k, inter_len, main);
-                }
 #pragma omp critical
                 active_set_append(as, k, col_j_cache, inter_len);
                 increased_set = TRUE;
