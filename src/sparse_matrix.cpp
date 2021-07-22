@@ -43,7 +43,8 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
             }
         }
         row_lengths[row] = row_pos;
-        new_rows[row] = (int*)malloc(row_pos * sizeof(int));
+        if (row_pos > 0)
+            new_rows[row] = (int*)malloc(row_pos * sizeof(int));
         memcpy(new_rows[row], row_cache, row_pos * sizeof(int));
     }
 

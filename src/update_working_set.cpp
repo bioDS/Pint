@@ -181,8 +181,8 @@ typedef struct IC_Entry {
     S8bCol col;
 } IC_Entry;
 // static robin_hood::unordered_flat_map<long, IC_Entry> inter_cache;
-static IC_Entry* inter_cache;
-static bool inter_cache_init_done = false;
+static IC_Entry* inter_cache = NULL;
+// static bool inter_cache_init_done = false;
 
 void update_inter_cache(long k, int n, float* rowsum, float last_max, int* col, int col_len)
 {
@@ -542,7 +542,8 @@ char update_working_set(
     //}
     char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, depth);
     for (int i = 0; i < n; i++) {
-        free(new_row_set.rows[i]);
+        if(NULL != new_row_set.rows[i])
+            free(new_row_set.rows[i]);
     }
     free(new_row_set.rows);
     free(new_row_set.row_lengths);
