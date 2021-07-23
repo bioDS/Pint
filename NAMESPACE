@@ -1,3 +1,3 @@
 useDynLib("Pint", .registration=TRUE)
-export(pairwise_lasso)
+export(interaction_lasso)
 export(read_log)

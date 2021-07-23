@@ -1,11 +1,11 @@
 #' @title Cyclic Lasso Function
 #'
-#' @name pairwise_lasso
+#' @name interaction_lasso
 #' @description Performas lasso regression on all pairwise combinations of columns
 #' @param X_filename, Y_filename, lambda, n, p
 #' @export
 #' @examples
-#' pairwise_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda = p, frac_overlap_allowed = 0.05)
+#' interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2])
 #' @useDynLib Pint
 
 process_result <- function(result) {
@@ -36,7 +36,7 @@ read_log <- function(log_filename="regression.log") {
     return(process_result(result))
 }
 
-pairwise_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none") {
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none") {
     Ym = as.matrix(Y)
     if (!dim(Ym)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
@@ -45,6 +45,18 @@ pairwise_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05
     log_level_enum = 0;
     if (log_level == "lambda") {
         log_level_enum = 1;
+    }
+
+    p <- ncol(m)
+    limit <- p
+    if (depth == 2) {
+        limit <- p*p
+    }
+    if (depth == 3) {
+        limit <- p*p*p
+    }
+    if (limit > 2^63) {
+        stop(sprtinf("cannot consider %d interactions, consider reducing depth or reducing the number of columns of X", limit))
     }
 
     tmp = apply(X,2, `%*%`, Y)

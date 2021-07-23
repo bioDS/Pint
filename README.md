@@ -7,7 +7,7 @@ This repo is an installable R package, you can install a locally cloned copy wit
 This library provides a single function that performs lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
 
 ```
-pairwise_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = 0.05, halt_error_diff=1.0001, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1)
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = 0.05, halt_error_diff=1.0001, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1)
 ```
 A list of non-zero pairwise/interaction and main effects is returned.
 
