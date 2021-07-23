@@ -440,8 +440,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     float lambda_min, float lambda_max, int max_iter, int verbose,
     float frac_overlap_allowed, float hed, enum LOG_LEVEL log_level,
     char** job_args, int job_args_num, int use_adaptive_calibration,
-    int max_nz_beta, char* log_filename, int depth)
+    int mnz_beta, char* log_filename, int depth)
 {
+    long max_nz_beta = mnz_beta;
     printf("n: %d, p: %d\n", n, p);
     halt_error_diff = hed;
     printf("using halt_error_diff of %f\n", halt_error_diff);
