@@ -47,16 +47,12 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0
         log_level_enum = 1;
     }
 
-    p <- ncol(m)
-    limit <- p
-    if (depth == 2) {
-        limit <- p*p
+    p <- ncol(X)
+    if (depth == 2 && p > 2^31) {
+        stop(sprtinf("cannot consider %d^%d interactions, consider reducing depth or reducing the number of columns of X", p, depth))
     }
-    if (depth == 3) {
-        limit <- p*p*p
-    }
-    if (limit > 2^63) {
-        stop(sprtinf("cannot consider %d interactions, consider reducing depth or reducing the number of columns of X", limit))
+    if (depth == 3 && p > 2^20) {
+        stop(sprtinf("cannot consider %d^%d interactions, consider reducing depth or reducing the number of columns of X", p, depth))
     }
 
     tmp = apply(X,2, `%*%`, Y)

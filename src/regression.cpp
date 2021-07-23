@@ -456,11 +456,11 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     long real_p_int = -1;
     switch (depth) {
         case 1:
-            real_p_int = p;
+            real_p_int = (long)p;
         case 2:
-            real_p_int = p*(p+1)/2;
+            real_p_int = (long)p*((long)p+1)/2;
         case 3:
-            real_p_int = p*(p+1)*(p)/(2*3);
+            real_p_int = (long)p*((long)p+1)*((long)p-1)/(2*3);
         break;
     }
     double tmp = 396.952547477011765511e-3;
