@@ -645,9 +645,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         thread_caches[i].col_j = (int*)malloc(sizeof(int) * n);
     }
 
-    float* last_max = new float[n];
+    float* last_max = new float[p];
     bool* wont_update = new bool[p];
-    memset(last_max, 0, n * sizeof(*last_max));
+    memset(last_max, 0, p * sizeof(*last_max));
     float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
 #pragma omp parallel for schedule(static)
