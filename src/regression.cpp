@@ -166,9 +166,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* max_int_delta = vars->max_int_delta;
     int_pair* precalc_get_num = vars->precalc_get_num;
     long new_nz_beta = 0;
-    gsl_permutation* iter_permutation = vars->iter_permutation;
+    //gsl_permutation* iter_permutation = vars->iter_permutation;
     // gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
-    gsl_permutation* perm;
+    //gsl_permutation* perm;
 
     float error = 0.0;
     for (int i = 0; i < n; i++) {
@@ -387,9 +387,9 @@ int run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         // (float)(total_changed*100)/(float)(total_changed+total_unchanged));
         // printf("%.1f%% of active set was blank\n",
         // (float)total_present/(float)(total_present+total_notpresent));
-        if (active_set->length > 0) {
-            gsl_permutation_free(perm);
-        }
+        //if (active_set->length > 0) {
+        //    gsl_permutation_free(perm);
+        //}
     }
 
     // gsl_rng_free(rng);
@@ -517,7 +517,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         }
     }
 
-    cached_nums = get_all_nums(p, max_interaction_distance);
+    //cached_nums = get_all_nums(p, max_interaction_distance);
 
     float error = 0.0;
     for (int i = 0; i < n; i++) {
@@ -548,9 +548,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     float cpu_time_used;
 
     int set_min_lambda = FALSE;
-    gsl_permutation* iter_permutation = gsl_permutation_alloc(p_int);
+    //gsl_permutation* iter_permutation = gsl_permutation_alloc(p_int);
     gsl_rng* iter_rng;
-    gsl_permutation_init(iter_permutation);
+    //gsl_permutation_init(iter_permutation);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     // final_lambda = lambda_min;
     int max_lambda_count = max_iter;
@@ -674,7 +674,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         Y,
         max_int_delta,
         precalc_get_num,
-        iter_permutation,
+        NULL,
         Xu,
     };
     long nz_beta = 0;
@@ -830,7 +830,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     // free beta sets
     free_sparse_matrix(Xc);
-    gsl_permutation_free(iter_permutation);
+    //gsl_permutation_free(iter_permutation);
     gsl_rng_free(iter_rng);
     for (int i = 0; i < max_num_threads; i++) {
         free(thread_column_caches[i]);
