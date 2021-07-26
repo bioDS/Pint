@@ -109,12 +109,12 @@ void active_set_append(Active_Set* as, long value, int* col, int len)
     // printf("as, adding val %ld as ", value);
     robin_hood::unordered_flat_map<long, AS_Entry>* entries;
     int p = as->p;
-    if (p % 5 != 0) {
-        // printf("\np = %d\n", p);
-#ifdef NOT_R
-        g_assert_true(p % 5 == 0);
-#endif
-    }
+//    if (p % 5 != 0) {
+//        // printf("\np = %d\n", p);
+//#ifdef NOT_R
+//        g_assert_true(p % 5 == 0);
+//#endif
+//    }
     if (value < p) {
         //if (VERBOSE && value == interesting_col)
         //    printf("[%ld < %d]: main\n", value, p);

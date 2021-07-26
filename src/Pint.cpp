@@ -205,8 +205,6 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.X = X;
 
 
-    Rprintf("limiting interaction distance to %d\n", max_interaction_distance);
-
     Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,

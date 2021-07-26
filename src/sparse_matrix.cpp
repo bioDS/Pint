@@ -16,7 +16,7 @@ void free_sparse_matrix(XMatrixSparse X)
         free(X.cols[i].compressed_indices);
     }
     free(X.cols);
-    gsl_permutation_free(X.permutation);
+    //gsl_permutation_free(X.permutation);
 }
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
@@ -315,8 +315,8 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     // X2.col_nz = col_nz;
 
     gsl_rng* r;
-    gsl_permutation* permutation = gsl_permutation_alloc(p * (p + 1) / 2); //TODO: N.B. not necessarily correct size. Don't use any more.
-    gsl_permutation_init(permutation);
+    //gsl_permutation* permutation = gsl_permutation_alloc(p * (p + 1) / 2); //TODO: N.B. not necessarily correct size. Don't use any more.
+    //gsl_permutation_init(permutation);
     gsl_rng_env_setup();
     // permutation_splits is the number of splits excluding the final (smaller)
     // split
@@ -339,14 +339,14 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     for (int i = 0; i < NumCores; i++)
         thread_r[i] = gsl_rng_alloc(T);
 
-    if (shuffle == TRUE) {
-        parallel_shuffle(permutation, permutation_split_size, final_split_size,
-            permutation_splits);
-    }
-    X2.permutation = permutation;
-    global_permutation = permutation;
-    global_permutation_inverse = gsl_permutation_alloc(permutation->size);
-    gsl_permutation_inverse(global_permutation_inverse, permutation);
+    //if (shuffle == TRUE) {
+    //    parallel_shuffle(permutation, permutation_split_size, final_split_size,
+    //        permutation_splits);
+    //}
+    //X2.permutation = permutation;
+    //global_permutation = permutation;
+    //global_permutation_inverse = gsl_permutation_alloc(permutation->size);
+    //gsl_permutation_inverse(global_permutation_inverse, permutation);
 
     X2.n = n;
     X2.p = p_int;
