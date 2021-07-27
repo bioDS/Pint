@@ -735,8 +735,10 @@ static void check_X2_encoding()
     while (!g_queue_is_empty(s8b_col)) {
         S8bWord* current_word = g_queue_pop_head(s8b_col);
         memcpy(&actual_col[count], current_word, sizeof(S8bWord));
+        free(current_word);
         count++;
     }
+    g_queue_free(s8b_col);
 
     printf("checking [s8b] == [int]\n");
     for (long k = 0; k < p_int; k++) {
@@ -789,6 +791,17 @@ static void check_X2_encoding()
     free(col_nz_indices);
     free(nums);
     free(col_sizes);
+    for (int i = 0; i < p; i++) {
+        free(xmatrix.X[i]);
+    }
+    for (int i = 0; i < xmatrix_sparse.p; i++)
+        free(xmatrix_sparse.cols[i].compressed_indices);
+    for (int i = 0; i < p_int; i++)
+        free(X2.X[i]);
+    free(xmatrix.X);
+    free(X2.X);
+    free(xmatrix_sparse.cols);
+    free(actual_col);
 }
 
 static void check_permutation()
