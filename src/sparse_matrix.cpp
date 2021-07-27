@@ -82,7 +82,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     // memset(X2.col_nwords, 0, p_int * sizeof(int));
 
     X2.cols = malloc(sizeof *X2.cols * p_int);
-    X2.rows = malloc(sizeof *X2.rows * n);
+    // X2.rows = malloc(sizeof *X2.rows * n);
 
     long done_percent = 0;
     long total_count = 0;
@@ -314,39 +314,11 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     //X2.compressed_indices = compressed_indices;
     // X2.col_nz = col_nz;
 
-    gsl_rng* r;
-    gsl_permutation* permutation = gsl_permutation_alloc(p * (p + 1) / 2); //TODO: N.B. not necessarily correct size. Don't use any more.
-    gsl_permutation_init(permutation);
-    gsl_rng_env_setup();
-    // permutation_splits is the number of splits excluding the final (smaller)
-    // split
     permutation_splits = NumCores;
     permutation_split_size = p_int / permutation_splits;
-    const gsl_rng_type* T = gsl_rng_default;
-    // if (permutation_split_size > T->max) {
-    //	permutation_split_size = T->max;
-    //	permutation_splits = actual_p_int/permutation_split_size;
-    //	if (actual_p_int % permutation_split_size != 0) {
-    //		permutation_splits++;
-    //	}
-    //}
     final_split_size = p_int % permutation_splits;
     printf("%ld splits of size %ld\n", permutation_splits, permutation_split_size);
     printf("final split size: %ld\n", final_split_size);
-    r = gsl_rng_alloc(T);
-    gsl_rng* thread_r[NumCores];
-#pragma omp parallel for
-    for (long i = 0; i < NumCores; i++)
-        thread_r[i] = gsl_rng_alloc(T);
-
-    if (shuffle == TRUE) {
-        parallel_shuffle(permutation, permutation_split_size, final_split_size,
-            permutation_splits);
-    }
-    X2.permutation = permutation;
-    global_permutation = permutation;
-    global_permutation_inverse = gsl_permutation_alloc(permutation->size);
-    gsl_permutation_inverse(global_permutation_inverse, permutation);
 
     X2.n = n;
     X2.p = p_int;

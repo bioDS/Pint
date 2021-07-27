@@ -324,34 +324,6 @@ static void test_X2_from_X()
     g_assert_true(X2s.n == n);
     g_assert_true(X2s.p == p_int);
 
-    // print X2s
-    // printf("X2s:\n");
-    // for (long k = 0; k < p_int; k++) {
-    //  long entry = -1;
-    //  printf("%ld: ", k);
-    //  for (long i = 0; i < X2s.cols[k].nwords; i++) {
-    //    S8bWord word = X2s.cols[k].compressed_indices[i];
-    //    unsigned long values = word.values;
-    //    for (long j = 0; j <= group_size[word.selector]; j++) {
-    //      long diff = values & masks[word.selector];
-    //      if (diff != 0) {
-    //        entry += diff;
-    //        printf(" %ld", entry);
-    //      }
-    //      values >>= item_width[word.selector];
-    //    }
-    //  }
-    //  printf("\n");
-    //}
-
-    // printf("X2 (printed rows are file columns)\n");
-    // for (long j = 0; j < p_int; j++) {
-    //  for (long i = 0; i < n; i++) {
-    //    printf(" %ld", xm2.X[j][i]);
-    //  }
-    //  printf("\n");
-    //}
-
     long column_entries[n];
 
     for (long k = 0; k < p_int; k++) {
@@ -394,6 +366,17 @@ static void test_X2_from_X()
         }
         // printf("\nfinished column %ld", k);
     }
+
+    for (int i = 0; i < p; i++) {
+        free(xm.X[i]);
+    }
+    for (int k = 0; k < p_int; k++) {
+        free(X2s.cols[k].compressed_indices);
+        free(xm2.X[k]);
+    }
+    free(xm.X);
+    free(xm2.X);
+    free(X2s.cols);
 }
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
