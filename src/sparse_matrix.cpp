@@ -23,8 +23,8 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
     long p = Xc.p;
     long n = Xc.n;
     struct row_set rs;
-    long** new_rows = (long**)calloc(n, sizeof(long*));
-    long* row_lengths = (long*)calloc(n, sizeof(int));
+    long** new_rows = (long**)calloc(n, sizeof *new_rows);
+    long* row_lengths = (long*)calloc(n, sizeof *row_lengths);
 
     // #pragma omp parallel for
     for (long row = 0; row < n; row++) {
@@ -41,10 +41,11 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
                 row_pos++;
             }
         }
+
         row_lengths[row] = row_pos;
         if (row_pos > 0)
-            new_rows[row] = (long*)malloc(row_pos * sizeof(int));
-        memcpy(new_rows[row], row_cache, row_pos * sizeof(int));
+            new_rows[row] = (long*)malloc(row_pos * sizeof *new_rows);
+        memcpy(new_rows[row], row_cache, row_pos * sizeof *new_rows);
     }
 
     rs.rows = new_rows;
