@@ -14,11 +14,12 @@ if [ $isdiff -eq 1 ]; then
 	git reset --quiet --soft HEAD~1
 fi
 
-ninja -C build test > test_output && cat test_output
-ninja -C build coverage > coverage_output
+test_output=$(ninja -C build test)
+coverage_output=$(ninja -C build coverage)
 
-ok=$(grep Ok test_output | grep [0-9]* -o)
-fail=$(grep "^Fail" test_output | grep [0-9]* -o)
+ok=$(echo $test_output | grep  "Ok:\s\s*[0-9][0-9]*" -o | grep "[0-9][0-9]*" -o)
+fail=$(echo $test_output | grep -P "(?<!Expected\s)Fail:\s\s*[0-9][0-9]*" -o | grep "[0-9][0-9]*" -o)
+
 total_tests=$(echo $ok + $fail | bc -l)
 
 total_coverage=$(grep "TOTAL" build/meson-logs/coverage.txt | grep -o "[0-9]*\%" | tr -d '%')
@@ -68,3 +69,6 @@ git add test-badge.svg -f
 if [ $isdiff -eq 1 ]; then
 	git stash pop
 fi
+
+echo $test_output > test_output
+echo $coverage_output > coverage_output
