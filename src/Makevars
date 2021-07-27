@@ -1,0 +1,2 @@
+PKG_CXXFLAGS = -D_GNU_SOURCE -D_DEFAULT_SOURCE -I/usr/share/R/include -std=c++14 -fopenmp -fpermissive -Ofast -ffast-math -flto -g -I./
+PKG_LIBS = -L/usr/lib/R/lib -lncurses -ltinfo -Wl,--export-dynamic -fopenmp -Wl,-Bsymbolic-functions -Wl,-z,relro -lR -lgsl -lgslcblas -lm -lgomp -g

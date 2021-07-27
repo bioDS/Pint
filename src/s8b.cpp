@@ -3,18 +3,18 @@
 
 using namespace std;
 
-S8bWord to_s8b(int count, int* vals)
+S8bWord to_s8b(long count, long* vals)
 {
     S8bWord word;
     word.values = 0;
     word.selector = 0;
-    int t = 0;
+    long t = 0;
     // TODO: improve on this
     while (t < 16 && group_size[t] >= count)
         t++;
     word.selector = t - 1;
     unsigned long test = 0;
-    for (int i = 0; i < count; i++) {
+    for (long i = 0; i < count; i++) {
         test |= vals[count - i - 1];
         if (i < count - 1)
             test <<= item_width[word.selector];
@@ -23,26 +23,26 @@ S8bWord to_s8b(int count, int* vals)
     return word;
 }
 
-S8bCol col_to_s8b_col(int size, int* col)
+S8bCol col_to_s8b_col(long size, long* col)
 {
     // Read through the the current column entries, and append them as an
     // s8b-encoded list of offsets
     // printf("writing new s8b col of length %d\n", size);
-    int col_entries[60];
-    int count = 0;
-    int largest_entry = 0;
-    int max_bits = max_size_given_entries[0];
-    int diff = 0;
-    int total_nz_entries = 0;
+    long col_entries[60];
+    long count = 0;
+    long largest_entry = 0;
+    long max_bits = max_size_given_entries[0];
+    long diff = 0;
+    long total_nz_entries = 0;
     Queue* current_col = queue_new();
     Queue* current_col_actual = queue_new();
-    int prev_entry = -1;
-    for (int entry_ind = 0; entry_ind < size; entry_ind++) {
-        int entry = col[entry_ind];
+    long prev_entry = -1;
+    for (long entry_ind = 0; entry_ind < size; entry_ind++) {
+        long entry = col[entry_ind];
         total_nz_entries++;
         diff = entry - prev_entry;
-        int used = 0;
-        int tdiff = diff;
+        long used = 0;
+        long tdiff = diff;
         while (tdiff > 0) {
             used++;
             tdiff >>= 1;
@@ -73,7 +73,7 @@ S8bCol col_to_s8b_col(int size, int* col)
     S8bWord tempword = to_s8b(count, col_entries);
     memcpy(word, &tempword, sizeof(S8bWord));
     queue_push_tail(current_col, word);
-    int length = queue_get_length(current_col);
+    long length = queue_get_length(current_col);
 
     // push all our words to an array in the new col
     S8bCol s8bCol;

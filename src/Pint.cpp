@@ -19,7 +19,7 @@ struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets *beta_sets) {
     long main_len = beta_sets->beta1.size();
     long int_len = beta_sets->beta2.size();
     long trip_len = beta_sets->beta3.size();
-    int p = beta_sets->p;
+    long p = beta_sets->p;
 
     long* main_effects = new long[main_len];
     float* main_strength = new float[main_len];
@@ -67,17 +67,17 @@ extern "C" {
 #include <Rinternals.h>
 
 struct effect {
-    int i, j;
+    long i, j;
     float strength;
 };
 
 SEXP process_beta(Beta_Value_Sets* beta_sets)
 {
     struct C_Beta_Sets cbs = cpp_bs_to_c(beta_sets);
-    int main_count = 0, int_count = 0;
-    int total_main_count = cbs.main_len;
-    int total_int_count = cbs.int_len;
-    int total_trip_count = cbs.trip_len;
+    long main_count = 0, int_count = 0;
+    long total_main_count = cbs.main_len;
+    long total_int_count = cbs.int_len;
+    long total_trip_count = cbs.trip_len;
 
     SEXP main_i = PROTECT(allocVector(INTSXP, total_main_count));
     SEXP main_strength = PROTECT(allocVector(REALSXP, total_main_count));
@@ -130,8 +130,8 @@ SEXP read_log_(SEXP log_filename_)
 {
     char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
 
-    int restored_iter = -1;
-    int restored_lambda_count = -1;
+    long restored_iter = -1;
+    long restored_lambda_count = -1;
     float restored_lambda_value = -1.0;
     Beta_Value_Sets restored_beta_sets;
 
@@ -150,17 +150,17 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     double* x = REAL(X_);
     double* y = REAL(Y_);
     SEXP dim = getAttrib(X_, R_DimSymbol);
-    int n = INTEGER(dim)[0];
-    int p = INTEGER(dim)[1];
+    long n = INTEGER(dim)[0];
+    long p = INTEGER(dim)[1];
     float frac_overlap_allowed = asReal(frac_overlap_allowed_);
-    int max_interaction_distance = asInteger(max_interaction_distance_);
-    int p_int = get_p_int(p, max_interaction_distance);
-    int max_nz_beta = asInteger(max_nz_beta_);
+    long max_interaction_distance = asInteger(max_interaction_distance_);
+    long p_int = get_p_int(p, max_interaction_distance);
+    long max_nz_beta = asInteger(max_nz_beta_);
     bool verbose = asLogical(verbose_);
-    int max_lambdas = asInteger(max_lambdas_);
+    long max_lambdas = asInteger(max_lambdas_);
     char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
-    int depth = asInteger(depth_);
-    int log_level_enum = asInteger(log_level_);
+    long depth = asInteger(depth_);
+    long log_level_enum = asInteger(log_level_);
 
     initialise_static_resources();
 
@@ -182,21 +182,21 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         printf("updating once per iteration\n");
     }
 
-    int use_adaptive_calibration = asLogical(use_adaptive_calibration_);
+    long use_adaptive_calibration = asLogical(use_adaptive_calibration_);
 
     float halt_error_diff = asReal(halt_error_diff_);
 
-    int** X = (int**)malloc(p * sizeof(int*));
-    for (int i = 0; i < p; i++)
-        X[i] = (int*)malloc(n * sizeof(int));
+    long** X = (long**)malloc(p * sizeof(long*));
+    for (long i = 0; i < p; i++)
+        X[i] = (long*)malloc(n * sizeof(int));
 
-    for (int i = 0; i < p; i++) {
-        for (int j = 0; j < n; j++) {
+    for (long i = 0; i < p; i++) {
+        for (long j = 0; j < n; j++) {
             X[i][j] = (int)(x[j + i * n]);
         }
     }
     float* Y = (float*)malloc(n * sizeof(float));
-    for (int i = 0; i < n; i++) {
+    for (long i = 0; i < n; i++) {
         Y[i] = (float)y[i];
     }
 
@@ -217,7 +217,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     free_static_resources();
 
-    for (int i = 0; i < p; i++)
+    for (long i = 0; i < p; i++)
         free(X[i]);
     free(X);
     free(Y);

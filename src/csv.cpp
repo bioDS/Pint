@@ -1,12 +1,12 @@
 #include "liblasso.h"
 
-XMatrix read_x_csv(char* fn, int n, int p)
+XMatrix read_x_csv(char* fn, long n, long p)
 {
     char* buf = NULL;
     size_t line_size = 0;
-    int** X = malloc(p * sizeof(int*));
+    long** X = malloc(p * sizeof(long*));
 
-    for (int i = 0; i < p; i++)
+    for (long i = 0; i < p; i++)
         X[i] = malloc(n * sizeof(int));
 
     FILE* fp = fopen(fn, "r");
@@ -14,11 +14,11 @@ XMatrix read_x_csv(char* fn, int n, int p)
         perror("opening failed");
     }
 
-    int col = 0, row = 0, actual_cols = p;
-    int readline_result = 0;
+    long col = 0, row = 0, actual_cols = p;
+    long readline_result = 0;
     while ((readline_result = getline(&buf, &line_size, fp)) > 0) {
         // remove name from beginning (for the moment)
-        int i = 1;
+        long i = 1;
         while (buf[i] != '"')
             i++;
         i++;
@@ -63,7 +63,7 @@ XMatrix read_x_csv(char* fn, int n, int p)
     return xmatrix;
 }
 
-float* read_y_csv(char* fn, int n)
+float* read_y_csv(char* fn, long n)
 {
     char* buf = malloc(BUF_SIZE);
     char* temp = malloc(BUF_SIZE);
@@ -75,7 +75,7 @@ float* read_y_csv(char* fn, int n)
         perror("opening failed");
     }
 
-    int col = 0, i = 0;
+    long col = 0, i = 0;
     while (fgets(buf, BUF_SIZE, fp) != NULL) {
         i = 1;
         // skip the name
@@ -86,7 +86,7 @@ float* read_y_csv(char* fn, int n)
             i++;
         // read the rest of the line as a float
         memset(temp, 0, BUF_SIZE);
-        int j = 0;
+        long j = 0;
         while (buf[i] != '\n')
             temp[j++] = buf[i++];
         Y[col] = atof(temp);
@@ -98,11 +98,11 @@ float* read_y_csv(char* fn, int n)
     if (NORMALISE_Y == 1) {
         printf("%d, normalising y values\n", NORMALISE_Y);
         float mean = 0.0;
-        for (int i = 0; i < n; i++) {
+        for (long i = 0; i < n; i++) {
             mean += Y[i];
         }
         mean /= n;
-        for (int i = 0; i < n; i++) {
+        for (long i = 0; i < n; i++) {
             Y[i] -= mean;
         }
     }

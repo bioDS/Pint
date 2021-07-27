@@ -3,14 +3,14 @@
 #include <cstdlib>
 
 static long log_file_offset;
-static int int_print_len;
+static long int_print_len;
 
-void init_print(FILE *log_file, int n, int p, int num_betas, char** job_args,
-    int job_args_num)
+void init_print(FILE *log_file, long n, long p, long num_betas, char** job_args,
+    long job_args_num)
 {
     int_print_len = std::log10(p*p*p) + 1;
     fprintf(log_file, "still running\n");
-    for (int i = 0; i < job_args_num; i++) {
+    for (long i = 0; i < job_args_num; i++) {
         fprintf(log_file, "%s ", job_args[i]);
     }
     fprintf(log_file, "\n");
@@ -23,21 +23,21 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 
 
 // print to log: metadata required to resume from the log
-FILE* init_log(char* filename, int n, int p, int num_betas, char** job_args,
-    int job_args_num)
+FILE* init_log(char* filename, long n, long p, long num_betas, char** job_args,
+    long job_args_num)
 {
     FILE* log_file = fopen(filename, "w+");
     init_print(log_file, n, p, num_betas, job_args, job_args_num);
     return log_file;
 }
 
-static int log_pos = 0;
+static long log_pos = 0;
 // save the current beta values to a log, so the program can be resumed if it is
 // interrupted
-void save_log(int iter, float lambda_value, int lambda_count, Beta_Value_Sets* beta_sets,
+void save_log(long iter, float lambda_value, long lambda_count, Beta_Value_Sets* beta_sets,
     FILE* log_file)
 {
-    int real_n_betas = beta_sets->beta1.size() + beta_sets->beta2.size() + beta_sets->beta3.size();
+    long real_n_betas = beta_sets->beta1.size() + beta_sets->beta2.size() + beta_sets->beta3.size();
     // Rather than filling the log with beta values, we want to only keep two
     // copies. The current one, and a backup in case we stop while writing the
     // current one.
@@ -87,11 +87,11 @@ void close_log(FILE* log_file)
     fclose(log_file);
 }
 
-int check_can_restore_from_log(char* filename, int n, int p, int num_betas,
-    char** job_args, int job_args_num)
+long check_can_restore_from_log(char* filename, long n, long p, long num_betas,
+    char** job_args, long job_args_num)
 {
-    int buf_size = num_betas * 16 + 500;
-    int can_use = FALSE;
+    long buf_size = num_betas * 16 + 500;
+    long can_use = FALSE;
     FILE* log_file = fopen(filename, "r");
     if (log_file == NULL) {
         return FALSE;
@@ -100,7 +100,7 @@ int check_can_restore_from_log(char* filename, int n, int p, int num_betas,
     char* buffer = malloc(buf_size);
 
     memset(our_args, 0, sizeof(our_args));
-    for (int i = 0; i < job_args_num; i++) {
+    for (long i = 0; i < job_args_num; i++) {
         sprintf(our_args + strlen(our_args), "%s ", job_args[i]);
     }
     sprintf(our_args + strlen(our_args), "\n");
@@ -125,17 +125,17 @@ int check_can_restore_from_log(char* filename, int n, int p, int num_betas,
 }
 
 // returns the opened log for future use.
-FILE* restore_from_log(char* filename, bool check_args, int n, int p, 
-    char** job_args, int job_args_num, int* actual_iter,
-    int* actual_lambda_count, float* actual_lambda_value,
+FILE* restore_from_log(char* filename, bool check_args, long n, long p, 
+    char** job_args, long job_args_num, long* actual_iter,
+    long* actual_lambda_count, float* actual_lambda_value,
     Beta_Value_Sets *actual_beta_sets)
 {
 
-    int num_betas = 100;
+    long num_betas = 100;
     FILE* log_file = fopen(filename, "r+");
     long buf_size = num_betas * (16+int_print_len) + 500;
     char* buffer = new char[buf_size];
-    int beta1_size = -1, beta2_size = -1, beta3_size = -1;
+    long beta1_size = -1, beta2_size = -1, beta3_size = -1;
     Rprintf("restoring from log\n");
 
     // the first 5 rows are commentary & X size.
@@ -151,7 +151,7 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
 
     // now we're at the first saved line, check whether it's a complete
     // checkpoint.
-    int can_restore = TRUE;
+    long can_restore = TRUE;
     long first_pos = ftell(log_file);
 
     // assumes the line has already been read into buffer.
@@ -159,7 +159,7 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
         // buffer contains ' %d, %d, %d' [entries in row 1,2,3]
         sscanf(buffer, " %d, %d, %d\n", &beta1_size, &beta2_size, &beta3_size);
         printf(": beta sizes: %d, %d, %d\n", beta1_size, beta2_size, beta3_size);
-        int max_size = std::max(beta1_size, std::max(beta2_size, beta3_size))*(16+int_print_len);
+        long max_size = std::max(beta1_size, std::max(beta2_size, beta3_size))*(16+int_print_len);
         if (max_size > buf_size) {
             printf("setting new buf size for %d entries\n", max_size);
             buf_size = max_size;
@@ -199,8 +199,8 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
         read_beta_sizes();
         fgets(buffer, buf_size, log_file); // read lambda/iter info.
         // the first one was fine, but the second one may be more recent.
-        int first_iter, first_lambda_count;
-        int second_iter, second_lambda_count;
+        long first_iter, first_lambda_count;
+        long second_iter, second_lambda_count;
         float first_lambda_value;
         float second_lambda_value;
         sscanf(buffer, "%d, %d, %e\n", &first_iter, &first_lambda_count,
@@ -249,7 +249,7 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
     if (can_restore) {
         printf(": restoring from log\n");
         // buffer contains the current lambda and iter values.
-        int first_iter = -1, first_lambda_count = -1;
+        long first_iter = -1, first_lambda_count = -1;
         float first_lambda_value = -1;
         printf("final buf: '%s'\n", buffer);
         read_beta_sizes();
@@ -266,11 +266,11 @@ FILE* restore_from_log(char* filename, bool check_args, int n, int p,
         auto read_beta = [&](auto beta_size, auto *beta_set) {
             long offset = 0;
             fgets(buffer, buf_size, log_file);
-            for (int i = 0; i < beta_size; i++) {
+            for (long i = 0; i < beta_size; i++) {
                 // printf("values_buf: '%s'\n", buffer + offset);
-                int beta_no = -1;
+                long beta_no = -1;
                 float beta_val = -1.0;
-                int ret = sscanf(buffer + offset, "%d,%e, ", &beta_no, &beta_val);
+                long ret = sscanf(buffer + offset, "%d,%e, ", &beta_no, &beta_val);
                 if (ret != 2) {
                     fprintf(stderr, "failed to match value in log, bad things will now happen\n");
                     fprintf(stderr, "log value was '%s'\n", buffer + offset);

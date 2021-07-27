@@ -5,12 +5,12 @@ enum Output_Mode { quit,
     file,
     terminal };
 
-int main(int argc, char** argv)
+int main(long argc, char** argv)
 {
     if (argc != 12) {
         fprintf(stderr, "usage: ./lasso_exe X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]\n");
         printf("actual args(%d): '", argc);
-        for (int i = 0; i < argc; i++) {
+        for (long i = 0; i < argc; i++) {
             printf("%s ", argv[i]);
         }
         printf("\n");
@@ -48,11 +48,11 @@ int main(int argc, char** argv)
         lambda = 3.604;
     printf("using lambda = %f\n", lambda);
 
-    int N = atoi(argv[6]);
-    int P = atoi(argv[7]);
+    long N = atoi(argv[6]);
+    long P = atoi(argv[7]);
     printf("using N = %d, P = %d\n", N, P);
 
-    int max_interaction_distance = atoi(argv[8]);
+    long max_interaction_distance = atoi(argv[8]);
     printf("using max interaction distance: %d\n", max_interaction_distance);
 
     float overlap = atof(argv[9]);
@@ -73,8 +73,8 @@ int main(int argc, char** argv)
     XMatrix xmatrix = read_x_csv(argv[1], N, P);
     float* Y = read_y_csv(argv[2], N);
 
-    int** X2;
-    int nbeta;
+    long** X2;
+    long nbeta;
     nbeta = xmatrix.actual_cols;
     X2 = xmatrix.X;
     printf("using nbeta = %d\n", nbeta);
@@ -91,26 +91,26 @@ int main(int argc, char** argv)
     printf("begginning coordinate descent\n");
     auto beta_sets = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, max_interaction_distance,
         5000, lambda, 300, VERBOSE, overlap, 1.0001, log_level, argv, argc, FALSE, 20, "exe.log", 2);
-    int nbeta_int = nbeta;
+    long nbeta_int = nbeta;
     auto beta = beta_sets.beta3;
     nbeta_int = get_p_int(nbeta, max_interaction_distance);
     //if (beta == NULL) {
     //	fprintf(stderr, "failed to estimate beta values\n");
     //	return 1;
     //}
-    //for (int i = 0; i < nbeta_int; i++) {
+    //for (long i = 0; i < nbeta_int; i++) {
     //	printf("%f ", beta[i]);
     //}
     //printf("\n");
 
     printf("indices non-zero (|x| != 0):\n");
-    int printed = 0;
-    int sig_beta_count = 0;
+    long printed = 0;
+    long sig_beta_count = 0;
     //TODO: remove hack to avoid printing too much for the terminal
 
     printf("\n\n");
 
-    for (int i = 0; i < xmatrix.actual_cols; i++)
+    for (long i = 0; i < xmatrix.actual_cols; i++)
         free(xmatrix.X[i]);
     free(xmatrix.X);
     free(Y);
@@ -137,7 +137,7 @@ int main(int argc, char** argv)
             float coef = it->second;
             printf("%ld,%ld,%ld: %f\n", std::get<0>(abc), std::get<1>(abc), std::get<2>(abc), coef);
         }
-        //for (int i = 0; i < nbeta_int && printed < 100; i++) {
+        //for (long i = 0; i < nbeta_int && printed < 100; i++) {
         //    if (fabs((beta)[i]) > 0) {
         //        printed++;
         //        sig_beta_count++;
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
         //}
         break;
     case file:
-        for (int i = 0; i < nbeta_int; i++) {
+        for (long i = 0; i < nbeta_int; i++) {
             if (beta[i] != 0.0) {
                 printed++;
                 sig_beta_count++;

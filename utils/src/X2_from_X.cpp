@@ -4,14 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void write_x_csv(char* filename, int** X, int n, int p)
+void write_x_csv(char* filename, long** X, long n, long p)
 {
     FILE* fp = fopen(filename, "w");
     printf("writing %dx%d elements\n", n, p);
 
-    for (int i = 0; i < n; i++) {
+    for (long i = 0; i < n; i++) {
         fprintf(fp, "\"%d\",", i);
-        for (int j = 0; j < p - 1; j++) {
+        for (long j = 0; j < p - 1; j++) {
             if (X[i][j] > 1) {
                 printf("writing problem at %dx%d\n", i, j);
             }
@@ -21,7 +21,7 @@ void write_x_csv(char* filename, int** X, int n, int p)
     }
 }
 
-int main(int argc, char** argv)
+int main(long argc, char** argv)
 {
     if (argc != 5) {
         printf("usage ./X2_from_X X.csv n p X2.csv\n");
@@ -30,13 +30,13 @@ int main(int argc, char** argv)
 
     char* Xf = argv[1];
     char* X2f = argv[4];
-    int n = atoi(argv[2]);
-    int p = atoi(argv[3]);
+    long n = atoi(argv[2]);
+    long p = atoi(argv[3]);
 
     printf("reading matrix\n");
     XMatrix xmatrix = read_x_csv(Xf, n, p);
     printf("translating to X2\n");
-    int** X2 = X2_from_X(xmatrix.X, n, xmatrix.actual_cols);
+    long** X2 = X2_from_X(xmatrix.X, n, xmatrix.actual_cols);
     printf("writing X2\n");
     write_x_csv(X2f, X2, n, (p * (p + 1)) / 2);
 

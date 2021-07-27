@@ -38,8 +38,8 @@ extern "C" {
 
 
 typedef struct {
-    int* col_i;
-    int* col_j;
+    long* col_i;
+    long* col_j;
     robin_hood::unordered_flat_map<long, float> lf_map;
 } Thread_Cache;
 typedef struct {
@@ -50,8 +50,8 @@ typedef struct {
 } pad_int;
 
 typedef struct {
-    int i;
-    int j;
+    long i;
+    long j;
 } int_pair;
 
 enum LOG_LEVEL {
@@ -61,19 +61,19 @@ enum LOG_LEVEL {
 };
 
 struct X_uncompressed {
-    int* host_X;
-    int* host_col_nz;
-    int* host_col_offsets;
-    int* host_X_row;
-    int* host_row_nz;
-    int* host_row_offsets;
-    int n;
-    int p;
+    long* host_X;
+    long* host_col_nz;
+    long* host_col_offsets;
+    long* host_X_row;
+    long* host_row_nz;
+    long* host_row_offsets;
+    long n;
+    long p;
     size_t total_size;
 };
 struct AS_Properties {
-    int was_present : 1;
-    int present : 1;
+    long was_present : 1;
+    long present : 1;
 };
 
 struct OpenCL_Setup {
@@ -103,23 +103,23 @@ struct OpenCL_Setup {
 #include "tuple_val.h"
 
 typedef struct {
-    // int *entries;
+    // long *entries;
     // struct AS_Properties *properties;
     // struct AS_Entry *entries;
     robin_hood::unordered_flat_map<long, struct AS_Entry> entries1;
     robin_hood::unordered_flat_map<long, struct AS_Entry> entries2;
     robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
-    int length;
-    int max_length;
+    long length;
+    long max_length;
     gsl_permutation* permutation;
-    int p;
+    long p;
     // S8bCol *compressed_cols;
 } Active_Set;
 
 struct AS_Entry {
     long val : 62;
-    int was_present : 1;
-    int present : 1;
+    long was_present : 1;
+    long present : 1;
     S8bCol col;
     float *last_rowsum;
     float last_max;
@@ -129,19 +129,19 @@ typedef struct {
     robin_hood::unordered_flat_map<long, float> beta1;
     robin_hood::unordered_flat_map<long, float> beta2;
     robin_hood::unordered_flat_map<long, float> beta3;
-    int p;
+    long p;
 } Beta_Value_Sets;
 
 typedef struct {
     XMatrixSparse Xc;
     float** last_rowsum;
     Thread_Cache* thread_caches;
-    int n;
+    long n;
     // robin_hood::unordered_flat_map<long, float> *beta;
     Beta_Value_Sets* beta_sets;
     float* last_max;
     bool* wont_update;
-    int p;
+    long p;
     long p_int;
     XMatrixSparse X2c;
     float* Y;
@@ -158,16 +158,16 @@ typedef struct {
 #include "update_working_set.h"
 #include "log.h"
 
-int** X2_from_X(int** X, int n, int p);
-float* read_y_csv(char* fn, int n);
-XMatrix read_x_csv(char* fn, int n, int p);
+long** X2_from_X(long** X, long n, long p);
+float* read_y_csv(char* fn, long n);
+XMatrix read_x_csv(char* fn, long n, long p);
 int_pair get_num(long num, long p);
 void free_static_resources();
 void initialise_static_resources();
 void parallel_shuffle(gsl_permutation* permutation, long split_size,
     long final_split_size, long splits);
 long get_p_int(long p, long max_interaction_distance);
-int_pair* get_all_nums(int p, int max_interaction_distance);
+int_pair* get_all_nums(long p, long max_interaction_distance);
 
 #define TRUE 1
 #define FALSE 0
@@ -187,20 +187,20 @@ extern double subproblem_time;
 extern long used_branches;
 extern long pruned_branches;
 
-extern int NumCores;
+extern long NumCores;
 extern long permutation_splits;
 extern long permutation_split_size;
 extern long final_split_size;
-extern const int NORMALISE_Y;
-extern int skipped_updates;
-extern int total_updates;
-extern int skipped_updates_entries;
-extern int total_updates_entries;
-extern int zero_updates;
-extern int zero_updates_entries;
-extern int* colsum;
+extern const long NORMALISE_Y;
+extern long skipped_updates;
+extern long total_updates;
+extern long skipped_updates_entries;
+extern long total_updates_entries;
+extern long zero_updates;
+extern long zero_updates_entries;
+extern long* colsum;
 extern float* col_ysum;
-extern int max_size_given_entries[61];
+extern long max_size_given_entries[61];
 extern long total_beta_updates;
 extern long total_beta_nz_updates;
 extern float halt_error_diff;
@@ -211,5 +211,5 @@ extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 extern gsl_permutation* global_permutation;
 extern gsl_permutation* global_permutation_inverse;
 extern int_pair* cached_nums;
-extern int VERBOSE;
+extern long VERBOSE;
 extern float total_sqrt_error;

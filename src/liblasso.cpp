@@ -6,23 +6,23 @@
 #include <limits.h>
 #include <omp.h>
 
-int NumCores = 1;
+long NumCores = 1;
 long permutation_splits = 1;
 long permutation_split_size;
 long final_split_size;
 
-const int NORMALISE_Y = 0;
-int skipped_updates = 0;
-int total_updates = 0;
-int skipped_updates_entries = 0;
-int total_updates_entries = 0;
-int zero_updates = 0;
-int zero_updates_entries = 0;
+const long NORMALISE_Y = 0;
+long skipped_updates = 0;
+long total_updates = 0;
+long skipped_updates_entries = 0;
+long total_updates_entries = 0;
+long zero_updates = 0;
+long zero_updates_entries = 0;
 
-int VERBOSE = 1;
-int* colsum;
+long VERBOSE = 1;
+long* colsum;
 float* col_ysum;
-int max_size_given_entries[61];
+long max_size_given_entries[61];
 
 float max_rowsums[NUM_MAX_ROWSUMS];
 float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
@@ -37,7 +37,7 @@ double subproblem_time = 0.0;
 long used_branches = 0;
 long pruned_branches = 0;
 
-int min(int a, int b)
+long min(long a, long b)
 {
     if (a < b)
         return a;
@@ -54,10 +54,10 @@ void initialise_static_resources()
     NumCores = omp_get_num_procs();
     printf("using %d cores\n", NumCores);
     thread_r = malloc(NumCores * sizeof(gsl_rng*));
-    for (int i = 0; i < NumCores; i++)
+    for (long i = 0; i < NumCores; i++)
         thread_r[i] = gsl_rng_alloc(T);
 
-    for (int i = 0; i < 60; i++) {
+    for (long i = 0; i < 60; i++) {
         max_size_given_entries[i] = 60 / (i + 1);
     }
     max_size_given_entries[60] = 0;
@@ -71,7 +71,7 @@ void free_static_resources()
     //  gsl_permutation_free(global_permutation_inverse);
     if (cached_nums != NULL)
         free(cached_nums);
-    for (int i = 0; i < NumCores; i++)
+    for (long i = 0; i < NumCores; i++)
         gsl_rng_free(thread_r[i]);
 }
 
@@ -119,7 +119,7 @@ void parallel_shuffle(gsl_permutation* permutation, long split_size,
     long final_split_size, long splits)
 {
 #pragma omp parallel for
-    for (int i = 0; i < splits; i++) {
+    for (long i = 0; i < splits; i++) {
         // printf("%p, %p, %d, %d\n", permutation->data,
         // &permutation->data[i*split_size], i, split_size); printf("range %p-%p\n",
         // &permutation->data[i*split_size], &permutation->data[i*split_size] +
@@ -149,7 +149,7 @@ long get_p_int(long p, long dist)
     return p_int;
 }
 
-int max(int a, int b)
+long max(long a, long b)
 {
     if (a > b)
         return a;
@@ -169,10 +169,10 @@ float soft_threshold(float z, float gamma)
         return val;
 }
 
-float get_sump(int p, int k, int i, robin_hood::unordered_flat_map<long, float> beta, int** X)
+float get_sump(long p, long k, long i, robin_hood::unordered_flat_map<long, float> beta, long** X)
 {
     float sump = 0;
-    for (int j = 0; j < p; j++) {
+    for (long j = 0; j < p; j++) {
         if (j != k)
             sump += X[i][j] * beta[j];
     }
@@ -185,15 +185,15 @@ int_pair get_num(long num, long p)
     return cached_nums[num];
 }
 
-int_pair* get_all_nums(int p, int max_interaction_distance)
+int_pair* get_all_nums(long p, long max_interaction_distance)
 {
     long p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance == -1)
         max_interaction_distance = p_int / 2 + 1;
     int_pair* nums = malloc(p_int * sizeof(int_pair));
     long offset = 0;
-    for (int i = 0; i < p; i++) {
-        for (int j = i; j < min(p, i + max_interaction_distance); j++) {
+    for (long i = 0; i < p; i++) {
+        for (long j = i; j < min(p, i + max_interaction_distance); j++) {
             int_pair ip;
             ip.i = i;
             ip.j = j;
@@ -214,14 +214,14 @@ int_pair* get_all_nums(int p, int max_interaction_distance)
  * This should never happen.
  */
 
-int** X2_from_X(int** X, int n, int p)
+long** X2_from_X(long** X, long n, long p)
 {
-    int** X2 = malloc(n * sizeof(int*));
-    for (int row = 0; row < n; row++) {
+    long** X2 = malloc(n * sizeof(long*));
+    for (long row = 0; row < n; row++) {
         X2[row] = malloc(((p * (p + 1)) / 2) * sizeof(int));
-        int offset = 0;
-        for (int i = 0; i < p; i++) {
-            for (int j = i; j < p; j++) {
+        long offset = 0;
+        for (long i = 0; i < p; i++) {
+            for (long j = i; j < p; j++) {
                 X2[row][offset++] = X[row][i] * X[row][j];
             }
         }

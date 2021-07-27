@@ -5,14 +5,14 @@
 
 using namespace std;
 
-XMatrixSparse sparsify_X(int** X, int n, int p)
+XMatrixSparse sparsify_X(long** X, long n, long p)
 {
     return sparse_X2_from_X(X, n, p, 1, FALSE);
 }
 
 void free_sparse_matrix(XMatrixSparse X)
 {
-    for (int i = 0; i < X.p; i++) {
+    for (long i = 0; i < X.p; i++) {
         free(X.cols[i].compressed_indices);
     }
     free(X.cols);
@@ -21,22 +21,22 @@ void free_sparse_matrix(XMatrixSparse X)
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
 {
-    int p = Xc.p;
-    int n = Xc.n;
+    long p = Xc.p;
+    long n = Xc.n;
     struct row_set rs;
-    int** new_rows = (int**)calloc(n, sizeof(int*));
-    int* row_lengths = (int*)calloc(n, sizeof(int));
+    long** new_rows = (long**)calloc(n, sizeof(long*));
+    long* row_lengths = (long*)calloc(n, sizeof(int));
 
     // #pragma omp parallel for
-    for (int row = 0; row < n; row++) {
+    for (long row = 0; row < n; row++) {
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
-        int* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
-        // check inverted list for interactions along row_main
-        // int *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
-        int row_pos = 0;
-        for (int i = 0; i < Xu.host_row_nz[row]; i++) {
+        long* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
+        // check inverted list for interactions aint row_main
+        // long *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
+        long row_pos = 0;
+        for (long i = 0; i < Xu.host_row_nz[row]; i++) {
             long col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
-            // int col = X_row[i];
+            // long col = X_row[i];
             if (!remove[col]) {
                 row_cache[row_pos] = col;
                 row_pos++;
@@ -44,7 +44,7 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
         }
         row_lengths[row] = row_pos;
         if (row_pos > 0)
-            new_rows[row] = (int*)malloc(row_pos * sizeof(int));
+            new_rows[row] = (long*)malloc(row_pos * sizeof(int));
         memcpy(new_rows[row], row_cache, row_pos * sizeof(int));
     }
 
@@ -57,13 +57,13 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
  * max_interaction_distance: interactions will be up to, but not including, this
  * distance from each other. set to 1 for no interactions.
  */
-XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
-    long max_interaction_distance, int shuffle)
+XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
+    long max_interaction_distance, long shuffle)
 {
     XMatrixSparse X2;
     long colno, length;
 
-    int iter_done = 0;
+    long iter_done = 0;
     long p_int = p * (p + 1) / 2;
     // TODO: for the moment we use the maximum possible p_int for allocation,
     // because things assume it.
@@ -75,7 +75,7 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     printf("p_int: %d\n", p_int);
 
     // TODO: granted all these pointers are the same size, but it's messy
-    // X2.compressed_indices = malloc(p_int * sizeof(int *));
+    // X2.compressed_indices = malloc(p_int * sizeof(long *));
     // X2.col_nz = malloc(p_int * sizeof(*X2.col_nz));
     // memset(X2.col_nz, 0, p_int * sizeof(*X2.col_nz));
     // X2.col_nwords = malloc(p_int * sizeof(int));
@@ -84,7 +84,7 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     X2.cols = malloc(sizeof *X2.cols * p_int);
     X2.rows = malloc(sizeof *X2.rows * n);
 
-    int done_percent = 0;
+    long done_percent = 0;
     long total_count = 0;
     long total_sum = 0;
     // size_t testcol = -INT_MAX;
@@ -116,26 +116,26 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
             // segfault for debugger
             // printf("%ld != %ld\ni,j a,b sa,sb = %ld,%ld %ld,%ld %ld,%ld", tmp,
             // colno, i, j, a, b, suma, sumb);
-            // (*(int*)NULL)++;
+            // (*(long*)NULL)++;
             // }
 
             // Read through the the current column entries, and append them to X2 as
             // an s8b-encoded list of offsets
-            int* col_entries = malloc(60 * sizeof(int));
-            int count = 0;
-            int largest_entry = 0;
-            int max_bits = max_size_given_entries[0];
-            int diff = 0;
-            int prev_row = -1;
-            int total_nz_entries = 0;
-            for (int row = 0; row < n; row++) {
+            long* col_entries = malloc(60 * sizeof(int));
+            long count = 0;
+            long largest_entry = 0;
+            long max_bits = max_size_given_entries[0];
+            long diff = 0;
+            long prev_row = -1;
+            long total_nz_entries = 0;
+            for (long row = 0; row < n; row++) {
                 val = X[i][row] * X[j][row];
                 if (val == 1) {
                     total_nz_entries++;
                     diff = row - prev_row;
                     total_sum += diff;
-                    int used = 0;
-                    int tdiff = diff;
+                    long used = 0;
+                    long tdiff = diff;
                     while (tdiff > 0) {
                         used++;
                         tdiff >>= 1;
@@ -205,21 +205,21 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     //
     //      // Read through the the current row entries, and append them to X2 as
     //      // an s8b-encoded list of offsets
-    //      int *row_entries = calloc(60, sizeof(int));
-    //      int count = 0;
-    //      int largest_entry = 0;
-    //      int max_bits = max_size_given_entries[0];
-    //      int diff = 0;
-    //      int prev_col = -1;
-    //      int total_nz_entries = 0;
-    //      for (int col = 0; col < p; col ++) {
+    //      long *row_entries = calloc(60, sizeof(int));
+    //      long count = 0;
+    //      long largest_entry = 0;
+    //      long max_bits = max_size_given_entries[0];
+    //      long diff = 0;
+    //      long prev_col = -1;
+    //      long total_nz_entries = 0;
+    //      for (long col = 0; col < p; col ++) {
     //        val = X[col][row] * X[col][row];
     //        if (val == 1) {
     //          total_nz_entries++;
     //          diff = col - prev_col;
     //          total_sum += diff;
-    //          int used = 0;
-    //          int tdiff = diff;
+    //          long used = 0;
+    //          long tdiff = diff;
     //          while (tdiff > 0) {
     //            used++;
     //            tdiff >>= 1;
@@ -276,7 +276,7 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     //}
     long total_words = 0;
     long total_entries = 0;
-    for (int i = 0; i < p_int; i++) {
+    for (long i = 0; i < p_int; i++) {
         total_words += X2.cols[i].nwords;
         total_entries += X2.cols[i].nz;
     }
@@ -288,17 +288,17 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
 
     S8bWord* compressed_indices;
     unsigned long* col_start;
-    int* col_nz;
+    long* col_nz;
     unsigned long offset = 0;
     //if (p_int == p) {
     //  compressed_indices = malloc(total_words * sizeof *compressed_indices);
     //  col_start = malloc(p_int * sizeof *col_start);
     //  col_nz = malloc(p_int * sizeof *col_nz);
     //  offset = 0;
-    //  for (int i = 0; i < p_int; i++) {
+    //  for (long i = 0; i < p_int; i++) {
     //    col_start[i] = offset;
     //    col_nz[i] = X2.cols[i].nz;
-    //    for (int w = 0; w < X2.cols[i].nwords; w++) {
+    //    for (long w = 0; w < X2.cols[i].nwords; w++) {
     //      compressed_indices[col_start[i] + w] = X2.cols[i].compressed_indices[w];
     //      if (compressed_indices[col_start[i] + w].values !=
     //          X2.cols[i].compressed_indices[w].values) {
@@ -336,7 +336,7 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
     r = gsl_rng_alloc(T);
     gsl_rng* thread_r[NumCores];
 #pragma omp parallel for
-    for (int i = 0; i < NumCores; i++)
+    for (long i = 0; i < NumCores; i++)
         thread_r[i] = gsl_rng_alloc(T);
 
     if (shuffle == TRUE) {
@@ -356,16 +356,16 @@ XMatrixSparse sparse_X2_from_X(int** X, int n, int p,
 
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
-    int* host_X = calloc(Xc->total_entries, sizeof(int));
-    int* host_col_nz = calloc(Xc->p, sizeof(int));
+    long* host_X = calloc(Xc->total_entries, sizeof(int));
+    long* host_col_nz = calloc(Xc->p, sizeof(int));
     ;
-    int* host_col_offsets = calloc(Xc->p, sizeof(int));
-    int* host_X_row = calloc(Xc->total_entries, sizeof(int));
-    int* host_row_nz = calloc(Xc->n, sizeof(int));
+    long* host_col_offsets = calloc(Xc->p, sizeof(int));
+    long* host_X_row = calloc(Xc->total_entries, sizeof(int));
+    long* host_row_nz = calloc(Xc->n, sizeof(int));
     ;
-    int* host_row_offsets = calloc(Xc->n, sizeof(int));
-    int p = Xc->p;
-    int n = Xc->n;
+    long* host_row_offsets = calloc(Xc->n, sizeof(int));
+    long p = Xc->p;
+    long n = Xc->n;
 
     // row-major dense X, for creating row inverted lists.
     char(*full_X)[p] = calloc(n * p, sizeof(char));
@@ -373,19 +373,19 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
     // read through compressed matrix and construct continuous
     // uncompressed matrix
     size_t offset = 0;
-    for (int k = 0; k < p; k++) {
+    for (long k = 0; k < p; k++) {
         host_col_offsets[k] = offset;
         host_col_nz[k] = Xc->cols[k].nz;
-        int* col = &host_X[offset];
+        long* col = &host_X[offset];
         // read column
         {
-            int col_entry_pos = 0;
-            int entry = -1;
-            for (int i = 0; i < Xc->cols[k].nwords; i++) {
+            long col_entry_pos = 0;
+            long entry = -1;
+            for (long i = 0; i < Xc->cols[k].nwords; i++) {
                 S8bWord word = Xc->cols[k].compressed_indices[i];
                 unsigned long values = word.values;
-                for (int j = 0; j <= group_size[word.selector]; j++) {
-                    int diff = values & masks[word.selector];
+                for (long j = 0; j <= group_size[word.selector]; j++) {
+                    long diff = values & masks[word.selector];
                     if (diff != 0) {
                         entry += diff;
                         col[col_entry_pos] = entry;
@@ -401,11 +401,11 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 
     // construct row-major indices.
     offset = 0;
-    for (int row = 0; row < n; row++) {
+    for (long row = 0; row < n; row++) {
         host_row_offsets[row] = offset;
-        int* col = &host_X[offset];
-        int row_nz = 0;
-        for (int col = 0; col < p; col++) {
+        long* col = &host_X[offset];
+        long row_nz = 0;
+        for (long col = 0; col < p; col++) {
             if (full_X[row][col] == 1) {
                 host_X_row[offset] = col;
                 row_nz++;

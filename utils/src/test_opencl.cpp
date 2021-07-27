@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 const char* test_kernel = ""
-                          "__kernel void vector_add(__global const int *A, __global const int *B, __global const int *C) {"
+                          "__kernel void vector_add(__global const long *A, __global const long *B, __global const long *C) {"
                           "	int i get_global_id(0);"
                           ""
                           "	C[i] = A[i] + B[i];"
@@ -17,11 +17,11 @@ int main()
     cl_int ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
     ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &ret_num_devices);
 
-    int* A = malloc(100 * sizeof(int));
-    int* B = malloc(100 * sizeof(int));
-    int* C = malloc(100 * sizeof(int));
+    long* A = malloc(100 * sizeof(int));
+    long* B = malloc(100 * sizeof(int));
+    long* C = malloc(100 * sizeof(int));
 
-    for (int i = 0; i < 100; i++) {
+    for (long i = 0; i < 100; i++) {
         A[i] = i;
         B[i] = i;
         C[i] = 0;
@@ -72,8 +72,8 @@ int main()
 
     ret = clEnqueueReadBuffer(command_queue, c_mem_obj, CL_TRUE, 0, 100 * sizeof(int), C, 0, NULL, NULL);
 
-    int sum = 0;
-    for (int i = 0; i < 100; i++) {
+    long sum = 0;
+    for (long i = 0; i < 100; i++) {
         sum += C[i];
     }
 

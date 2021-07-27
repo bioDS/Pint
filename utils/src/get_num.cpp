@@ -2,21 +2,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char** argv)
+int main(long argc, char** argv)
 {
     if (argc != 3) {
         printf("usage ./get_num [num] p\n");
         return 1;
     }
 
-    int num = atoi(argv[1]);
-    int p = atoi(argv[2]);
+    long num = atoi(argv[1]);
+    long p = atoi(argv[2]);
 
     printf("using num: %d, p %d\n", num, p);
 
-    int offset = 0;
-    for (int i = 0; i < p; i++) {
-        for (int j = i; j < p; j++) {
+    long offset = 0;
+    for (long i = 0; i < p; i++) {
+        for (long j = i; j < p; j++) {
             if (offset == num) {
                 printf("i: %d, j: %d\n", i + 1, j + 1);
             }
