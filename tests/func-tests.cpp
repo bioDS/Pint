@@ -579,6 +579,7 @@ static void test_read_y_csv()
     g_assert_true(Y[0] <= -133.351709197933 + 0.0001);
     g_assert_true(Y[999] >= -352.293608898344 - 0.0001);
     g_assert_true(Y[999] <= -352.293608898344 + 0.0001);
+    free(Y);
 }
 
 // assumes little endian
