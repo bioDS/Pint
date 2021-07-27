@@ -309,6 +309,12 @@ static void test_compressed_main_X()
         // printf("\nfinished column %ld", k);
     }
     printf("agreed on %ld\n", agreed_on);
+    for (int i = 0; i < p; i++) {
+        free(xm.X[i]);
+        free(Xs.cols[i].compressed_indices);
+    }
+    free(xm.X);
+    free(Xs.cols);
 }
 
 static void test_X2_from_X()
