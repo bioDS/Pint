@@ -807,9 +807,6 @@ static void check_X2_encoding()
 static void check_permutation()
 {
     long threads = omp_get_num_procs();
-    gsl_rng** thread_r = malloc(threads * sizeof(gsl_rng*));
-    for (long i = 0; i < threads; i++)
-        thread_r[i] = gsl_rng_alloc(gsl_rng_taus2);
 
     long perm_size = 3235; //<< 12 + 67;
     printf("perm_size %ld\n", perm_size);
@@ -818,8 +815,8 @@ static void check_permutation()
 
     parallel_shuffle(perm, perm_size / threads, perm_size % threads, threads);
 
-    long* found = malloc(perm_size * sizeof(int));
-    memset(found, 0, perm_size * sizeof(int));
+    long* found = new long[perm_size];
+    memset(found, 0, perm_size * sizeof *found);
     for (long i = 0; i < perm_size; i++) {
         size_t val = perm->data[i];
         found[val] = 1;
@@ -828,10 +825,9 @@ static void check_permutation()
     for (long i = 0; i < perm_size; i++) {
         printf("checking %ld is present\n", i);
         printf("found[%ld] = %ld\n", i, found[i]);
-        printf("found[%ld+1] = %ld\n", i, found[i + 1]);
         g_assert_true(found[i] == 1);
     }
-    free(found);
+    delete[] found;
     gsl_permutation_free(perm);
 
     perm_size = 123123; //<< 12 + 67;
@@ -841,7 +837,8 @@ static void check_permutation()
 
     parallel_shuffle(perm, perm_size / threads, perm_size % threads, threads);
 
-    found = malloc(perm_size * sizeof(int));
+    // found = malloc(perm_size * sizeof *found);
+    found = new long[perm_size];//malloc(perm_size * sizeof(long));
     memset(found, 0, perm_size);
     for (long i = 0; i < perm_size; i++) {
         long val = perm->data[i];
@@ -851,10 +848,9 @@ static void check_permutation()
     for (long i = 0; i < perm_size; i++) {
         printf("checking %ld is present\n", i);
         printf("found[%ld] = %ld\n", i, found[i]);
-        printf("found[%ld+1] = %ld\n", i, found[i + 1]);
         g_assert_true(found[i] == 1);
     }
-    free(found);
+    delete[] found;
     gsl_permutation_free(perm);
 }
 
