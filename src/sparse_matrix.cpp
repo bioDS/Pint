@@ -72,7 +72,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance < 0)
         max_interaction_distance = p;
-    printf("p_int: %d\n", p_int);
+    printf("p_int: %ld\n", p_int);
 
     // TODO: granted all these pointers are the same size, but it's messy
     // X2.compressed_indices = malloc(p_int * sizeof(long *));
@@ -192,7 +192,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
         iter_done++;
         if (p >= 100 && iter_done % (p / 100) == 0) {
             if (VERBOSE)
-                printf("create interaction matrix, %d\%\n", done_percent);
+                printf("create interaction matrix, %ld\%\n", done_percent);
             done_percent++;
         }
     }
@@ -331,8 +331,8 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     //	}
     //}
     final_split_size = p_int % permutation_splits;
-    printf("%d splits of size %d\n", permutation_splits, permutation_split_size);
-    printf("final split size: %d\n", final_split_size);
+    printf("%ld splits of size %ld\n", permutation_splits, permutation_split_size);
+    printf("final split size: %ld\n", final_split_size);
     r = gsl_rng_alloc(T);
     gsl_rng* thread_r[NumCores];
 #pragma omp parallel for

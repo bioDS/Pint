@@ -9,7 +9,7 @@ int main(long argc, char** argv)
 {
     if (argc != 12) {
         fprintf(stderr, "usage: ./lasso_exe X.csv Y.csv [main/int] verbose=T/F [max lambda] N P [max interaction distance] [frac overlap allowed] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]\n");
-        printf("actual args(%d): '", argc);
+        printf("actual args(%ld): '", argc);
         for (long i = 0; i < argc; i++) {
             printf("%s ", argv[i]);
         }
@@ -50,10 +50,10 @@ int main(long argc, char** argv)
 
     long N = atoi(argv[6]);
     long P = atoi(argv[7]);
-    printf("using N = %d, P = %d\n", N, P);
+    printf("using N = %ld, P = %ld\n", N, P);
 
     long max_interaction_distance = atoi(argv[8]);
-    printf("using max interaction distance: %d\n", max_interaction_distance);
+    printf("using max interaction distance: %ld\n", max_interaction_distance);
 
     float overlap = atof(argv[9]);
     printf("using frac: %.2f\n", overlap);
@@ -77,7 +77,7 @@ int main(long argc, char** argv)
     long nbeta;
     nbeta = xmatrix.actual_cols;
     X2 = xmatrix.X;
-    printf("using nbeta = %d\n", nbeta);
+    printf("using nbeta = %ld\n", nbeta);
 
     if (xmatrix.X == NULL) {
         fprintf(stderr, "failed to read X\n");
@@ -143,9 +143,9 @@ int main(long argc, char** argv)
         //        sig_beta_count++;
         //        int_pair ip = get_num(i, nbeta);
         //        if (ip.i == ip.j)
-        //            printf("main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
+        //            printf("main: %ld (%ld):     %f\n", i, ip.i + 1, (beta)[i]);
         //        else
-        //            printf("int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
+        //            printf("int: %ld  (%ld, %ld): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
         //    }
         //}
         break;
@@ -156,9 +156,9 @@ int main(long argc, char** argv)
                 sig_beta_count++;
                 int_pair ip = get_num(i, nbeta);
                 if (ip.i == ip.j)
-                    fprintf(output_file, "main: %d (%d):     %f\n", i, ip.i + 1, (beta)[i]);
+                    fprintf(output_file, "main: %ld (%ld):     %f\n", i, ip.i + 1, (beta)[i]);
                 else
-                    fprintf(output_file, "int: %d  (%d, %d): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
+                    fprintf(output_file, "int: %ld  (%ld, %ld): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
             }
         }
         fclose(output_file);

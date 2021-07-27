@@ -7,17 +7,17 @@
 void write_x_csv(char* filename, long** X, long n, long p)
 {
     FILE* fp = fopen(filename, "w");
-    printf("writing %dx%d elements\n", n, p);
+    printf("writing %ldx%ld elements\n", n, p);
 
     for (long i = 0; i < n; i++) {
-        fprintf(fp, "\"%d\",", i);
+        fprintf(fp, "\"%ld\",", i);
         for (long j = 0; j < p - 1; j++) {
             if (X[i][j] > 1) {
-                printf("writing problem at %dx%d\n", i, j);
+                printf("writing problem at %ldx%ld\n", i, j);
             }
-            fprintf(fp, "%d,", X[i][j]);
+            fprintf(fp, "%ld,", X[i][j]);
         }
-        fprintf(fp, "%d\n", X[i][p - 1]);
+        fprintf(fp, "%ld\n", X[i][p - 1]);
     }
 }
 

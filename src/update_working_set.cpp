@@ -104,23 +104,23 @@ bool active_set_present(Active_Set* as, long value)
 void active_set_append(Active_Set* as, long value, long* col, long len)
 {
     //if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col), 100)) {
-    //  printf("appending interesting col %d to as\n", value);
+    //  printf("appending interesting col %ld to as\n", value);
     //}
     // printf("as, adding val %ld as ", value);
     robin_hood::unordered_flat_map<long, AS_Entry>* entries;
     long p = as->p;
     if (p % 5 != 0) {
-        // printf("\np = %d\n", p);
+        // printf("\np = %ld\n", p);
 #ifdef NOT_R
         g_assert_true(p % 5 == 0);
 #endif
     }
     if (value < p) {
         //if (VERBOSE && value == interesting_col)
-        //    printf("[%ld < %d]: main\n", value, p);
+        //    printf("[%ld < %ld]: main\n", value, p);
         entries = &as->entries1;
     } else if (value < p * p) {
-        // printf("[%ld < %d]: pair\n", value, p*p);
+        // printf("[%ld < %ld]: pair\n", value, p*p);
         entries = &as->entries2;
     } else {
         // printf("triple\n");
@@ -270,10 +270,10 @@ char update_working_set_cpu(
                     ri++;
                 for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
                     long inter = relevant_row_set.rows[row_main][ri];
-                    // printf("checking pairwise %ld,%d\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
+                    // printf("checking pairwise %ld,%ld\n", main, inter); //TOOD: maintain separate lists so we can solve them in order
                     sum_with_col[inter] += rowsum_diff;
                     //if (!checked_interesting_cols && main == interesting_col1 && inter == interesting_col2) {
-                    //    // printf(" adding %f to sum %ld,%d. new total: %f\n", rowsum_diff, main, inter, sum_with_col[inter]);
+                    //    // printf(" adding %f to sum %ld,%ld. new total: %f\n", rowsum_diff, main, inter, sum_with_col[inter]);
                     //    checked_interesting_cols = true;
                     //}
                     if (depth > 2) {
@@ -310,13 +310,13 @@ char update_working_set_cpu(
                             for (long ri2 = ri + 1; ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                                 long inter2 = relevant_row_set.rows[row_main][ri2];
                                 long inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                                // printf("checking triple %ld,%d,%d: diff %f\n", main, inter, inter2, rowsum_diff);
+                                // printf("checking triple %ld,%ld,%ld: diff %f\n", main, inter, inter2, rowsum_diff);
                                 if (row_main == 0 && inter == 1 && inter2 == 2) {
                                     // printf("interesting col ind == %ld", inter_ind);
                                 }
                                 sum_with_col[inter_ind] += rowsum_diff;
                                 //if (main == interesting_col && inter == interesting_col) {
-                                //    // printf("appending %f to interesting col (%d,%d)\n", rowsum_diff, main, inter);
+                                //    // printf("appending %f to interesting col (%ld,%ld)\n", rowsum_diff, main, inter);
                                 //}
                             }
                         } else {
@@ -337,7 +337,7 @@ char update_working_set_cpu(
         //    printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
         //}
         //if (main == interesting_col1)
-        //    printf(" %ld sum with col %d: %f\n", main, interesting_col2, sum_with_col[interesting_col2]);
+        //    printf(" %ld sum with col %ld: %f\n", main, interesting_col2, sum_with_col[interesting_col2]);
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
         auto curr_inter = sum_with_col.cbegin();
@@ -354,10 +354,10 @@ char update_working_set_cpu(
 //                g_assert_true(tuple_val < p * p);
 //#endif
 //                // std::tuple<long,long> inter_pair_tmp = val_to_pair(tuple_val, p);
-//                // printf("%ld,%d,%d sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
+//                // printf("%ld,%ld,%ld sum: %f > %f (lambda)?\n", main, std::get<0>(inter_pair_tmp), std::get<1>(inter_pair_tmp), sum, lambda);
 //            }
             max_inter_val = std::max(max_inter_val, sum);
-            // printf("testing inter %d, sum is %d\n", inter, sum_with_col[inter]);
+            // printf("testing inter %ld, sum is %ld\n", inter, sum_with_col[inter]);
             if (sum > lambda*total_sqrt_error) {
                 long a, b, c;
                 long k;
@@ -374,9 +374,9 @@ char update_working_set_cpu(
                     c = main; //TODO: unnecessary
                     k = pair_to_val(std::make_tuple(a, b), p);
                     //if (a == interesting_col1 && b == interesting_col2)
-                    //    printf("%d, %d: sum %f\n", a, b, sum);
+                    //    printf("%ld, %ld: sum %f\n", a, b, sum);
                     //if (k < p) {
-                    //    printf("(%d,%d|%d): k = %ld\n", a, b, p, k);
+                    //    printf("(%ld,%ld|%ld): k = %ld\n", a, b, p, k);
                     //}
 #ifdef NOT_R
                     g_assert_true(k >= p || k < p * p);
@@ -402,7 +402,7 @@ char update_working_set_cpu(
                 for (long ia = 0; ia < Xu.host_col_nz[a]; ia++) {
                     long cur_row = colA[ia];
                     //if (a == b && a == c) {
-                    //  printf("%d: %d ", ia, cur_row);
+                    //  printf("%ld: %ld ", ia, cur_row);
                     //}
                     while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
                         ib++;
@@ -410,7 +410,7 @@ char update_working_set_cpu(
                         ic++;
                     if (cur_row == colB[ib] && cur_row == colC[ic]) {
                         //if (a == b && a == c) {
-                        //  printf("\n%d,%d,%d\n", ia, ib, ic);
+                        //  printf("\n%ld,%ld,%ld\n", ia, ib, ic);
                         //}
                         col_j_cache[inter_len] = cur_row;
                         inter_len++;
@@ -433,13 +433,13 @@ char update_working_set_cpu(
                     for (long ia = 0; ia < Xu.host_col_nz[a]; ia++) {
                         long cur_row = colA[ia];
                         //if (a == b && a == c) {
-                        //  printf("%d: %d ", ia, cur_row);
+                        //  printf("%ld: %ld ", ia, cur_row);
                         //}
                         while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
                             ib++;
                         if (cur_row == colB[ib]) {
                             //if (a == b && a == c) {
-                            //  printf("\n%d,%d,%d\n", ia, ib, ic);
+                            //  printf("\n%ld,%ld,%ld\n", ia, ib, ic);
                             //}
                             col_j_cache[inter_len] = cur_row;
                             inter_len++;
@@ -459,9 +459,9 @@ char update_working_set_cpu(
         sum_with_col.clear();
     }
 
-    // printf("total: %d, skipped %d, inter_cols %d\n", total, skipped, total_inter_cols);
+    // printf("total: %ld, skipped %ld, inter_cols %ld\n", total, skipped, total_inter_cols);
     // printf("int2 used: %ld, skipped %ld (%.0f\%)\n", int2_used, int2_skipped, 100.0 * (double)int2_skipped / (double)(int2_skipped + int2_used));
-    // printf("as size: %d,%d,%d\n", as->entries1.size(), as->entries2.size(), as->entries3.size());
+    // printf("as size: %ld,%ld,%ld\n", as->entries1.size(), as->entries2.size(), as->entries3.size());
     return increased_set;
 }
 
@@ -478,7 +478,7 @@ char update_working_set(
     // printf("wont_update:\n");
     // for (long i = 0; i < p; i++) {
     //   if (wont_update[i])
-    //     printf("%d ", i);
+    //     printf("%ld ", i);
     // }
     // printf("\n");
     //int count = 0;
@@ -486,11 +486,11 @@ char update_working_set(
     //    if (!wont_update[i])
     //        count++;
     //if (count_may_update != count) {
-    //    printf("count_may_update was %d, should have been %d\n", count_may_update, count);
+    //    printf("count_may_update was %ld, should have been %ld\n", count_may_update, count);
     //}
     //g_assert_true(count == count_may_update);
     //if (!wont_update[interesting_col1] && !wont_update[interesting_col2])
-    //    printf(" both cols %d,%d may update\n", interesting_col1, interesting_col2);
+    //    printf(" both cols %ld,%ld may update\n", interesting_col1, interesting_col2);
     //bool f1 = false, f2 = false;
     //for (long i = 0; i < count_may_update; i++) {
     //    if (updateable_items[count_may_update] == interesting_col1)
@@ -524,7 +524,7 @@ char update_working_set(
     //                    f2pos = found;
     //                }
     //                if (found1 && found2) {
-    //                    // printf("found both in row %d at positions %d,%d\n", row, f1pos, f2pos);
+    //                    // printf("found both in row %ld at positions %ld,%ld\n", row, f1pos, f2pos);
     //                    found_both = true;
     //                }
     //            }
@@ -565,22 +565,22 @@ char update_working_set(
 //    cl_uint ret_num_platforms;
 //    ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to get OpenCL platform, err %d\n", ret);
+//        fprintf(stderr, "failed to get OpenCL platform, err %ld\n", ret);
 //    }
 //    ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id,
 //        &ret_num_devices);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to get OpenCL device, err %d\n", ret);
+//        fprintf(stderr, "failed to get OpenCL device, err %ld\n", ret);
 //    }
 //    cl_context context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create OpenCL context, err %d\n", ret);
+//        fprintf(stderr, "failed to create OpenCL context, err %ld\n", ret);
 //    }
 //    cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
 //
 //    cl_program program = clCreateProgramWithSource(context, 1, &source.buffer, &source.len, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to build program, err %d\n", ret);
+//        fprintf(stderr, "failed to build program, err %ld\n", ret);
 //    }
 //
 //    //const char *cl_build_options = "-cl-opt-disable";
@@ -588,7 +588,7 @@ char update_working_set(
 //    // Build the program
 //    ret = clBuildProgram(program, 1, &device_id, cl_build_options, NULL, NULL);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to build program, err %d\n", ret);
+//        fprintf(stderr, "failed to build program, err %ld\n", ret);
 //    }
 //
 //    // Create the OpenCL kernel
@@ -598,42 +598,42 @@ char update_working_set(
 //    cl_mem target_X = clCreateBuffer(context, CL_MEM_READ_ONLY,
 //        sizeof(int) * n * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_col_nz = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_col_offsets = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_wont_update = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_rowsum = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * n, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_beta = clCreateBuffer(context, CL_MEM_READ_ONLY,
 //        sizeof(float) * p_int, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device beta buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device beta buffer, %ld\n", ret);
 //    }
 //    cl_mem target_updateable_items = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(int) * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_append = clCreateBuffer(context, CL_MEM_READ_WRITE,
 //        sizeof(char) * p_int, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //    cl_mem target_last_max = clCreateBuffer(context, CL_MEM_READ_WRITE,
 //        sizeof(float) * p, NULL, &ret);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to create device buffer, %d\n", ret);
+//        fprintf(stderr, "failed to create device buffer, %ld\n", ret);
 //    }
 //
 //    // zero everything in target memory
@@ -644,17 +644,17 @@ char update_working_set(
 //    ret = clEnqueueWriteBuffer(command_queue, target_X, CL_TRUE, 0,
 //        sizeof(int) * Xu.total_size, host_X, 0, NULL, NULL);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//        fprintf(stderr, "failed to write device buffers, %ld\n", ret);
 //    }
 //    ret = clEnqueueWriteBuffer(command_queue, target_col_nz, CL_TRUE, 0,
 //        sizeof(int) * p, host_col_nz, 0, NULL, NULL);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//        fprintf(stderr, "failed to write device buffers, %ld\n", ret);
 //    }
 //    ret = clEnqueueWriteBuffer(command_queue, target_col_offsets, CL_TRUE, 0,
 //        sizeof(int) * p, host_col_offsets, 0, NULL, NULL);
 //    if (ret != CL_SUCCESS) {
-//        fprintf(stderr, "failed to write device buffers, %d\n", ret);
+//        fprintf(stderr, "failed to write device buffers, %ld\n", ret);
 //    }
 //
 //    struct OpenCL_Setup setup;

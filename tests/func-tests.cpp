@@ -180,7 +180,7 @@ static void update_beta_fixture_set_up(UpdateFixture* fixture,
     fixture->k = 27;
     fixture->dBMax = 0;
     fixture->intercept = 0;
-    printf("%d\n", fixture->X[1][0]);
+    printf("%ld\n", fixture->X[1][0]);
     long p_int = (fixture->p * (fixture->p + 1)) / 2;
     int_pair* precalc_get_num = (int_pair*)malloc(p_int * sizeof(int_pair));
     long offset = 0;
@@ -286,15 +286,15 @@ static void test_compressed_main_X()
         // n.b. XMatrix.X is column-major
         col_entry_pos = 0;
         for (long i = 0; i < n; i++) {
-            // printf("\ncolumn %d contains %d entries", k, X2s.nz[k]);
+            // printf("\ncolumn %ld contains %ld entries", k, X2s.nz[k]);
             if (col_entry_pos > Xs.cols[k].nz || column_entries[col_entry_pos] < i) {
                 if (xm.X[k][i] != 0) {
-                    printf("\n[%d][%d] is not in the index but should be", k, i);
+                    printf("\n[%ld][%ld] is not in the index but should be", k, i);
                     g_assert_true(FALSE);
                 }
             } else if (Xs.cols[k].nz > 0 && column_entries[col_entry_pos] == i) {
                 if (xm.X[k][i] != 1) {
-                    printf("\n[%d][%d] missing from \n", k, i);
+                    printf("\n[%ld][%ld] missing from \n", k, i);
                     g_assert_true(FALSE);
                 } else {
                     agreed_on++;
@@ -302,9 +302,9 @@ static void test_compressed_main_X()
                 col_entry_pos++;
             }
         }
-        // printf("\nfinished column %d", k);
+        // printf("\nfinished column %ld", k);
     }
-    printf("agreed on %d\n", agreed_on);
+    printf("agreed on %ld\n", agreed_on);
 }
 
 static void test_X2_from_X()
@@ -324,7 +324,7 @@ static void test_X2_from_X()
     // printf("X2s:\n");
     // for (long k = 0; k < p_int; k++) {
     //  long entry = -1;
-    //  printf("%d: ", k);
+    //  printf("%ld: ", k);
     //  for (long i = 0; i < X2s.cols[k].nwords; i++) {
     //    S8bWord word = X2s.cols[k].compressed_indices[i];
     //    unsigned long values = word.values;
@@ -332,7 +332,7 @@ static void test_X2_from_X()
     //      long diff = values & masks[word.selector];
     //      if (diff != 0) {
     //        entry += diff;
-    //        printf(" %d", entry);
+    //        printf(" %ld", entry);
     //      }
     //      values >>= item_width[word.selector];
     //    }
@@ -343,7 +343,7 @@ static void test_X2_from_X()
     // printf("X2 (printed rows are file columns)\n");
     // for (long j = 0; j < p_int; j++) {
     //  for (long i = 0; i < n; i++) {
-    //    printf(" %d", xm2.X[j][i]);
+    //    printf(" %ld", xm2.X[j][i]);
     //  }
     //  printf("\n");
     //}
@@ -352,7 +352,7 @@ static void test_X2_from_X()
 
     for (long k = 0; k < p_int; k++) {
         if (k == 2905) {
-            printf("xm2.X[%d][0] == %d\n", k, xm2.X[k][0]);
+            printf("xm2.X[%ld][0] == %ld\n", k, xm2.X[k][0]);
         }
         long col_entry_pos = 0;
         long entry = -1;
@@ -374,21 +374,21 @@ static void test_X2_from_X()
         // n.b. XMatrix.X is column-major
         col_entry_pos = 0;
         for (long i = 0; i < n; i++) {
-            // printf("\ncolumn %d contains %d entries", k, X2s.nz[k]);
+            // printf("\ncolumn %ld contains %ld entries", k, X2s.nz[k]);
             if (col_entry_pos > X2s.cols[k].nz || column_entries[col_entry_pos] < i) {
                 if (xm2.X[k][i] != 0) {
-                    printf("\n[%d][%d] is not in the index but should be", k, i);
+                    printf("\n[%ld][%ld] is not in the index but should be", k, i);
                     g_assert_true(FALSE);
                 }
             } else if (X2s.cols[k].nz > 0 && column_entries[col_entry_pos] == i) {
                 if (xm2.X[k][i] != 1) {
-                    printf("\n[%d][%d] missing from \n", k, i);
+                    printf("\n[%ld][%ld] missing from \n", k, i);
                     g_assert_true(FALSE);
                 }
                 col_entry_pos++;
             }
         }
-        // printf("\nfinished column %d", k);
+        // printf("\nfinished column %ld", k);
     }
 }
 
@@ -519,7 +519,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
     for (long i = 0; i < p_int; i++) {
         long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
         // long k = i;
-        printf("testing beta[%d] (%f) ~ %f [", i, beta[i],
+        printf("testing beta[%ld] (%f) ~ %f [", i, beta[i],
             small_X2_correct_beta[k]);
 
         if ((beta[i] < small_X2_correct_beta[k] + acceptable_diff) && (beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
@@ -556,7 +556,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
     long no_agreeing = 0;
     for (long i = 0; i < p_int; i++) {
         long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-        printf("testing beta[%d] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
+        printf("testing beta[%ld] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
 
         if ((beta[k] < glmnet_beta[i] + acceptable_diff) && (beta[k] > glmnet_beta[i] - acceptable_diff)) {
             no_agreeing++;
@@ -621,7 +621,7 @@ static void check_X2_encoding()
         }
         col_sizes[j] = queue_get_length(col_q);
         col_nz_indices[j] = malloc(sizeof *col_nz_indices[j] * col_sizes[j]);
-        printf(" real col size: %d, \tcompressed col contains %d entries \n",
+        printf(" real col size: %ld, \tcompressed col contains %ld entries \n",
             col_sizes[j], xmatrix_sparse.cols[j].nz);
         g_assert_true(col_sizes[j] == xmatrix_sparse.cols[j].nz);
         long pos = 0;
@@ -657,7 +657,7 @@ static void check_X2_encoding()
     }
     printf("mean diff size: %f\n", (float)total / (float)no_entries);
 
-    printf("size of s8bword struct: %d (long is %ld)\n", sizeof(S8bWord),
+    printf("size of s8bword struct: %ld (long is %ld)\n", sizeof(S8bWord),
         sizeof(int));
 
     S8bWord test_word;
@@ -682,7 +682,7 @@ static void check_X2_encoding()
     }
     max_size_given_entries[60] = 0;
 
-    printf("num entries in col 0: %d\n", xmatrix_sparse.cols[0].nz);
+    printf("num entries in col 0: %ld\n", xmatrix_sparse.cols[0].nz);
     long* col_entries = malloc(60 * sizeof(int));
     long count = 0;
     // GList *s8b_col = NULL;
@@ -694,7 +694,7 @@ static void check_X2_encoding()
     for (long i = 0; i < xmatrix_sparse.cols[0].nz; i++) {
         if (i != 0)
             diff = col_nz_indices[0][i] - col_nz_indices[0][i - 1];
-        // printf("current no. %d, diff %d. available bits %d\n",
+        // printf("current no. %ld, diff %ld. available bits %ld\n",
         // col_nz_indices[0][i], diff, max_bits); update max bits.
         long used = 0;
         long tdiff = diff;
@@ -710,9 +710,9 @@ static void check_X2_encoding()
             //  printf(" b ");
             // if (largest_entry > max_size_given_entries[count+1])
             //  printf(" c ");
-            // printf("pushing word with %d entries: ", count);
+            // printf("pushing word with %ld entries: ", count);
             // for (long j = 0; j < count; j++)
-            //  printf("%d ", col_entries[j]);
+            //  printf("%ld ", col_entries[j]);
             // printf("\n");
             S8bWord* word = malloc(sizeof(S8bWord));
             S8bWord tempword = to_s8b(count, col_entries);
@@ -746,7 +746,7 @@ static void check_X2_encoding()
 
     printf("checking [s8b] == [int]\n");
     for (long k = 0; k < p_int; k++) {
-        printf("col %d (interaction %d,%d)\n", k, nums[k].i, nums[k].j);
+        printf("col %ld (interaction %ld,%ld)\n", k, nums[k].i, nums[k].j);
         long checked = 0;
         long col_entry_pos = 0;
         long entry = -1;
@@ -757,7 +757,7 @@ static void check_X2_encoding()
                 long diff = values & masks[word.selector];
                 if (diff != 0) {
                     entry += diff;
-                    printf("pos %d, %d == %d\n", col_entry_pos, entry,
+                    printf("pos %ld, %ld == %ld\n", col_entry_pos, entry,
                         col_nz_indices[k][col_entry_pos]);
                     g_assert_true(entry == col_nz_indices[k][col_entry_pos]);
                     col_entry_pos++;
@@ -766,23 +766,23 @@ static void check_X2_encoding()
                 values >>= item_width[word.selector];
             }
         }
-        printf("col %d, checked %d out of %d present\n", k, checked, col_sizes[k]);
+        printf("col %ld, checked %ld out of %ld present\n", k, checked, col_sizes[k]);
         g_assert_true(checked == xmatrix_sparse.cols[k].nz);
     }
 
     long bytes = length * sizeof(S8bWord);
-    printf("col[0] contains %d words, for a toal of %d bytes, instead of %d "
-           "shorts (%d bytes). Effective reduction %f\n",
+    printf("col[0] contains %ld words, for a toal of %ld bytes, instead of %ld "
+           "shorts (%ld bytes). Effective reduction %f\n",
         length, bytes, xmatrix_sparse.cols[0].nz,
         xmatrix_sparse.cols[0].nz * sizeof(short),
         (float)bytes / (xmatrix_sparse.cols[0].nz * sizeof(short)));
 
     printf("liblasso vs test compressed first col:\n");
     for (long i = 0; i < xmatrix_sparse.cols[0].nwords; i++) {
-        printf("%d == %d\n", xmatrix_sparse.cols[0].compressed_indices[i].selector,
+        printf("%ld == %ld\n", xmatrix_sparse.cols[0].compressed_indices[i].selector,
             actual_col[i].selector);
         g_assert_true(xmatrix_sparse.cols[0].compressed_indices[i].selector == actual_col[i].selector);
-        printf("%d == %d\n", xmatrix_sparse.cols[0].compressed_indices[i].values,
+        printf("%ld == %ld\n", xmatrix_sparse.cols[0].compressed_indices[i].values,
             actual_col[i].values);
         g_assert_true(xmatrix_sparse.cols[0].compressed_indices[i].values == actual_col[i].values);
     }
@@ -816,12 +816,12 @@ static void check_permutation()
     for (long i = 0; i < perm_size; i++) {
         size_t val = perm->data[i];
         found[val] = 1;
-        printf("found %d\n", val);
+        printf("found %ld\n", val);
     }
     for (long i = 0; i < perm_size; i++) {
-        printf("checking %d is present\n", i);
-        printf("found[%d] = %d\n", i, found[i]);
-        printf("found[%d+1] = %d\n", i, found[i + 1]);
+        printf("checking %ld is present\n", i);
+        printf("found[%ld] = %ld\n", i, found[i]);
+        printf("found[%ld+1] = %ld\n", i, found[i + 1]);
         g_assert_true(found[i] == 1);
     }
     free(found);
@@ -839,12 +839,12 @@ static void check_permutation()
     for (long i = 0; i < perm_size; i++) {
         long val = perm->data[i];
         found[val] = 1;
-        printf("found %d\n", val);
+        printf("found %ld\n", val);
     }
     for (long i = 0; i < perm_size; i++) {
-        printf("checking %d is present\n", i);
-        printf("found[%d] = %d\n", i, found[i]);
-        printf("found[%d+1] = %d\n", i, found[i + 1]);
+        printf("checking %ld is present\n", i);
+        printf("found[%ld] = %ld\n", i, found[i]);
+        printf("found[%ld+1] = %ld\n", i, found[i + 1]);
         g_assert_true(found[i] == 1);
     }
     free(found);
@@ -858,14 +858,14 @@ long check_didnt_update(long p, long p_int, bool* wont_update, robin_hood::unord
         // long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
         long k = i;
         // long k = fixture->xmatrix_sparse.permutation->data[i];
-        // printf("testing beta[%d] (%f)\n", k, beta[k]);
+        // printf("testing beta[%ld] (%f)\n", k, beta[k]);
         int_pair ip = get_num(k, p_int);
         // TODO: we should only check against later items not in the working set,
         // this needs to be udpated
         if (wont_update[ip.i] || wont_update[ip.j]) {
-            // printf("checking interaction %d,%d is zero\n", ip.i, ip.j);
+            // printf("checking interaction %ld,%ld is zero\n", ip.i, ip.j);
             if (beta[k] != 0.0) {
-                printf("beta %d (interaction %d,%d) should be zero according to "
+                printf("beta %ld (interaction %ld,%ld) should be zero according to "
                        "will_update_effect(), but is in fact %f\n",
                     k, ip.i, ip.j, beta[k]);
                 no_disagreeing++;
@@ -921,10 +921,10 @@ bool get_wont_update(char* working_set, bool* wont_update, long p,
 
     // for (long i = 0; i < p; i++) {
     //  if (wont_update[i]) {
-    //      printf("%d supposedly wont update\n", i);
+    //      printf("%ld supposedly wont update\n", i);
     //  }
     //}
-    // printf("ruled out %d branch(es)\n", ruled_out);
+    // printf("ruled out %ld branch(es)\n", ruled_out);
     return ruled_out;
 }
 // run branch_prune check, then full regression step without pruning.
@@ -1001,7 +1001,7 @@ static void check_branch_pruning(UpdateFixture* fixture,
 
             ruled_out = get_wont_update(working_set, wont_update, p, Xu, lambda, last_max,
                 last_rowsum, rowsum, column_cache, n, beta);
-            printf("iter %d ruled out %d\n", iter, ruled_out);
+            printf("iter %ld ruled out %ld\n", iter, ruled_out);
             long k = 0;
             for (long main_effect = 0; main_effect < p; main_effect++) {
                 for (long interaction = main_effect; interaction < p; interaction++) {
@@ -1029,7 +1029,7 @@ static void check_branch_pruning(UpdateFixture* fixture,
             for (long i = 0; i < p; i++) {
                 if (!wont_update[i]) {
                     if (last_max[i] != max_int_delta[i]) {
-                        printf("main effect %d new last_max is %f\n", i, max_int_delta[i]);
+                        printf("main effect %ld new last_max is %f\n", i, max_int_delta[i]);
                     }
                     last_max[i] = max_int_delta[i];
                 }
@@ -1043,12 +1043,12 @@ static void check_branch_pruning(UpdateFixture* fixture,
                 break;
             }
         }
-        printf("done lambda %f in %d iters\n", lambda, iter + 1);
+        printf("done lambda %f in %ld iters\n", lambda, iter + 1);
         for (long i = 0; i < p; i++) {
             // we did check these anyway, but since we ordinarily wouldn't they don't
             // get updated.
             if (!wont_update[i]) {
-                // printf("updating last_rowsum for %d\n", i);
+                // printf("updating last_rowsum for %ld\n", i);
                 memcpy(last_rowsum[i], old_rowsum, sizeof *old_rowsum * n);
             }
         }
@@ -1086,7 +1086,7 @@ float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum)
     }
     error = sqrt(error);
     for (long iter = 0; iter < 100; iter++) {
-        // printf("iter %d\n", iter);
+        // printf("iter %ld\n", iter);
         // last_iter_count = iter;
         float prev_error = error;
 
@@ -1118,7 +1118,7 @@ float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum)
         error = sqrt(error);
         // printf("prev_error: %f \t error: %f\n", prev_error, error);
         if (prev_error / error < HALT_ERROR_DIFF) {
-            printf("done lambda %.2f after %d iters\n", lambda, iter + 1);
+            printf("done lambda %.2f after %ld iters\n", lambda, iter + 1);
             break;
         } else if (iter == 99) {
             printf("halting lambda %.2f after 100 iters\n", lambda);
@@ -1171,7 +1171,7 @@ static unsigned long* target_col_nz;
 //  //    omp_target_alloc(p_int * sizeof *target_sumn, omp_get_default_device());
 //  //target_col_nz =
 //  //    omp_target_alloc(p_int * sizeof *target_col_nz, omp_get_default_device());
-//  printf("total entries: %d\n", Xc->total_entries);
+//  printf("total entries: %ld\n", Xc->total_entries);
 //  unsigned long *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
 //  unsigned long *temp_offset = malloc(p * sizeof *temp_offset);
 //  unsigned long *temp_size = malloc(p * sizeof *temp_offset);
@@ -1263,7 +1263,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         for (auto it = true_effects.begin(); it != true_effects.end(); it++) {
             long first = it->first - 1;
             long second = it->second - 1;
-            printf("checking %d,%d\n", first, second);
+            printf("checking %ld,%ld\n", first, second);
             long val = pair_to_val(std::make_tuple(first, second), fixture->p);
             printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
             g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
@@ -1380,7 +1380,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 #pragma omp parallel for schedule(static)
     for (long i = 0; i < p; i++) {
         last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 64);
-        // printf("i: %d\n", i);
+        // printf("i: %ld\n", i);
         // last_rowsum[i] = &last_rowsum[0][i * n];
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
     }
@@ -1391,7 +1391,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     // float last_max[n];
     float* last_max = calloc(n, sizeof(float));
-    // printf("last_max: %lx\n", last_max);
+    // printf("last_max: %p\n", last_max);
     memset(last_max, 0, sizeof(*last_max));
 
     // start running tests with decreasing lambda
@@ -1462,7 +1462,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     }
     printf("last updated val: %ld\n", last_updated_val);
     int_pair pair = fixture->precalc_get_num[last_updated_val];
-    printf("%d,%d\n", pair.i, pair.j);
+    printf("%ld,%ld\n", pair.i, pair.j);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     basic_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
     printf("time: %f s\n", basic_cpu_time_used);
@@ -1532,14 +1532,14 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
     printf("\n");
-    printf("col 0,1 length: %d\n", X2c.cols[1].nz);
+    printf("col 0,1 length: %ld\n", X2c.cols[1].nz);
     printf("classic 0,1: %f\n", beta_sets.beta2[1]);
     printf("pruned  0,1: %f\n", pruning_beta_sets.beta2[101]);
     printf("addresses maybe of interest:\n");
-    printf("Xc.cols:       %lx\n", Xc.cols);
-    printf("last_rowsum:   %lx\n", last_rowsum);
-    printf("p_rowsum:      %lx\n", p_rowsum);
-    printf("wont_update:   %lx\n", wont_update);
+    printf("Xc.cols:       %p\n", Xc.cols);
+    printf("last_rowsum:   %p\n", last_rowsum);
+    printf("p_rowsum:      %p\n", p_rowsum);
+    printf("wont_update:   %p\n", wont_update);
     active_set_free(active_set);
     pruned_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
     printf("basic time: %.2fs (%.2f X2 conversion) \t pruned time %.2f s\n",
@@ -1555,9 +1555,9 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
            "reused col\n",
         main_col_time, int_col_time, reused_col_time);
 
-    printf("used branches:   %d\n", used_branches);
-    printf("pruned branches: %d\n", pruned_branches);
-    printf("total branches:  %d\n", used_branches + pruned_branches);
+    printf("used branches:   %ld\n", used_branches);
+    printf("pruned branches: %ld\n", pruned_branches);
+    printf("total branches:  %ld\n", used_branches + pruned_branches);
 
     // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
     float* basic_rowsum = malloc(sizeof *basic_rowsum * n);
@@ -1587,7 +1587,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
                     // nz_beta_pruning += beta_pruning[k] != 0.0;
                     // pruned_rowsum[entry] += beta_pruning[k];
                     //if (basic_rowsum[entry] > 1e20) {
-                    //  printf("1. basic_rowsum[%d] = %f\n", entry, basic_rowsum[entry]);
+                    //  printf("1. basic_rowsum[%ld] = %f\n", entry, basic_rowsum[entry]);
                     //}
                 }
                 values >>= item_width[word.selector];
@@ -1659,7 +1659,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("checking beta 3\n");
     check_beta_set(&pruning_beta_sets.beta3);
 
-    printf("found %d effects\n", total_effects);
+    printf("found %ld effects\n", total_effects);
     // g_assert_true(nz_beta_pruning >= beta_pruning.size() /2);
     float basic_error = 0.0;
     float pruned_error = 0.0;
@@ -1667,7 +1667,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         basic_error += basic_rowsum[i] * basic_rowsum[i];
         pruned_error += pruned_rowsum[i] * pruned_rowsum[i];
         if (basic_rowsum[i] > 1e20) {
-            printf("2. basic_rowsum[%d] = %f\n", i, basic_rowsum[i]);
+            printf("2. basic_rowsum[%ld] = %f\n", i, basic_rowsum[i]);
         }
     }
     basic_error = sqrt(basic_error);
@@ -1703,7 +1703,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     //    float min = fmin(basic_beta, pruned_beta);
 
     //    if (max / min > acceptable_diff && fabs(basic_beta) > 0.01) {
-    //      printf("basic[%d,%d = %d] \t   %.2e \t =\\= \t %.2e \t pruning[%d,%d = %d]\n", main, inter, k, basic_beta,
+    //      printf("basic[%ld,%ld = %ld] \t   %.2e \t =\\= \t %.2e \t pruning[%ld,%ld = %ld]\n", main, inter, k, basic_beta,
     //             pruned_beta, main, inter, pair_to_val(std::make_tuple(main, inter), p));
     //    }
     //    g_assert_true(max/min <= acceptable_diff || fabs(basic_beta) < 0.01);
@@ -1717,7 +1717,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     //  float min = fmin(basic_beta, pruned_beta);
 
     //  if (max / min > acceptable_diff) {
-    //    printf("basic[%d] \t   %.2f \t =\\= \t %.2f \t pruning[%d]\n", k, beta[k],
+    //    printf("basic[%ld] \t   %.2f \t =\\= \t %.2f \t pruning[%ld]\n", k, beta[k],
     //           beta_pruning[k], k);
     //  }
     //}
@@ -1762,7 +1762,7 @@ void test_row_list_without_columns()
     for (long i = 0; i < n; i++) {
         for (long j = 0; j < rs.row_lengths[i]; j++) {
             long entry = rs.rows[i][j];
-            printf("%d, ", entry);
+            printf("%ld, ", entry);
         }
         printf("\n");
     }
@@ -1773,17 +1773,17 @@ void test_row_list_without_columns()
             if (remove[j])
                 continue;
             long entry = xm_a[i][j];
-            printf("%d, ", entry);
+            printf("%ld, ", entry);
             if (entry == 1) {
                 if (rs.rows[i][found] != j) {
-                    printf("!= found! (%d)\n", rs.rows[i][found]);
+                    printf("!= found! (%ld)\n", rs.rows[i][found]);
                 }
                 g_assert_true(rs.rows[i][found] == j);
                 found++;
             }
         }
         if (found != rs.row_lengths[i]) {
-            printf("\nfound %d, row length %d\n", found, rs.row_lengths[i]);
+            printf("\nfound %ld, row length %ld\n", found, rs.row_lengths[i]);
         }
         g_assert_true(found == rs.row_lengths[i]);
         printf("\n");
@@ -1863,7 +1863,7 @@ void trivial_3way_test()
                                 //}
                                 float cb = correct_beta[triplet_to_val(std::make_tuple(j, j2, j3), p)];
                                 if (cb != 0.0) {
-                                    printf("Y[%d] +=  %f (%d,%d,%d)\n", i, cb, j, j2, j3);
+                                    printf("Y[%ld] +=  %f (%ld,%ld,%ld)\n", i, cb, j, j2, j3);
                                     Y[i] += cb;
                                 }
                             }
@@ -1901,14 +1901,14 @@ void trivial_3way_test()
         for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
             long val = it->first;
             if (val < p) {
-                printf("%d: %f\n", val, it->second);
+                printf("%ld: %f\n", val, it->second);
             } else if (val < p * p) {
                 auto pair = val_to_pair(val, p);
-                printf("%d,%d: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
+                printf("%ld,%ld: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
             } else {
                 g_assert_true(val < p * p * p);
                 auto triple = val_to_triplet(val, p);
-                printf("%d,%d,%d: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
+                printf("%ld,%ld,%ld: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
             }
         }
     };
@@ -1946,9 +1946,9 @@ void test_tuple_vals()
                 long y = std::get<1>(tp);
                 long z = std::get<2>(tp);
                 if (a != x || b != y || c != z) {
-                    printf("assigning %d %d %d ... ", a, b, c);
-                    printf("%d\n", val);
-                    printf("found %d %d %d\n", x, y, z);
+                    printf("assigning %ld %ld %ld ... ", a, b, c);
+                    printf("%ld\n", val);
+                    printf("found %ld %ld %ld\n", x, y, z);
                 }
                 g_assert_true(std::get<0>(tp) == a);
                 g_assert_true(std::get<1>(tp) == b);
@@ -2002,18 +2002,18 @@ void save_restore_log()
             long key = it->first;
             float val = it->second;
             if (!set2->contains(key))
-                printf("%d not present in set2\n", key);
+                printf("%ld not present in set2\n", key);
             if (!(fabs(set2->at(key) - val) < 0.00001))
-                printf("%d: %f != %f \n", key, set2->at(key), val);
+                printf("%ld: %f != %f \n", key, set2->at(key), val);
             g_assert_true(fabs(set2->at(key) - val) < 0.00001);
         }
         for (auto it = set2->begin(); it != set2->end(); it++) {
             long key = it->first;
             float val = it->second;
             if (!set1->contains(key))
-                printf("%d not present in set1\n", key);
+                printf("%ld not present in set1\n", key);
             if (!(fabs(set1->at(key) - val) < 0.00001))
-                printf("%d: %f != %f \n", key, set2->at(key), val);
+                printf("%ld: %f != %f \n", key, set2->at(key), val);
             g_assert_true(fabs(set1->at(key) - val) < 0.00001);
         }
     };
@@ -2119,7 +2119,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     Beta_Value_Sets final_beta_sets;
     restore_from_log(log_filename, true, fixture->n, fixture->p, job_args, job_args_num, &final_iter, &final_lambda_count, &final_lambda_value, &final_beta_sets);
 
-    printf("finished at lambda %d: %f\n", final_lambda_count, final_lambda_value);
+    printf("finished at lambda %ld: %f\n", final_lambda_count, final_lambda_value);
     g_assert_true(fabs(final_lambda_value - 0.556171) < 0.001);
     g_assert_true(final_lambda_count == 192);
 

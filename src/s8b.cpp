@@ -27,7 +27,7 @@ S8bCol col_to_s8b_col(long size, long* col)
 {
     // Read through the the current column entries, and append them as an
     // s8b-encoded list of offsets
-    // printf("writing new s8b col of length %d\n", size);
+    // printf("writing new s8b col of length %ld\n", size);
     long col_entries[60];
     long count = 0;
     long largest_entry = 0;

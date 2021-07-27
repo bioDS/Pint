@@ -17,7 +17,7 @@ void init_print(FILE *log_file, long n, long p, long num_betas, char** job_args,
     fprintf(log_file, "lasso log file. metadata follows on the next few lines.\n \
 The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, $beta_2 ... $beta_k");
     fprintf(log_file, "num_rows, num_cols\n");
-    fprintf(log_file, "%d, %d\n", n, p);
+    fprintf(log_file, "%ld, %ld\n", n, p);
     log_file_offset = ftell(log_file);
 }
 
@@ -144,7 +144,7 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
     fgets(buffer, buf_size, log_file);
     fgets(buffer, buf_size, log_file);
     fgets(buffer, buf_size, log_file); // contains n, p
-    sscanf(buffer, "%d, %d", &n, &p);
+    sscanf(buffer, "%ld, %ld", &n, &p);
     int_print_len = std::log10(p*p*p) + 1;
     log_file_offset = ftell(log_file);
     // init_print(log_file, n, p, num_betas, job_args, job_args_num);
@@ -156,12 +156,12 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
 
     // assumes the line has already been read into buffer.
     auto read_beta_sizes = [&]() {
-        // buffer contains ' %d, %d, %d' [entries in row 1,2,3]
-        sscanf(buffer, " %d, %d, %d\n", &beta1_size, &beta2_size, &beta3_size);
-        printf(": beta sizes: %d, %d, %d\n", beta1_size, beta2_size, beta3_size);
+        // buffer contains ' %ld, %ld, %ld' [entries in row 1,2,3]
+        sscanf(buffer, " %ld, %ld, %ld\n", &beta1_size, &beta2_size, &beta3_size);
+        printf(": beta sizes: %ld, %ld, %ld\n", beta1_size, beta2_size, beta3_size);
         long max_size = std::max(beta1_size, std::max(beta2_size, beta3_size))*(16+int_print_len);
         if (max_size > buf_size) {
-            printf("setting new buf size for %d entries\n", max_size);
+            printf("setting new buf size for %ld entries\n", max_size);
             buf_size = max_size;
             buffer = (char*)realloc(buffer, buf_size*(16+int_print_len) + 500);
         }
@@ -203,9 +203,9 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
         long second_iter, second_lambda_count;
         float first_lambda_value;
         float second_lambda_value;
-        sscanf(buffer, "%d, %d, %e\n", &first_iter, &first_lambda_count,
+        sscanf(buffer, "%ld, %ld, %e\n", &first_iter, &first_lambda_count,
             &first_lambda_value);
-        printf(": first_iter, lambda_count, lambda_value: %d,%d,%f\n", first_iter, first_lambda_count, first_lambda_value);
+        printf(": first_iter, lambda_count, lambda_value: %ld,%ld,%f\n", first_iter, first_lambda_count, first_lambda_value);
 
         skip_entries();
         fgets(buffer, buf_size, log_file); //there's a newline between the two
@@ -225,10 +225,10 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
                 fgets(buffer, buf_size, log_file);
 
                 printf("**** buf: '%s'\n", buffer);
-                sscanf(buffer, " %d, %d, %e\n", &second_iter, &second_lambda_count,
+                sscanf(buffer, " %ld, %ld, %e\n", &second_iter, &second_lambda_count,
                     &second_lambda_value);
-                printf(": first_lambda_count: %d\n", first_lambda_count);
-                printf(": second_lambda_count: %d\n", second_lambda_count);
+                printf(": first_lambda_count: %ld\n", first_lambda_count);
+                printf(": second_lambda_count: %ld\n", second_lambda_count);
                 if (strncmp(buffer, "w", 1) == 0 || first_lambda_count > second_lambda_count || (first_lambda_count == second_lambda_count && first_iter > second_iter)) {
                     printf(": first entry > second_entry\n");
                     // but we can't/shouldn't use this one, go back to the first
@@ -255,9 +255,9 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
         read_beta_sizes();
         fgets(buffer, buf_size, log_file);
 
-        sscanf(buffer, "%d, %d, %e\n", actual_iter, actual_lambda_count,
+        sscanf(buffer, "%ld, %ld, %e\n", actual_iter, actual_lambda_count,
             actual_lambda_value);
-        printf(": lambda_count is now %d, lambda is now %f, iter is now %d\n",
+        printf(": lambda_count is now %ld, lambda is now %f, iter is now %ld\n",
             *actual_lambda_count, *actual_lambda_value, *actual_iter);
 
         // we actually only need the beta values, which are on the current line.
@@ -270,12 +270,12 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
                 // printf("values_buf: '%s'\n", buffer + offset);
                 long beta_no = -1;
                 float beta_val = -1.0;
-                long ret = sscanf(buffer + offset, "%d,%e, ", &beta_no, &beta_val);
+                long ret = sscanf(buffer + offset, "%ld,%e, ", &beta_no, &beta_val);
                 if (ret != 2) {
                     fprintf(stderr, "failed to match value in log, bad things will now happen\n");
                     fprintf(stderr, "log value was '%s'\n", buffer + offset);
                 }
-                // printf(": beta: %d,%f\n", beta_no, beta_val);
+                // printf(": beta: %ld,%f\n", beta_no, beta_val);
                 beta_set->insert_or_assign(beta_no, beta_val);
                 offset += 16 + int_print_len;
             }

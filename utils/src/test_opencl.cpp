@@ -67,7 +67,7 @@ int main()
     ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_item_size, &local_item_size, 0, NULL, NULL);
 
     if (ret != CL_SUCCESS) {
-        fprintf(stderr, "something went wrong %d\n", ret);
+        fprintf(stderr, "something went wrong %ld\n", ret);
     }
 
     ret = clEnqueueReadBuffer(command_queue, c_mem_obj, CL_TRUE, 0, 100 * sizeof(int), C, 0, NULL, NULL);
@@ -77,7 +77,7 @@ int main()
         sum += C[i];
     }
 
-    printf("sum: %d (should be) %d\n", sum, 2 * 100 * (100 - 1) / 2);
+    printf("sum: %ld (should be) %ld\n", sum, 2 * 100 * (100 - 1) / 2);
 
     ret = clFlush(command_queue);
     ret = clFinish(command_queue);

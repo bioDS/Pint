@@ -12,17 +12,17 @@ int main(long argc, char** argv)
     long num = atoi(argv[1]);
     long p = atoi(argv[2]);
 
-    printf("using num: %d, p %d\n", num, p);
+    printf("using num: %ld, p %ld\n", num, p);
 
     long offset = 0;
     for (long i = 0; i < p; i++) {
         for (long j = i; j < p; j++) {
             if (offset == num) {
-                printf("i: %d, j: %d\n", i + 1, j + 1);
+                printf("i: %ld, j: %ld\n", i + 1, j + 1);
             }
             offset++;
         }
     }
-    printf("out of %d\n", offset + 1);
+    printf("out of %ld\n", offset + 1);
     return 0;
 }

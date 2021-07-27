@@ -77,7 +77,7 @@ float l2_combined_estimate(X_uncompressed X, float lambda, long k,
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     //if (verbose && k == interesting_col)
-    //    printf("effect %d total estimate: %f = %f*%f + %f\n", k, total_estimate,
+    //    printf("effect %ld total estimate: %f = %f*%f + %f\n", k, total_estimate,
     //        fabs(last_max), alpha, remainder);
     return total_estimate;
 }
@@ -99,17 +99,17 @@ bool wont_update_effect(X_uncompressed X, float lambda, long k, float last_max,
     // long* cache = malloc(X.n * sizeof *column_cache);
     float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum);
     //if (verbose && k == interesting_col) {
-    //    // printf("beta[%d] = %f\n", k, beta[k]);
-    //    printf("%d: upper bound: %f < lambda: %f?\n", k, upper_bound,
+    //    // printf("beta[%ld] = %f\n", k, beta[k]);
+    //    printf("%ld: upper bound: %f < lambda: %f?\n", k, upper_bound,
     //        lambda);
     //    if (upper_bound <= lambda) {
-    //        printf("may update %d\n", k);
+    //        printf("may update %ld\n", k);
     //    }
     //}
     //if (k == interesting_col1)
-    //    printf(" col1 [%d] %f <= %f? : %d\n", k, upper_bound, lambda, upper_bound <= lambda);
+    //    printf(" col1 [%ld] %f <= %f? : %ld\n", k, upper_bound, lambda, upper_bound <= lambda);
     //if (k == interesting_col2)
-    //    printf(" col2 [%d] %f <= %f? : %d\n", k, upper_bound, lambda, upper_bound <= lambda);
+    //    printf(" col2 [%ld] %f <= %f? : %ld\n", k, upper_bound, lambda, upper_bound <= lambda);
     // free(cache);
     // return upper_bound <= lambda*X.n;
     return upper_bound <= lambda * total_sqrt_error;
@@ -147,7 +147,7 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
     long col_entry_pos = 0;
 
     long entry = -1;
-    // printf("col.nz: %d\n", col.nz);
+    // printf("col.nz: %ld\n", col.nz);
     for (long i = 0; i < col.nwords; i++) { //TODO: broken
         S8bWord word = col.compressed_indices[i];
         unsigned long values = word.values;

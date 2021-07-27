@@ -52,7 +52,7 @@ void initialise_static_resources()
 {
     const gsl_rng_type* T = gsl_rng_default;
     NumCores = omp_get_num_procs();
-    printf("using %d cores\n", NumCores);
+    printf("using %ld cores\n", NumCores);
     thread_r = malloc(NumCores * sizeof(gsl_rng*));
     for (long i = 0; i < NumCores; i++)
         thread_r[i] = gsl_rng_alloc(T);
@@ -97,7 +97,7 @@ long rand_long(gsl_rng* thread_rng, long max)
         r = gsl_rng_uniform_int(thread_rng, max);
     }
     if (r > max) {
-        fprintf(stderr, "%d > %d, something went wrong in rand_long\n", r, max);
+        fprintf(stderr, "%ld > %ld, something went wrong in rand_long\n", r, max);
     }
     return r;
 }
@@ -120,7 +120,7 @@ void parallel_shuffle(gsl_permutation* permutation, long split_size,
 {
 #pragma omp parallel for
     for (long i = 0; i < splits; i++) {
-        // printf("%p, %p, %d, %d\n", permutation->data,
+        // printf("%p, %p, %ld, %ld\n", permutation->data,
         // &permutation->data[i*split_size], i, split_size); printf("range %p-%p\n",
         // &permutation->data[i*split_size], &permutation->data[i*split_size] +
         // split_size);
@@ -145,7 +145,7 @@ long get_p_int(long p, long dist)
             + dist * (dist + 1) / 2;
     }
 
-    printf("p: %d, dist: %d, interactions = %d\n", p, dist, p_int);
+    printf("p: %ld, dist: %ld, interactions = %ld\n", p, dist, p_int);
     return p_int;
 }
 

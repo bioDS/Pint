@@ -33,7 +33,7 @@ XMatrix read_x_csv(char* fn, long n, long p)
             } else if (buf[i] == '1') {
                 X[col][row] = 1;
             } else {
-                fprintf(stderr, "format error reading X from %s at row: %d, col: %d\n",
+                fprintf(stderr, "format error reading X from %s at row: %ld, col: %ld\n",
                     fn, row, col);
                 exit(0);
             }
@@ -50,10 +50,10 @@ XMatrix read_x_csv(char* fn, long n, long p)
             break;
     }
     if (readline_result == -1)
-        fprintf(stderr, "failed to read line, errno %d\n", errno);
+        fprintf(stderr, "failed to read line, errno %ld\n", errno);
 
     if (actual_cols < p) {
-        printf("number of columns < p, should p have been %d?\n", actual_cols);
+        printf("number of columns < p, should p have been %ld?\n", actual_cols);
         p = actual_cols;
     }
     free(buf);
@@ -96,7 +96,7 @@ float* read_y_csv(char* fn, long n)
     // for comparison with implementations that normalise rather than
     // finding the intercept.
     if (NORMALISE_Y == 1) {
-        printf("%d, normalising y values\n", NORMALISE_Y);
+        printf("%ld, normalising y values\n", NORMALISE_Y);
         float mean = 0.0;
         for (long i = 0; i < n; i++) {
             mean += Y[i];
