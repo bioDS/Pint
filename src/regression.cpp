@@ -456,18 +456,18 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 
     long real_p_int = -1;
     switch (depth) {
-        case 1:
-            real_p_int = (long)p;
-        case 2:
-            real_p_int = (long)p*((long)p+1)/2;
-        case 3:
-            real_p_int = (long)p*((long)p+1)*((long)p-1)/(2*3);
+    case 1:
+        real_p_int = (long)p;
+    case 2:
+        real_p_int = (long)p * ((long)p + 1) / 2;
+    case 3:
+        real_p_int = (long)p * ((long)p + 1) * ((long)p - 1) / (2 * 3);
         break;
     }
     double tmp = 396.952547477011765511e-3;
     printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
-    printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95/(2.0*(double)real_p_int)));
-    double final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95/(2.0*(double)real_p_int));
+    printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
+    double final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
     final_lambda /= n; // not very well justified, but seems like it might be helping.
     // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.
     printf("using final lambda: %f\n", final_lambda);
@@ -504,13 +504,11 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     long offset = 0;
     for (long i = 0; i < p; i++) {
         for (long j = i; j < min((long)p, i + max_interaction_distance + 1); j++) {
-            i = gsl_permutation_get(global_permutation_inverse, offset);
-            j = gsl_permutation_get(global_permutation_inverse, offset);
             // printf("i,j: %ld,%ld\n", i, j);
-            precalc_get_num[gsl_permutation_get(global_permutation_inverse, offset)]
+            precalc_get_num[offset]
                 .i
                 = i;
-            precalc_get_num[gsl_permutation_get(global_permutation_inverse, offset)]
+            precalc_get_num[offset]
                 .j
                 = j;
             offset++;
@@ -560,9 +558,9 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     long iter_count = 0;
 
     long max_num_threads = omp_get_max_threads();
-    long** thread_column_caches = malloc(max_num_threads * sizeof(long*));
+    long** thread_column_caches = (long**)malloc(max_num_threads * sizeof *thread_column_caches);
     for (long i = 0; i < max_num_threads; i++) {
-        thread_column_caches[i] = malloc(largest_col * sizeof(int));
+        thread_column_caches[i] = (long*)malloc(largest_col * sizeof *thread_column_caches[i]);
     }
 
     FILE* log_file;
@@ -628,8 +626,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     if (use_adaptive_calibration) {
         Rprintf("Using Adaptive Calibration\n");
         beta_sequence.count = 0;
-        beta_sequence.betas = malloc(max_lambda_count * sizeof(Beta_Sequence));
-        beta_sequence.lambdas = malloc(max_lambda_count * sizeof(float));
+        beta_sequence.betas = (Sparse_Betas*)malloc(max_lambda_count * sizeof *beta_sequence.betas);
+        beta_sequence.lambdas = (float*)malloc(max_lambda_count * sizeof *beta_sequence.lambdas);
     }
 
     float** last_rowsum = (float**)malloc(sizeof *last_rowsum * p);
@@ -641,8 +639,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     Thread_Cache thread_caches[NumCores];
 
     for (long i = 0; i < NumCores; i++) {
-        thread_caches[i].col_i = (long*)malloc(sizeof(int) * max(n, p));
-        thread_caches[i].col_j = (long*)malloc(sizeof(int) * n);
+        thread_caches[i].col_i = (long*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = (long*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
     float* last_max = new float[p];
@@ -821,8 +819,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     if (use_adaptive_calibration) {
         for (long i = 0; i < beta_sequence.count; i++) {
             // beta_sequence.betas[i].betas.clear();
-            free(beta_sequence.betas[i].indices);
-            free(beta_sequence.betas[i].values);
+            delete[] beta_sequence.betas[i].indices;
+            delete[] beta_sequence.betas[i].values;
         }
         free(beta_sequence.betas);
         free(beta_sequence.lambdas);

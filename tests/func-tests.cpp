@@ -161,10 +161,6 @@ const static float small_X2_correct_beta[630] = {
     -120.529141, 0.000000, 0.000000, 0.000000, 0.000000, -80.263024
 };
 
-static void test_update_beta_greedy_l1() { printf("not implemented yet\n"); }
-
-static void test_update_intercept_cyclic() { printf("not implemented yet\n"); }
-
 static void update_beta_fixture_set_up(UpdateFixture* fixture,
     gconstpointer user_data)
 {
@@ -173,16 +169,14 @@ static void update_beta_fixture_set_up(UpdateFixture* fixture,
     fixture->xmatrix = read_x_csv("../testXSmall.csv", fixture->n, fixture->p);
     fixture->X = fixture->xmatrix.X;
     fixture->Y = read_y_csv("../testYSmall.csv", fixture->n);
-    fixture->rowsum = (float*)malloc(fixture->n * sizeof(float));
+    fixture->rowsum = (float*)malloc(fixture->n * sizeof *fixture->rowsum);
     fixture->lambda = 6.46;
-    // fixture->beta = (float*)malloc(fixture->p * sizeof(float));
-    // memset(fixture->beta, 0, fixture->p * sizeof(float));
     fixture->k = 27;
     fixture->dBMax = 0;
     fixture->intercept = 0;
     printf("%ld\n", fixture->X[1][0]);
     long p_int = (fixture->p * (fixture->p + 1)) / 2;
-    int_pair* precalc_get_num = (int_pair*)malloc(p_int * sizeof(int_pair));
+    int_pair* precalc_get_num = (int_pair*)malloc(p_int * sizeof *precalc_get_num);
     long offset = 0;
     for (long i = 0; i < fixture->p; i++) {
         for (long j = i; j < fixture->p; j++) {
@@ -193,9 +187,9 @@ static void update_beta_fixture_set_up(UpdateFixture* fixture,
     }
     fixture->precalc_get_num = precalc_get_num;
 
-    long** thread_column_caches = (long**)malloc(NumCores * sizeof(long*));
+    long** thread_column_caches = (long**)malloc(NumCores * sizeof *thread_column_caches);
     for (long i = 0; i < NumCores; i++) {
-        thread_column_caches[i] = (long*)malloc(fixture->n * sizeof(int));
+        thread_column_caches[i] = (long*)malloc(fixture->n * sizeof *thread_column_caches[i]);
     }
     fixture->column_caches = thread_column_caches;
 }
@@ -454,7 +448,7 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
     long max_num_threads = omp_get_max_threads();
     long** thread_column_caches = (long**)malloc(max_num_threads * sizeof(long*));
     for (long i = 0; i < max_num_threads; i++) {
-        thread_column_caches[i] = (long*)malloc(fixture->n * sizeof(int));
+        thread_column_caches[i] = (long*)malloc(fixture->n * sizeof *thread_column_caches[i]);
     }
     fixture->column_caches = thread_column_caches;
     printf("done test init\n");
@@ -656,9 +650,6 @@ static void check_X2_encoding()
     }
     printf("mean diff size: %f\n", (float)total / (float)no_entries);
 
-    printf("size of s8bword struct: %ld (long is %ld)\n", sizeof(S8bWord),
-        sizeof(int));
-
     S8bWord test_word;
     test_word.selector = 7;
     test_word.values = 0;
@@ -682,7 +673,7 @@ static void check_X2_encoding()
     max_size_given_entries[60] = 0;
 
     printf("num entries in col 0: %ld\n", xmatrix_sparse.cols[0].nz);
-    long* col_entries = malloc(60 * sizeof(int));
+    long* col_entries = (long*)malloc(60 * sizeof *col_entries);
     long count = 0;
     // GList *s8b_col = NULL;
     GQueue* s8b_col = g_queue_new();
@@ -1165,11 +1156,6 @@ struct to_append {
     long length;
 };
 
-static unsigned long* target_X;
-static unsigned long* target_size;
-static unsigned long* target_col_offsets;
-static float* target_sumn;
-static unsigned long* target_col_nz;
 
 //void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
 //  long n = Xc->n;
@@ -1377,8 +1363,8 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     Thread_Cache thread_caches[NumCores];
 
     for (long i = 0; i < NumCores; i++) {
-        thread_caches[i].col_i = malloc(sizeof(int) * max(n, p));
-        thread_caches[i].col_j = malloc(sizeof(int) * n);
+        thread_caches[i].col_i = malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = malloc(n * sizeof *thread_caches[i].col_j);
     }
 
     XMatrixSparse Xc = fixture->Xc;
@@ -1763,8 +1749,8 @@ void test_row_list_without_columns()
 
     Thread_Cache thread_caches[NumCores];
     for (long i = 0; i < NumCores; i++) {
-        thread_caches[i].col_i = malloc(sizeof(int) * max(n, p));
-        thread_caches[i].col_j = malloc(sizeof(int) * n);
+        thread_caches[i].col_i = malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = malloc(n * sizeof *thread_caches[i].col_j);
     }
 
     struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
@@ -1989,8 +1975,8 @@ void save_restore_log()
     long iter = 1;
     float lambda_value = 1000.0;
     long lambda_count = 5;
-    char* job_args[] = { "arg1", "arg2", "longer_argument_3", "4" };
-    char* not_job_args[] = { "arg1", "arg2", "longer_argument_7", "4" };
+    const char* job_args[] = { "arg1", "arg2", "longer_argument_3", "4" };
+    const char* not_job_args[] = { "arg1", "arg2", "longer_argument_7", "4" };
     long job_args_num = 4;
 
     char* log_filename = "testlog";
@@ -2156,8 +2142,6 @@ int main(int argc, char* argv[])
     g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL,
         update_beta_fixture_set_up, test_update_beta_cyclic,
         update_beta_fixture_tear_down);
-    g_test_add_func("/func/test-update-intercept-cyclic",
-        test_update_intercept_cyclic);
     g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
     g_test_add_func("/func/test-compressed-main-X", test_compressed_main_X);
     g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, FALSE,

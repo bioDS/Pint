@@ -216,9 +216,9 @@ int_pair* get_all_nums(long p, long max_interaction_distance)
 
 long** X2_from_X(long** X, long n, long p)
 {
-    long** X2 = malloc(n * sizeof(long*));
+    long** X2 = malloc(n * sizeof *X2);
     for (long row = 0; row < n; row++) {
-        X2[row] = malloc(((p * (p + 1)) / 2) * sizeof(int));
+        X2[row] = (long*)malloc(((p * (p + 1)) / 2) * sizeof *X2[row]);
         long offset = 0;
         for (long i = 0; i < p; i++) {
             for (long j = i; j < p; j++) {

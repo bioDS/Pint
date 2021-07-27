@@ -17,9 +17,9 @@ int main()
     cl_int ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
     ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_GPU, 1, &device_id, &ret_num_devices);
 
-    long* A = malloc(100 * sizeof(int));
-    long* B = malloc(100 * sizeof(int));
-    long* C = malloc(100 * sizeof(int));
+    long* A = malloc(100 * sizeof *A);
+    long* B = malloc(100 * sizeof *B);
+    long* C = malloc(100 * sizeof *C);
 
     for (long i = 0; i < 100; i++) {
         A[i] = i;

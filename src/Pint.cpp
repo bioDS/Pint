@@ -186,9 +186,9 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     float halt_error_diff = asReal(halt_error_diff_);
 
-    long** X = (long**)malloc(p * sizeof(long*));
+    long** X = (long**)malloc(p * sizeof *X);
     for (long i = 0; i < p; i++)
-        X[i] = (long*)malloc(n * sizeof(int));
+        X[i] = (long*)malloc(n * sizeof *X[i]);
 
     for (long i = 0; i < p; i++) {
         for (long j = 0; j < n; j++) {
