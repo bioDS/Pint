@@ -51,3 +51,4 @@ XMatrixSparse sparsify_X(long** X, long n, long p);
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches);
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc);
+void free_host_X(X_uncompressed *Xu);

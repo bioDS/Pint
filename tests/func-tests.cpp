@@ -472,6 +472,11 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture* fixture,
     // free(fixture->beta);
     free(fixture->precalc_get_num);
     free_sparse_matrix(fixture->xmatrix_sparse);
+    long max_num_threads = omp_get_max_threads();
+    for (long i = 0; i < max_num_threads; i++) {
+        free(fixture->column_caches[i]);
+    }
+    free(fixture->column_caches);
 }
 
 static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
@@ -890,7 +895,7 @@ static void pruning_fixture_set_up(UpdateFixture* fixture,
     XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
     printf("getting sparse X2\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
-    if (use_big < 2) {
+    if ((long)use_big < 2) {
         XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
         fixture->X2c = X2c;
     }
@@ -1057,6 +1062,13 @@ static void check_branch_pruning(UpdateFixture* fixture,
         }
         printf("new error: %f\n", error);
     }
+    free_host_X(&Xu);
+    free(working_set);
+    free(old_rowsum);
+    for (long i = 0; i < p; i++) {
+        free(last_rowsum[i]);
+    }
+    free(last_rowsum);
 }
 
 static long last_updated_val = -1;

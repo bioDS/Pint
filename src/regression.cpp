@@ -854,6 +854,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     printf("%ld found\n", nonzero);
     printf("nz = %ld, became_zero = %ld\n", num_nz_beta,
         became_zero); // TODO: disable for release
+    free_host_X(&Xu);
 
     return beta_sets;
 }

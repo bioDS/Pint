@@ -16,7 +16,6 @@ void free_sparse_matrix(XMatrixSparse X)
         free(X.cols[i].compressed_indices);
     }
     free(X.cols);
-    gsl_permutation_free(X.permutation);
 }
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
@@ -326,21 +325,28 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     return X2;
 }
 
+void free_host_X(X_uncompressed *Xu) {
+    free(Xu->host_X);
+    free(Xu->host_col_nz);
+    free(Xu->host_col_offsets);
+    free(Xu->host_X_row);
+    free(Xu->host_row_nz);
+    free(Xu->host_row_offsets);
+}
+
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
-    long* host_X = calloc(Xc->total_entries, sizeof(int));
-    long* host_col_nz = calloc(Xc->p, sizeof(int));
-    ;
-    long* host_col_offsets = calloc(Xc->p, sizeof(int));
-    long* host_X_row = calloc(Xc->total_entries, sizeof(int));
-    long* host_row_nz = calloc(Xc->n, sizeof(int));
-    ;
-    long* host_row_offsets = calloc(Xc->n, sizeof(int));
+    long* host_X =              (long*)calloc(Xc->total_entries, sizeof(long));
+    long* host_col_nz =         (long*)calloc(Xc->p, sizeof(long));
+    long* host_col_offsets =    (long*)calloc(Xc->p, sizeof(long));
+    long* host_X_row =          (long*)calloc(Xc->total_entries, sizeof(long));
+    long* host_row_nz =         (long*)calloc(Xc->n, sizeof(long));
+    long* host_row_offsets =    (long*)calloc(Xc->n, sizeof(long));
     long p = Xc->p;
     long n = Xc->n;
 
     // row-major dense X, for creating row inverted lists.
-    char(*full_X)[p] = calloc(n * p, sizeof(char));
+    char(*full_X)[p] = (char (*)[p])calloc(n * p, sizeof(char));
 
     // read through compressed matrix and construct continuous
     // uncompressed matrix
@@ -387,6 +393,7 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
         host_row_nz[row] = row_nz;
     }
 
+    free(full_X);
     struct X_uncompressed Xu;
     Xu.host_col_nz = host_col_nz;
     Xu.host_col_offsets = host_col_offsets;
