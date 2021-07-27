@@ -249,6 +249,10 @@ static void test_read_x_csv()
         sum += xmatrix.X[i][321];
     }
     g_assert_true(sum == 8);
+    for (long i = 0; i < p; i++) {
+        free(xmatrix.X[i]);
+    }
+    free(xmatrix.X);
 }
 
 static void test_compressed_main_X()

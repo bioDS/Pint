@@ -7,7 +7,7 @@ XMatrix read_x_csv(char* fn, long n, long p)
     long** X = malloc(p * sizeof(long*));
 
     for (long i = 0; i < p; i++)
-        X[i] = malloc(n * sizeof(int));
+        X[i] = malloc(n * sizeof(long));
 
     FILE* fp = fopen(fn, "r");
     if (fp == NULL) {
