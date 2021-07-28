@@ -2159,7 +2159,7 @@ int main(int argc, char* argv[])
         test_simple_coordinate_descent_tear_down);
     g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
     g_test_add_func("/func/test-permutation", check_permutation);
-    g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
+    g_test_add("/func/test-branch-pruning", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
