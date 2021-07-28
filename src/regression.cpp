@@ -140,7 +140,7 @@ float calculate_error(float* Y, float* rowsum, long n)
     return error;
 }
 
-static float halt_error_diff;
+float halt_error_diff;
 static auto rng = std::default_random_engine();
 
 long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
@@ -255,7 +255,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         if (VERBOSE)
             printf("updating working set.\n");
         long count_may_update = 0;
-        long* updateable_items = calloc(p, sizeof *updateable_items); // TODO: keep between iters
+        long* updateable_items = (long*)calloc(p, sizeof *updateable_items); // TODO: keep between iters
         for (long i = 0; i < p; i++) {
             // if (!wont_update[i] && !active_set_present(active_set, i)) {
             if (!wont_update[i]) {
@@ -283,7 +283,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         }
         //********** Solve subproblem     *******************
         if (VERBOSE)
-            printf("active set size: %ld, or %.2f \%\n", active_set->length,
+            printf("active set size: %ld, or %.2f %%\n", active_set->length,
                 100 * (float)active_set->length / (float)p_int);
         if (VERBOSE)
             printf("solving subproblem.\n");
@@ -372,7 +372,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                 printf("error: %f\n", error);
             if (prev_error / error < halt_error_diff) {
                 if (VERBOSE)
-                    printf("done after %ld iters\n", lambda, iter + 1);
+                    printf("done lambda %f after %ld iters\n", lambda, iter + 1);
                 break;
             }
         }
@@ -778,7 +778,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     //  long entry = -1;
     //  for (long i = 0; i < X2.cols[col].nwords; i++) {
     //    S8bWord word = X2.cols[col].compressed_indices[i];
-    //    unsigned long values = word.values;
+    //    long values = word.values;
     //    for (long j = 0; j <= group_size[word.selector]; j++) {
     //      long diff = values & masks[word.selector];
     //      if (diff != 0) {
@@ -877,7 +877,7 @@ Changes update_beta_cyclic_old(
     long entry = -1;
     for (long i = 0; i < xmatrix_sparse.cols[k].nwords; i++) {
         S8bWord word = xmatrix_sparse.cols[k].compressed_indices[i];
-        unsigned long values = word.values;
+        long values = word.values;
         for (long j = 0; j <= group_size[word.selector]; j++) {
             long diff = values & masks[word.selector];
             if (diff != 0) {
@@ -946,7 +946,7 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, long n, long p,
     long entry = -1;
     for (long i = 0; i < col.nwords; i++) {
         alignas(64) S8bWord word = col.compressed_indices[i];
-        unsigned long values = word.values;
+        long values = word.values;
         for (long j = 0; j <= group_size[word.selector]; j++) {
             long diff = values & masks[word.selector];
             if (diff != 0) {

@@ -21,7 +21,7 @@ void write_x_csv(char* filename, long** X, long n, long p)
     }
 }
 
-int main(long argc, char** argv)
+int main(int argc, char** argv)
 {
     if (argc != 5) {
         printf("usage ./X2_from_X X.csv n p X2.csv\n");

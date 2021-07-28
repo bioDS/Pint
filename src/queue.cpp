@@ -19,7 +19,7 @@ long queue_is_empty(Queue* q)
 
 void queue_push_tail(Queue* q, void* item)
 {
-    struct Queue_Item* new_queue_item = malloc(sizeof(Queue_Item));
+    struct Queue_Item* new_queue_item = (Queue_Item*)malloc(sizeof(Queue_Item));
     new_queue_item->contents = item;
     new_queue_item->next = NULL;
     // if the queue is currently empty we set both first and last
@@ -43,7 +43,7 @@ void* queue_pop_head(Queue* q)
         return NULL;
     }
 
-    q->first_item = first_item->next;
+    q->first_item = (Queue_Item*)first_item->next;
     // if we pop'd the only item, don't keep it as last.
     if (NULL == q->first_item) {
         q->last_item = NULL;
@@ -61,12 +61,12 @@ void* queue_pop_head(Queue* q)
 void queue_free(Queue* q)
 {
     Queue_Item* current_item = q->first_item;
-    Queue_Item* next_item = current_item->next;
+    Queue_Item* next_item = (Queue_Item*)current_item->next;
 
     // free the queue contents
     while (current_item != NULL) {
         free(current_item->contents);
-        next_item = current_item->next;
+        next_item = (Queue_Item*)current_item->next;
         free(current_item);
         current_item = next_item;
     }

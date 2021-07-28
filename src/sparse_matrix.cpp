@@ -146,7 +146,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
                     // if the current diff won't fit in the s8b word, push the word and
                     // start a new one
                     if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
-                        S8bWord* word = malloc(sizeof(
+                        S8bWord* word = (S8bWord*)malloc(sizeof(
                             S8bWord)); // we (maybe?) can't rely on this being the size of a
                             // pointer, so we'll add by reference
                         S8bWord tempword = to_s8b(count, col_entries);
@@ -169,17 +169,17 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
                                     "will be missing!\n");
             }
             // push the last (non-full) word
-            S8bWord* word = malloc(sizeof(S8bWord));
+            S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
             S8bWord tempword = to_s8b(count, col_entries);
             memcpy(word, &tempword, sizeof(S8bWord));
             queue_push_tail(current_col, word);
             free(col_entries);
             length = queue_get_length(current_col);
 
-            S8bWord* indices = malloc(sizeof *indices * length);
+            S8bWord* indices = (S8bWord*)malloc(sizeof *indices * length);
             count = 0;
             while (!queue_is_empty(current_col)) {
-                S8bWord* current_word = queue_pop_head(current_col);
+                S8bWord* current_word = (S8bWord*)queue_pop_head(current_col);
                 indices[count] = *current_word;
                 free(current_word);
                 count++;
@@ -194,7 +194,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
         iter_done++;
         if (p >= 100 && iter_done % (p / 100) == 0) {
             if (VERBOSE)
-                printf("create interaction matrix, %ld\%\n", done_percent);
+                printf("create interaction matrix, %ld%%\n", done_percent);
             done_percent++;
         }
     }
@@ -211,9 +211,9 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     X2.total_entries = total_entries;
 
     S8bWord* compressed_indices;
-    unsigned long* col_start;
+    long* col_start;
     long* col_nz;
-    unsigned long offset = 0;
+    long offset = 0;
 
     permutation_splits = NumCores;
     permutation_split_size = p_int / permutation_splits;
@@ -263,7 +263,7 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
             long entry = -1;
             for (long i = 0; i < Xc->cols[k].nwords; i++) {
                 S8bWord word = Xc->cols[k].compressed_indices[i];
-                unsigned long values = word.values;
+                long values = word.values;
                 for (long j = 0; j <= group_size[word.selector]; j++) {
                     long diff = values & masks[word.selector];
                     if (diff != 0) {

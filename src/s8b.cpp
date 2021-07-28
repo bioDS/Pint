@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <liblasso.h>
+#include <glib-2.0/glib.h>
 
 using namespace std;
 
@@ -9,13 +10,11 @@ S8bWord to_s8b(long count, long* vals)
     word.values = 0;
     word.selector = 0;
     long t = 0;
-    // TODO: improve on this
-    while (t < 16 && group_size[t] >= count)
-        t++;
-    word.selector = t - 1;
-    unsigned long test = 0;
+    word.selector = selector_given_count[count];
+    long test = 0;
     for (long i = 0; i < count; i++) {
         test |= vals[count - i - 1];
+        g_assert_true(word.selector >= 0);
         if (i < count - 1)
             test <<= item_width[word.selector];
     }
@@ -51,11 +50,9 @@ S8bCol col_to_s8b_col(long size, long* col)
         // if the current diff won't fit in the s8b word, push the word and start
         // a new one
         if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
-            S8bWord* word = malloc(
-                sizeof(S8bWord)); // we (maybe?) can't rely on this being the size
-                // of a pointer, so we'll add by reference
+            S8bWord* word = (S8bWord*)malloc(sizeof *word);
             S8bWord tempword = to_s8b(count, col_entries);
-            memcpy(word, &tempword, sizeof(S8bWord));
+            memcpy(word, &tempword, sizeof *word);
             queue_push_tail(current_col, word);
             count = 0;
             largest_entry = 0;
@@ -69,7 +66,7 @@ S8bCol col_to_s8b_col(long size, long* col)
         prev_entry = entry;
     }
     // push the last (non-full) word
-    S8bWord* word = malloc(sizeof(S8bWord));
+    S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
     S8bWord tempword = to_s8b(count, col_entries);
     memcpy(word, &tempword, sizeof(S8bWord));
     queue_push_tail(current_col, word);
@@ -77,12 +74,12 @@ S8bCol col_to_s8b_col(long size, long* col)
 
     // push all our words to an array in the new col
     S8bCol s8bCol;
-    s8bCol.compressed_indices = malloc(length * sizeof(S8bWord));
+    s8bCol.compressed_indices = (S8bWord*)malloc(length * sizeof(S8bWord));
     s8bCol.nz = total_nz_entries;
     s8bCol.nwords = length;
     count = 0;
     while (!queue_is_empty(current_col)) {
-        S8bWord* current_word = queue_pop_head(current_col);
+        S8bWord* current_word = (S8bWord*)queue_pop_head(current_col);
         s8bCol.compressed_indices[count] = *current_word;
         free(current_word);
         count++;

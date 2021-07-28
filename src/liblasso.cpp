@@ -22,7 +22,6 @@ long zero_updates_entries = 0;
 long VERBOSE = 1;
 long* colsum;
 float* col_ysum;
-long max_size_given_entries[61];
 
 float max_rowsums[NUM_MAX_ROWSUMS];
 float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
@@ -53,14 +52,9 @@ void initialise_static_resources()
     const gsl_rng_type* T = gsl_rng_default;
     NumCores = omp_get_num_procs();
     printf("using %ld cores\n", NumCores);
-    thread_r = malloc(NumCores * sizeof(gsl_rng*));
+    thread_r = (gsl_rng**)malloc(NumCores * sizeof(gsl_rng*));
     for (long i = 0; i < NumCores; i++)
         thread_r[i] = gsl_rng_alloc(T);
-
-    for (long i = 0; i < 60; i++) {
-        max_size_given_entries[i] = 60 / (i + 1);
-    }
-    max_size_given_entries[60] = 0;
 }
 
 void free_static_resources()
@@ -190,7 +184,7 @@ int_pair* get_all_nums(long p, long max_interaction_distance)
     long p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance == -1)
         max_interaction_distance = p_int / 2 + 1;
-    int_pair* nums = malloc(p_int * sizeof(int_pair));
+    int_pair* nums = (int_pair*)malloc(p_int * sizeof(int_pair));
     long offset = 0;
     for (long i = 0; i < p; i++) {
         for (long j = i; j < min(p, i + max_interaction_distance); j++) {
@@ -216,7 +210,7 @@ int_pair* get_all_nums(long p, long max_interaction_distance)
 
 long** X2_from_X(long** X, long n, long p)
 {
-    long** X2 = malloc(n * sizeof *X2);
+    long** X2 = (long**)malloc(n * sizeof *X2);
     for (long row = 0; row < n; row++) {
         X2[row] = (long*)malloc(((p * (p + 1)) / 2) * sizeof *X2[row]);
         long offset = 0;

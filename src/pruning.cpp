@@ -150,7 +150,7 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
     // printf("col.nz: %ld\n", col.nz);
     for (long i = 0; i < col.nwords; i++) { //TODO: broken
         S8bWord word = col.compressed_indices[i];
-        unsigned long values = word.values;
+        long values = word.values;
         for (long j = 0; j <= group_size[word.selector]; j++) {
             long diff = values & masks[word.selector];
             if (diff != 0) {

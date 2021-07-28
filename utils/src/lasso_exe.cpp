@@ -6,7 +6,7 @@ enum Output_Mode { quit,
     file,
     terminal };
 
-int main(int argc, char** argv)
+int main(int argc, const char** argv)
 {
     if (argc != 11) {
         fprintf(stderr, "usage: ./lasso_exe X.csv Y.csv [depth] verbose=T/F [max lambda] N P [max nz] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]\n");
@@ -24,9 +24,9 @@ int main(int argc, char** argv)
       printf("depth must be between 1 and 3 inclusive.\n");
       exit(EXIT_FAILURE);
     }
-    char* verbose = argv[5];
+    const char* verbose = argv[5];
     printf("verbose: %s\n", verbose);
-    char* output_filename = argv[10];
+    const char* output_filename = argv[10];
     FILE* output_file = NULL;
 
     enum Output_Mode output_mode = terminal;

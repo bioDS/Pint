@@ -6,7 +6,7 @@
 #include <omp.h>
 #include <stdlib.h>
 #include <tuple>
-#define _POSIX_C_SOURCE 199309L
+// #define _POSIX_C_SOURCE 199309L
 #include <iostream>
 #include <time.h>
 #include <vector>
@@ -269,7 +269,7 @@ static void test_compressed_main_X()
         memset(column_entries, 0, sizeof *column_entries * n);
         for (long i = 0; i < Xs.cols[k].nwords; i++) {
             S8bWord word = Xs.cols[k].compressed_indices[i];
-            unsigned long values = word.values;
+            long values = word.values;
             for (long j = 0; j <= group_size[word.selector]; j++) {
                 long diff = values & masks[word.selector];
                 if (diff != 0) {
@@ -335,7 +335,7 @@ static void test_X2_from_X()
         memset(column_entries, 0, sizeof *column_entries * n);
         for (long i = 0; i < X2s.cols[k].nwords; i++) {
             S8bWord word = X2s.cols[k].compressed_indices[i];
-            unsigned long values = word.values;
+            long values = word.values;
             for (long j = 0; j <= group_size[word.selector]; j++) {
                 long diff = values & masks[word.selector];
                 if (diff != 0) {
@@ -518,7 +518,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
 
     Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        0, 0.01, 1.0001, FALSE, 1, "test", FALSE, -1, "test.log", 2);
+        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2);
     beta = beta_sets.beta3; //TODO: don't
 
     float acceptable_diff = 10;
@@ -578,25 +578,25 @@ static void check_X2_encoding()
 
     int_pair* nums = get_all_nums(p, -1);
     // create uncompressed sparse version of X2.
-    long** col_nz_indices = malloc(sizeof *col_nz_indices * p_int);
+    long** col_nz_indices = (long**)malloc(sizeof *col_nz_indices * p_int);
     for (long j = 0; j < p_int; j++) {
     }
-    long* col_sizes = malloc(sizeof *col_sizes * p_int);
+    long* col_sizes = (long*)malloc(sizeof *col_sizes * p_int);
     for (long j = 0; j < p_int; j++) {
         Queue* col_q = queue_new();
         for (long i = 0; i < n; i++) {
             if (X2.X[j][i] != 0) {
-                queue_push_tail(col_q, i);
+                queue_push_tail(col_q, (void*)i);
             }
         }
         col_sizes[j] = queue_get_length(col_q);
-        col_nz_indices[j] = malloc(sizeof *col_nz_indices[j] * col_sizes[j]);
+        col_nz_indices[j] = (long*)malloc(sizeof *col_nz_indices[j] * col_sizes[j]);
         printf(" real col size: %ld, \tcompressed col contains %ld entries \n",
             col_sizes[j], xmatrix_sparse.cols[j].nz);
         g_assert_true(col_sizes[j] == xmatrix_sparse.cols[j].nz);
         long pos = 0;
         while (!queue_is_empty(col_q)) {
-            col_nz_indices[j][pos] = queue_pop_head(col_q);
+            col_nz_indices[j][pos] = (long)queue_pop_head(col_q);
             pos++;
             g_assert_true(pos <= col_sizes[j]);
         }
@@ -630,7 +630,7 @@ static void check_X2_encoding()
     S8bWord test_word;
     test_word.selector = 7;
     test_word.values = 0;
-    unsigned long numbers[10] = { 3, 2, 4, 20, 1, 14, 30, 52, 10, 63 };
+    long numbers[10] = { 3, 2, 4, 20, 1, 14, 30, 52, 10, 63 };
     for (long i = 0; i < 10; i++) {
         test_word.values |= numbers[9 - i];
         if (i < 9)
@@ -681,7 +681,7 @@ static void check_X2_encoding()
             // for (long j = 0; j < count; j++)
             //  printf("%ld ", col_entries[j]);
             // printf("\n");
-            S8bWord* word = malloc(sizeof(S8bWord));
+            S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
             S8bWord tempword = to_s8b(count, col_entries);
             memcpy(word, &tempword, sizeof(S8bWord));
             g_queue_push_tail(s8b_col, word);
@@ -695,7 +695,7 @@ static void check_X2_encoding()
             largest_entry = used;
     }
     // push the last (non-full) word
-    S8bWord* word = malloc(sizeof(S8bWord));
+    S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
     S8bWord tempword = to_s8b(count, col_entries);
     memcpy(word, &tempword, sizeof(S8bWord));
     g_queue_push_tail(s8b_col, word);
@@ -703,10 +703,10 @@ static void check_X2_encoding()
     free(col_entries);
     long length = g_queue_get_length(s8b_col);
 
-    S8bWord* actual_col = malloc(length * sizeof(S8bWord));
+    S8bWord* actual_col = (S8bWord*)malloc(length * sizeof(S8bWord));
     count = 0;
     while (!g_queue_is_empty(s8b_col)) {
-        S8bWord* current_word = g_queue_pop_head(s8b_col);
+        S8bWord* current_word = (S8bWord*)g_queue_pop_head(s8b_col);
         memcpy(&actual_col[count], current_word, sizeof(S8bWord));
         free(current_word);
         count++;
@@ -721,7 +721,7 @@ static void check_X2_encoding()
         long entry = -1;
         for (long i = 0; i < xmatrix_sparse.cols[k].nwords; i++) {
             S8bWord word = xmatrix_sparse.cols[k].compressed_indices[i];
-            unsigned long values = word.values;
+            long values = word.values;
             for (long j = 0; j <= group_size[word.selector]; j++) {
                 long diff = values & masks[word.selector];
                 if (diff != 0) {
@@ -920,7 +920,7 @@ static void check_branch_pruning(UpdateFixture* fixture,
     printf("creating X2\n");
     long p_int = fixture->p * (fixture->p + 1) / 2;
     robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
-    char* working_set = malloc(sizeof *working_set * p_int);
+    char* working_set = (char*)malloc(sizeof *working_set * p_int);
     memset(working_set, 0, sizeof *working_set * p_int);
 
     XMatrixSparse Xc = fixture->Xc;
@@ -932,10 +932,10 @@ static void check_branch_pruning(UpdateFixture* fixture,
     for (long j = 0; j < p; j++)
         wont_update[j] = 0;
 
-    float** last_rowsum = malloc(sizeof *last_rowsum * p);
+    float** last_rowsum = (float**)malloc(sizeof *last_rowsum * p);
 #pragma omp parallel for schedule(static)
     for (long i = 0; i < p; i++) {
-        last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + PADDING);
+        last_rowsum[i] = (float*)malloc(sizeof *last_rowsum[i] * n + PADDING);
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
     }
 
@@ -954,7 +954,7 @@ static void check_branch_pruning(UpdateFixture* fixture,
     long seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
     float lambda = lambda_sequence[0] * n / 2;
     bool ruled_out = 0;
-    float* old_rowsum = malloc(sizeof *old_rowsum * n);
+    float* old_rowsum = (float*)malloc(sizeof *old_rowsum * n);
 
     float error = 0.0;
     for (long i = 0; i < n; i++) {
@@ -977,7 +977,6 @@ static void check_branch_pruning(UpdateFixture* fixture,
 
             ruled_out = get_wont_update(working_set, wont_update, p, Xu, lambda, last_max,
                 last_rowsum, rowsum, column_cache, n, beta);
-            printf("iter %ld ruled out %ld\n", iter, ruled_out);
             long k = 0;
             for (long main_effect = 0; main_effect < p; main_effect++) {
                 for (long interaction = main_effect; interaction < p; interaction++) {
@@ -1150,9 +1149,9 @@ struct to_append {
 //  //target_col_nz =
 //  //    omp_target_alloc(p_int * sizeof *target_col_nz, omp_get_default_device());
 //  printf("total entries: %ld\n", Xc->total_entries);
-//  unsigned long *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
-//  unsigned long *temp_offset = malloc(p * sizeof *temp_offset);
-//  unsigned long *temp_size = malloc(p * sizeof *temp_offset);
+//  long *temp_X = malloc(Xc->total_entries * sizeof *temp_X);
+//  long *temp_offset = malloc(p * sizeof *temp_offset);
+//  long *temp_size = malloc(p * sizeof *temp_offset);
 //  memset(temp_X, 0, Xc->total_entries * sizeof *temp_X);
 //  long offset = 0;
 //  for (long k = 0; k < p; k++) {
@@ -1165,7 +1164,7 @@ struct to_append {
 //      long entry = -1;
 //      for (long i = 0; i < Xc->cols[k].nwords; i++) {
 //        S8bWord word = Xc->cols[k].compressed_indices[i];
-//        unsigned long values = word.values;
+//        long values = word.values;
 //        for (long j = 0; j <= group_size[word.selector]; j++) {
 //          long diff = values & masks[word.selector];
 //          if (diff != 0) {
@@ -1341,22 +1340,22 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     Thread_Cache thread_caches[NumCores];
 
     for (long i = 0; i < NumCores; i++) {
-        thread_caches[i].col_i = malloc(max(n, p) * sizeof *thread_caches[i].col_i);
-        thread_caches[i].col_j = malloc(n * sizeof *thread_caches[i].col_j);
+        thread_caches[i].col_i = (long*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = (long*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
     XMatrixSparse Xc = fixture->Xc;
     XMatrixSparse X2c = fixture->X2c;
 
-    bool* wont_update = malloc(sizeof *wont_update * p);
+    bool* wont_update = (bool*)malloc(sizeof *wont_update * p);
 #pragma omp parallel for schedule(static)
     for (long j = 0; j < p; j++)
         wont_update[j] = 0;
 
-    float** last_rowsum = malloc(sizeof *last_rowsum * p);
+    float** last_rowsum = (float**)malloc(sizeof *last_rowsum * p);
 #pragma omp parallel for schedule(static)
     for (long i = 0; i < p; i++) {
-        last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 64);
+        last_rowsum[i] = (float*)malloc(sizeof *last_rowsum[i] * n + 64);
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
     }
 
@@ -1365,7 +1364,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
             g_assert_true(last_rowsum[j][i] == 0.0);
 
     // float last_max[n];
-    float* last_max = calloc(n, sizeof(float));
+    float* last_max = (float*)calloc(n, sizeof(float));
     // printf("last_max: %p\n", last_max);
     memset(last_max, 0, sizeof(*last_max));
 
@@ -1376,7 +1375,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05 };
     // float lambda_sequence[] = {10000,500, 400, 300};
     long seq_length = sizeof(lambda_sequence) / sizeof(*lambda_sequence);
-    float* old_rowsum = malloc(sizeof *old_rowsum * n);
+    float* old_rowsum = (float*)malloc(sizeof *old_rowsum * n);
 
     float error = 0.0;
     for (long i = 0; i < n; i++) {
@@ -1385,7 +1384,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     error = sqrt(error);
     // printf("initial error: %f\n", error);
 
-    float* max_int_delta = malloc(sizeof *max_int_delta * p);
+    float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
     struct X_uncompressed Xu = construct_host_X(&Xc);
 
@@ -1441,7 +1440,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     basic_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
     printf("time: %f s\n", basic_cpu_time_used);
-    float* basic_rowsum = malloc(sizeof *basic_rowsum * n);
+    float* basic_rowsum = (float*)malloc(sizeof *basic_rowsum * n);
     long nz_beta_basic = 0;
     long nz_beta_pruning = 0;
     for (long k = 0; k < p_int; k++) {
@@ -1449,7 +1448,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         long entry = -1;
         for (long i = 0; i < X2c.cols[k].nwords; i++) {
             S8bWord word = X2c.cols[k].compressed_indices[i];
-            unsigned long values = word.values;
+            long values = word.values;
             for (long j = 0; j <= group_size[word.selector]; j++) {
                 long diff = values & masks[word.selector];
                 if (diff != 0) {
@@ -1497,7 +1496,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     };
 
     printf("getting time for pruned version\n");
-    float* p_rowsum = malloc(sizeof *p_rowsum * n);
+    float* p_rowsum = (float*)malloc(sizeof *p_rowsum * n);
     for (long i = 0; i < n; i++) {
         p_rowsum[i] = -Y[i];
     }
@@ -1558,7 +1557,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("total branches:  %ld\n", used_branches + pruned_branches);
 
     // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
-    float* pruned_rowsum = malloc(sizeof *pruned_rowsum * n);
+    float* pruned_rowsum = (float*)malloc(sizeof *pruned_rowsum * n);
     for (long i = 0; i < n; i++) {
         basic_rowsum[i] = -Y[i];
         pruned_rowsum[i] = -Y[i];
@@ -1647,7 +1646,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     printf("basic had %ld nz beta, pruning had %ld\n", nz_beta_basic, nz_beta_pruning);
 
-    printf("basic error %.2f \t pruned err %.2f, %.0f\%\n", basic_error, pruned_error, 100.0*pruned_error/basic_error);
+    printf("basic error %.2f \t pruned err %.2f, %.0f%%\n", basic_error, pruned_error, 100.0*pruned_error/basic_error);
     //printf("pruning time is composed of %.2f pruning, %.2f working set "
     //       "updates, "
     //       "and %.2f subproblem time\n",
@@ -1702,8 +1701,8 @@ void test_row_list_without_columns()
 
     Thread_Cache thread_caches[NumCores];
     for (long i = 0; i < NumCores; i++) {
-        thread_caches[i].col_i = malloc(max(n, p) * sizeof *thread_caches[i].col_i);
-        thread_caches[i].col_j = malloc(n * sizeof *thread_caches[i].col_j);
+        thread_caches[i].col_i = (long*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = (long*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
     struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
@@ -1941,7 +1940,7 @@ void save_restore_log()
     const char* not_job_args[] = { "arg1", "arg2", "longer_argument_7", "4" };
     long job_args_num = 4;
 
-    char* log_filename = "testlog";
+    const char* log_filename = "testlog";
 
     FILE* logfile = init_log(log_filename, n, p, num_betas, job_args, job_args_num);
     save_log(iter, lambda_value, lambda_count, &beta_sets, logfile);
@@ -2044,7 +2043,7 @@ void save_restore_log()
 static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
 {
     long depth = 2;
-    char* log_filename = "adcal_test.log";
+    const char* log_filename = "adcal_test.log";
     remove(log_filename);
     long max_interaction_distance = -1;
     float lambda_min = 0.01;
@@ -2054,7 +2053,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     float frac_overlap_allowed = -1;
     float halt_beta_diff = 1.01;
     LOG_LEVEL log_level = LOG_LEVEL::LAMBDA;
-    char* job_args[] = { "adcal", "test", "args" };
+    const char* job_args[] = { "adcal", "test", "args" };
     long job_args_num = 3;
     long use_adaptive_calibration = TRUE;
     long max_nz_beta = -1;

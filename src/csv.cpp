@@ -50,7 +50,7 @@ XMatrix read_x_csv(const char* fn, long n, long p)
             break;
     }
     if (readline_result == -1)
-        fprintf(stderr, "failed to read line, errno %ld\n", errno);
+        fprintf(stderr, "failed to read line, errno %d\n", errno);
 
     if (actual_cols < p) {
         printf("number of columns < p, should p have been %ld?\n", actual_cols);
@@ -65,10 +65,10 @@ XMatrix read_x_csv(const char* fn, long n, long p)
 
 float* read_y_csv(const char* fn, long n)
 {
-    char* buf = malloc(BUF_SIZE);
-    char* temp = malloc(BUF_SIZE);
+    char* buf = (char*)malloc(BUF_SIZE);
+    char* temp = (char*)malloc(BUF_SIZE);
     memset(buf, 0, BUF_SIZE);
-    float* Y = malloc(n * sizeof(float));
+    float* Y = (float*)malloc(n * sizeof(float));
 
     FILE* fp = fopen(fn, "r");
     if (fp == NULL) {

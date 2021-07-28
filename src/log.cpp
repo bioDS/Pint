@@ -3,9 +3,9 @@
 #include <cstdlib>
 
 static long log_file_offset;
-static long int_print_len;
+static int int_print_len;
 
-void init_print(FILE *log_file, long n, long p, long num_betas, char** job_args,
+void init_print(FILE *log_file, long n, long p, long num_betas, const char** job_args,
     long job_args_num)
 {
     int_print_len = std::log10(p*p*p) + 1;
@@ -23,7 +23,7 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 
 
 // print to log: metadata required to resume from the log
-FILE* init_log(char* filename, long n, long p, long num_betas, char** job_args,
+FILE* init_log(const char* filename, long n, long p, long num_betas, const char** job_args,
     long job_args_num)
 {
     FILE* log_file = fopen(filename, "w+");
@@ -54,20 +54,20 @@ void save_log(long iter, float lambda_value, long lambda_count, Beta_Value_Sets*
     fprintf(log_file, "w");
 
     // write num beta1/2/3 values
-    fprintf(log_file, "%.*d, %.*d, %.*d\n", int_print_len, beta_sets->beta1.size(), int_print_len, beta_sets->beta2.size(), int_print_len, beta_sets->beta3.size());
+    fprintf(log_file, "%.*ld, %.*ld, %.*ld\n", int_print_len, beta_sets->beta1.size(), int_print_len, beta_sets->beta2.size(), int_print_len, beta_sets->beta3.size());
 
     // print beta 1/2/3 values each on a new line.
-    fprintf(log_file, "%.*d, %.*d, %+.6e\n", int_print_len, iter, int_print_len, lambda_count, lambda_value);
+    fprintf(log_file, "%.*ld, %.*ld, %+.6e\n", int_print_len, iter, int_print_len, lambda_count, lambda_value);
     for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end(); it++) {
-        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
+        fprintf(log_file, "%.*ld,%+.6e, ", int_print_len, it->first, it->second);
     }
     fprintf(log_file, "\n");
     for (auto it = beta_sets->beta2.begin(); it != beta_sets->beta2.end(); it++) {
-        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
+        fprintf(log_file, "%.*ld,%+.6e, ", int_print_len, it->first, it->second);
     }
     fprintf(log_file, "\n");
     for (auto it = beta_sets->beta3.begin(); it != beta_sets->beta3.end(); it++) {
-        fprintf(log_file, "%.*d,%+.6e, ", int_print_len, it->first, it->second);
+        fprintf(log_file, "%.*ld,%+.6e, ", int_print_len, it->first, it->second);
     }
     fprintf(log_file, "\n");
 
@@ -87,8 +87,8 @@ void close_log(FILE* log_file)
     fclose(log_file);
 }
 
-long check_can_restore_from_log(char* filename, long n, long p, long num_betas,
-    char** job_args, long job_args_num)
+long check_can_restore_from_log(const char* filename, long n, long p, long num_betas,
+    const char** job_args, long job_args_num)
 {
     long buf_size = num_betas * 16 + 500;
     long can_use = FALSE;
@@ -96,8 +96,8 @@ long check_can_restore_from_log(char* filename, long n, long p, long num_betas,
     if (log_file == NULL) {
         return FALSE;
     }
-    char* our_args = malloc(500);
-    char* buffer = malloc(buf_size);
+    char* our_args = (char*)malloc(500);
+    char* buffer = (char*)malloc(buf_size);
 
     memset(our_args, 0, sizeof(our_args));
     for (long i = 0; i < job_args_num; i++) {
@@ -106,11 +106,11 @@ long check_can_restore_from_log(char* filename, long n, long p, long num_betas,
     sprintf(our_args + strlen(our_args), "\n");
 
     // printf("checking log\n");
-    fgets(buffer, buf_size, log_file);
+    char* ret = fgets(buffer, buf_size, log_file);
     // printf("comparing '%s', '%s'n", buffer, "still running");
     if (strcmp(buffer, "still running\n") == 0) {
         // there was an interrupted run, we should check if it was this one.
-        fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
         // printf("comparing '%s', '%s'\n", buffer, our_args);
         if (strcmp(buffer, our_args) == 0) {
             // the files were the same!
@@ -125,8 +125,8 @@ long check_can_restore_from_log(char* filename, long n, long p, long num_betas,
 }
 
 // returns the opened log for future use.
-FILE* restore_from_log(char* filename, bool check_args, long n, long p, 
-    char** job_args, long job_args_num, long* actual_iter,
+FILE* restore_from_log(const char* filename, bool check_args, long n, long p, 
+    const char** job_args, long job_args_num, long* actual_iter,
     long* actual_lambda_count, float* actual_lambda_value,
     Beta_Value_Sets *actual_beta_sets)
 {
@@ -139,11 +139,11 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
     Rprintf("restoring from log\n");
 
     // the first 5 rows are commentary & X size.
-    fgets(buffer, buf_size, log_file);
-    fgets(buffer, buf_size, log_file);
-    fgets(buffer, buf_size, log_file);
-    fgets(buffer, buf_size, log_file);
-    fgets(buffer, buf_size, log_file); // contains n, p
+    char* ret = fgets(buffer, buf_size, log_file);
+    ret = fgets(buffer, buf_size, log_file);
+    ret = fgets(buffer, buf_size, log_file);
+    ret = fgets(buffer, buf_size, log_file);
+    ret = fgets(buffer, buf_size, log_file); // contains n, p
     sscanf(buffer, "%ld, %ld", &n, &p);
     int_print_len = std::log10(p*p*p) + 1;
     log_file_offset = ftell(log_file);
@@ -169,19 +169,19 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
     };
 
     auto skip_entries = [&]() {
-        fgets(buffer, buf_size, log_file);
-        fgets(buffer, buf_size, log_file);
-        fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
     };
 
-    fgets(buffer, buf_size, log_file);
+    ret = fgets(buffer, buf_size, log_file);
     printf("first buf: '%s'\n", buffer);
     if (strncmp(buffer, "w", 1) == 0) {
         printf("first entry unusable\n");
         // line is incomplete, don't use it.
         // just to read past it, we want to get the max size of each row.
         read_beta_sizes();
-        fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
 
         // skip over the lambda details and the entries;
         skip_entries();
@@ -197,7 +197,7 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
     } else {
         printf(": first entry was usable\n");
         read_beta_sizes();
-        fgets(buffer, buf_size, log_file); // read lambda/iter info.
+        ret = fgets(buffer, buf_size, log_file); // read lambda/iter info.
         // the first one was fine, but the second one may be more recent.
         long first_iter, first_lambda_count;
         long second_iter, second_lambda_count;
@@ -208,9 +208,9 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
         printf(": first_iter, lambda_count, lambda_value: %ld,%ld,%f\n", first_iter, first_lambda_count, first_lambda_value);
 
         skip_entries();
-        fgets(buffer, buf_size, log_file); //there's a newline between the two
+        ret = fgets(buffer, buf_size, log_file); //there's a newline between the two
         long second_pos = ftell(log_file);
-        fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
 
         // check the second entry, but only if it exists.
         if (!feof(log_file)) {
@@ -218,11 +218,11 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
             if (strncmp(buffer, "w", 1) == 0) {
                 printf("second entry unusable\n");
                 fseek(log_file, first_pos, SEEK_SET);
-                fgets(buffer, buf_size, log_file);
+                ret = fgets(buffer, buf_size, log_file);
             } else {
                 printf("**** 2nd beta size buf: '%s'\n", buffer);
                 read_beta_sizes(); // skip over second entry beta sizes.
-                fgets(buffer, buf_size, log_file);
+                ret = fgets(buffer, buf_size, log_file);
 
                 printf("**** buf: '%s'\n", buffer);
                 sscanf(buffer, " %ld, %ld, %e\n", &second_iter, &second_lambda_count,
@@ -233,17 +233,17 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
                     printf(": first entry > second_entry\n");
                     // but we can't/shouldn't use this one, go back to the first
                     fseek(log_file, first_pos, SEEK_SET);
-                    fgets(buffer, buf_size, log_file);
+                    ret = fgets(buffer, buf_size, log_file);
                 } else {
                     printf("seeking to beginning of second entry\n");
                     fseek(log_file, second_pos, SEEK_SET);
-                    fgets(buffer, buf_size, log_file);
+                    ret = fgets(buffer, buf_size, log_file);
                 }
             }
         } else {
             printf("log file has no second entry\n");
             fseek(log_file, first_pos, SEEK_SET);
-            fgets(buffer, buf_size, log_file);
+            ret = fgets(buffer, buf_size, log_file);
         }
     }
     if (can_restore) {
@@ -253,7 +253,7 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
         float first_lambda_value = -1;
         printf("final buf: '%s'\n", buffer);
         read_beta_sizes();
-        fgets(buffer, buf_size, log_file);
+        ret = fgets(buffer, buf_size, log_file);
 
         sscanf(buffer, "%ld, %ld, %e\n", actual_iter, actual_lambda_count,
             actual_lambda_value);
@@ -265,7 +265,10 @@ FILE* restore_from_log(char* filename, bool check_args, long n, long p,
         // read beta 1/2/3 from the next three lines
         auto read_beta = [&](auto beta_size, auto *beta_set) {
             long offset = 0;
-            fgets(buffer, buf_size, log_file);
+            ret = fgets(buffer, buf_size, log_file);
+            if (NULL == ret) {
+                fprintf(stderr, "error reading log file %s\n", filename);
+            }
             for (long i = 0; i < beta_size; i++) {
                 // printf("values_buf: '%s'\n", buffer + offset);
                 long beta_no = -1;

@@ -1,7 +1,6 @@
 #include "robin_hood.h"
 #include <omp.h>
 #include <stdlib.h>
-#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 
 #include "flat_hash_map.hpp"
 #include "liblasso.h"
@@ -11,43 +10,6 @@
 
 #define TRUE 1
 #define FALSE 0
-
-struct CL_Source {
-    char* buffer;
-    size_t len;
-};
-
-#define MAX_FILE_SIZE 1e6
-/// Reads the entire file *filename into a new buffer and returns it.
-struct CL_Source read_file(char* filename)
-{
-    char* big_buf = malloc(MAX_FILE_SIZE);
-    char* line_buf;
-    char* actual_buf;
-
-    FILE* fp = fopen(filename, "r");
-    if (fp == NULL) {
-        fprintf(stderr,
-            "error reading file %s, the program will probably now crash\n",
-            filename);
-    }
-
-    // read entire file
-    size_t pos = 0;
-    size_t line_size = 0;
-    long bytes_read = 0;
-    while ((bytes_read = getline(&line_buf, &line_size, fp)) > 0) {
-        memcpy(&big_buf[pos], line_buf, bytes_read);
-        pos += bytes_read;
-    }
-    actual_buf = malloc(pos);
-    memcpy(actual_buf, big_buf, pos);
-
-    free(line_buf);
-    free(big_buf);
-    struct CL_Source src = { actual_buf, pos };
-    return src;
-}
 
 Active_Set active_set_new(long max_length, long p)
 {
@@ -485,68 +447,7 @@ char update_working_set(
 {
     long p_int = p * (p + 1) / 2;
 
-    // construct small Xc containing only the relevant columns.
-    // in particular, we want the row index with no columns outside the updateable_items set.
-
-    // printf("wont_update:\n");
-    // for (long i = 0; i < p; i++) {
-    //   if (wont_update[i])
-    //     printf("%ld ", i);
-    // }
-    // printf("\n");
-    //int count = 0;
-    //for (long i = 0; i < p; i++)
-    //    if (!wont_update[i])
-    //        count++;
-    //if (count_may_update != count) {
-    //    printf("count_may_update was %ld, should have been %ld\n", count_may_update, count);
-    //}
-    //g_assert_true(count == count_may_update);
-    //if (!wont_update[interesting_col1] && !wont_update[interesting_col2])
-    //    printf(" both cols %ld,%ld may update\n", interesting_col1, interesting_col2);
-    //bool f1 = false, f2 = false;
-    //for (long i = 0; i < count_may_update; i++) {
-    //    if (updateable_items[count_may_update] == interesting_col1)
-    //        f1 = true;
-    //    if (updateable_items[count_may_update] == interesting_col2)
-    //        f2 = true;
-    //}
-    //printf("found: ");
-    //if (f1)
-    //    printf("f1, ");
-    //if (f2)
-    //    printf("f2, ");
-    //printf("\n");
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    // quick test:
-    //bool found_both = false;
-    //for (long row = 0; row < n; row++) {
-    //    long found = 0;
-    //    bool found1 = false, found2 = false;
-    //    long f1pos = -1, f2pos = -2;
-    //    for (long inter_i = 0; inter_i < Xu.host_row_nz[row]; inter_i++) {
-    //        long col = Xu.host_X_row[Xu.host_row_offsets[row] + inter_i];
-    //        if (!wont_update[col]) {
-    //            if (!found_both) {
-    //                if (!found_both && new_row_set.rows[row][found] == interesting_col1) {
-    //                    found1 = true;
-    //                    f1pos = found;
-    //                }
-    //                if (!found_both && new_row_set.rows[row][found] == interesting_col2) {
-    //                    found2 = true;
-    //                    f2pos = found;
-    //                }
-    //                if (found1 && found2) {
-    //                    // printf("found both in row %ld at positions %ld,%ld\n", row, f1pos, f2pos);
-    //                    found_both = true;
-    //                }
-    //            }
-    //            g_assert_true(new_row_set.rows[row][found] == col);
-    //            found++;
-    //        }
-    //    }
-    //    g_assert_true(found == new_row_set.row_lengths[row]);
-    //}
     char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, depth);
 
     free_row_set(new_row_set);

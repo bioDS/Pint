@@ -198,7 +198,6 @@ extern long zero_updates;
 extern long zero_updates_entries;
 extern long* colsum;
 extern float* col_ysum;
-extern long max_size_given_entries[61];
 extern long total_beta_updates;
 extern long total_beta_nz_updates;
 extern float halt_error_diff;

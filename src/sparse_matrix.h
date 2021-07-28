@@ -23,7 +23,7 @@ struct row_set {
 typedef struct XMatrixSparse {
     pad_int* col_nz;
     long* col_nwords;
-    unsigned long* col_start;
+    long* col_start;
     // unsigned short **col_nz_indices;
     gsl_permutation* permutation;
     // S8bWord **compressed_indices;
