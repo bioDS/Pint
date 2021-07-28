@@ -499,23 +499,6 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     // beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
     // memset(beta, 0, p_int * sizeof(float));
 
-    precalc_get_num = malloc(p_int * sizeof(int_pair));
-    long offset = 0;
-    for (long i = 0; i < p; i++) {
-        for (long j = i; j < min((long)p, i + max_interaction_distance + 1); j++) {
-            // printf("i,j: %ld,%ld\n", i, j);
-            precalc_get_num[offset]
-                .i
-                = i;
-            precalc_get_num[offset]
-                .j
-                = j;
-            offset++;
-        }
-    }
-
-    //cached_nums = get_all_nums(p, max_interaction_distance);
-
     float error = 0.0;
     for (long i = 0; i < n; i++) {
         error += Y[i] * Y[i];
@@ -670,7 +653,6 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         X2c_fake,
         Y,
         max_int_delta,
-        //precalc_get_num,
         NULL,
         NULL,
         Xu,
@@ -772,7 +754,6 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 
     Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
-    //free(precalc_get_num);
 
     // TODO: this really should be 0. Fix things until it is.
     // Rprintf("checking how much rowsums have diverged:\n");
