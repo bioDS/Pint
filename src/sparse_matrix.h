@@ -16,6 +16,7 @@ typedef struct Column_Set {
 struct row_set {
     long** rows;
     long* row_lengths;
+    long num_rows;
     // S8bCol* s8b_rows;
 };
 
@@ -50,5 +51,6 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
 XMatrixSparse sparsify_X(long** X, long n, long p);
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches);
+void free_row_set(struct row_set rs);
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc);
 void free_host_X(X_uncompressed *Xu);

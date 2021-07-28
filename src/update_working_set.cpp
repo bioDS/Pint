@@ -548,13 +548,8 @@ char update_working_set(
     //    g_assert_true(found == new_row_set.row_lengths[row]);
     //}
     char increased_set = update_working_set_cpu(Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda, beta, updateable_items, count_may_update, last_max, depth);
-    for (long i = 0; i < n; i++) {
-        if(NULL != new_row_set.rows[i])
-            free(new_row_set.rows[i]);
-    }
-    free(new_row_set.rows);
-    free(new_row_set.row_lengths);
 
+    free_row_set(new_row_set);
     return increased_set;
 }
 

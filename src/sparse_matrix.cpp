@@ -18,11 +18,21 @@ void free_sparse_matrix(XMatrixSparse X)
     free(X.cols);
 }
 
+void free_row_set(struct row_set rs) {
+    for (int i = 0; i < rs.num_rows; i++) {
+        if (NULL != rs.rows[i])
+            free(rs.rows[i]);
+    }
+    free(rs.row_lengths);
+    free(rs.rows);
+}
+
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
 {
     long p = Xc.p;
     long n = Xc.n;
     struct row_set rs;
+    rs.num_rows = n;
     long** new_rows = (long**)calloc(n, sizeof *new_rows);
     long* row_lengths = (long*)calloc(n, sizeof *row_lengths);
 

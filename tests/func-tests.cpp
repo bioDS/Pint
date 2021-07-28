@@ -1747,6 +1747,13 @@ void test_row_list_without_columns()
         free(thread_caches[i].col_i);
         free(thread_caches[i].col_j);
     }
+    for (long j = 0; j < p; j++) {
+        delete[] xm[j];
+    }
+    delete[] xm;
+    free_sparse_matrix(Xc);
+    free_host_X(&Xu);
+    free_row_set(rs);
 }
 
 void trivial_3way_test()
