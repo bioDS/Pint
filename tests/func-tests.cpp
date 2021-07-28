@@ -24,7 +24,7 @@ extern long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum
     float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, long depth);
 static long total_basic_beta_updates = 0;
 static long total_basic_beta_nz_updates = 0;
-static float LAMBDA_MIN = 15.0;
+static float LAMBDA_MIN = 1.5;
 
 // #pragma omp declare target
 // float fabs(float a) {
@@ -1353,14 +1353,10 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     for (long j = 0; j < p; j++)
         wont_update[j] = 0;
 
-    // float last_rowsum[p][n];
     float** last_rowsum = malloc(sizeof *last_rowsum * p);
-    last_rowsum[0] = malloc(sizeof(float) * p * n);
 #pragma omp parallel for schedule(static)
     for (long i = 0; i < p; i++) {
         last_rowsum[i] = malloc(sizeof *last_rowsum[i] * n + 64);
-        // printf("i: %ld\n", i);
-        // last_rowsum[i] = &last_rowsum[0][i * n];
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
     }
 
@@ -1415,7 +1411,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("getting time for un-pruned version: lambda min = %f\n", LAMBDA_MIN);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     // for (long lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN; lambda *= 0.9) {
+    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/n; lambda *= 0.9) {
         //long nz_beta = beta_sets.beta1.size()
         //+beta_sets.beta2.size()
         //+beta_sets.beta3.size();
@@ -1440,11 +1436,37 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         }
     }
     printf("last updated val: %ld\n", last_updated_val);
-    int_pair pair = fixture->precalc_get_num[last_updated_val];
-    printf("%ld,%ld\n", pair.i, pair.j);
+    // int_pair pair = fixture->precalc_get_num[last_updated_val];
+    // printf("%ld,%ld\n", pair.i, pair.j);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     basic_cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
     printf("time: %f s\n", basic_cpu_time_used);
+    float* basic_rowsum = malloc(sizeof *basic_rowsum * n);
+    long nz_beta_basic = 0;
+    long nz_beta_pruning = 0;
+    for (long k = 0; k < p_int; k++) {
+        nz_beta_basic += beta_sets.beta2[k] != 0.0;
+        long entry = -1;
+        for (long i = 0; i < X2c.cols[k].nwords; i++) {
+            S8bWord word = X2c.cols[k].compressed_indices[i];
+            unsigned long values = word.values;
+            for (long j = 0; j <= group_size[word.selector]; j++) {
+                long diff = values & masks[word.selector];
+                if (diff != 0) {
+                    entry += diff;
+
+                    // do whatever we need here with the index below:
+                    basic_rowsum[entry] += beta_sets.beta2[k];
+                    // nz_beta_pruning += beta_pruning[k] != 0.0;
+                    // pruned_rowsum[entry] += beta_pruning[k];
+                    //if (basic_rowsum[entry] > 1e20) {
+                    //  printf("1. basic_rowsum[%ld] = %f\n", entry, basic_rowsum[entry]);
+                    //}
+                }
+                values >>= item_width[word.selector];
+            }
+        }
+    }
 
 #pragma omp parallel for schedule(static)
     for (long i = 0; i < p; i++) {
@@ -1479,13 +1501,9 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     for (long i = 0; i < n; i++) {
         p_rowsum[i] = -Y[i];
     }
-    //target_setup(&Xc, &fixture->xmatrix);
-    //TODO: setup OpenCL device.
-    // struct OpenCL_Setup ocl_setup = setup_working_set_kernel(Xu, n, p);
-    struct OpenCL_Setup ocl_setup; //TODO: remove this
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     Active_Set active_set = active_set_new(p_int, p);
-    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/n; lambda *= 0.9) {
+    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/(n/2); lambda *= 0.9) {
         long nz_beta = 0;
         // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
         //for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
@@ -1494,7 +1512,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         //  }
         //}
         nz_beta = pruning_beta_sets.beta1.size() + pruning_beta_sets.beta2.size() + pruning_beta_sets.beta3.size();
-        if (nz_beta > MAX_NZ_BETA) {
+        if (nz_beta > nz_beta_basic) {
             break;
         }
         // memcpy(old_rowsum, p_rowsum, sizeof *p_rowsum *n);
@@ -1506,7 +1524,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, &ocl_setup, 2);
+            &active_set, NULL, 2);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1540,7 +1558,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("total branches:  %ld\n", used_branches + pruned_branches);
 
     // g_assert_true(pruned_cpu_time_used < 0.9 * basic_cpu_time_used);
-    float* basic_rowsum = malloc(sizeof *basic_rowsum * n);
     float* pruned_rowsum = malloc(sizeof *pruned_rowsum * n);
     for (long i = 0; i < n; i++) {
         basic_rowsum[i] = -Y[i];
@@ -1548,31 +1565,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     }
     if (Xc.p > 1000) {
         return;
-    }
-    long nz_beta_basic = 0;
-    long nz_beta_pruning = 0;
-    for (long k = 0; k < p_int; k++) {
-        nz_beta_basic += beta_sets.beta2[k] != 0.0;
-        long entry = -1;
-        for (long i = 0; i < X2c.cols[k].nwords; i++) {
-            S8bWord word = X2c.cols[k].compressed_indices[i];
-            unsigned long values = word.values;
-            for (long j = 0; j <= group_size[word.selector]; j++) {
-                long diff = values & masks[word.selector];
-                if (diff != 0) {
-                    entry += diff;
-
-                    // do whatever we need here with the index below:
-                    basic_rowsum[entry] += beta_sets.beta2[k];
-                    // nz_beta_pruning += beta_pruning[k] != 0.0;
-                    // pruned_rowsum[entry] += beta_pruning[k];
-                    //if (basic_rowsum[entry] > 1e20) {
-                    //  printf("1. basic_rowsum[%ld] = %f\n", entry, basic_rowsum[entry]);
-                    //}
-                }
-                values >>= item_width[word.selector];
-            }
-        }
     }
     //for (long i = 0; i < Xu.host_col_nz[54]; i++) {
     //  Xu.host_X Xu.host_col_offsets[54]
@@ -1655,53 +1647,35 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     printf("basic had %ld nz beta, pruning had %ld\n", nz_beta_basic, nz_beta_pruning);
 
-    printf("basic error %.2f \t pruned err %.2f\n", basic_error, pruned_error);
+    printf("basic error %.2f \t pruned err %.2f, %.0f\%\n", basic_error, pruned_error, 100.0*pruned_error/basic_error);
     //printf("pruning time is composed of %.2f pruning, %.2f working set "
     //       "updates, "
     //       "and %.2f subproblem time\n",
     //       pruning_time, working_set_update_time, subproblem_time);
     g_assert_true(
-        fmax(basic_error, pruned_error) / fmin(basic_error, pruned_error) < 1.2);
+        pruned_error/basic_error < 1.05);
 
     printf("working set upates were: %.2f main effect col, %.2f long col, %.2f "
            "reused col\n",
         main_col_time, int_col_time, reused_col_time);
 
-    //printf("checking beta values come out the same\n");
-    //long offset = 0;
-    //for (long main = 0; main < p; main++) {
-    //  for (long inter = 0; inter < p; inter++) {
-    //    long k = offset;
-    //    float basic_beta = fabs(beta_sets.beta2[offset]);
-    //    float pruned_beta = 0.0;
-    //    if (main == inter) {
-    //      pruned_beta = fabs(pruning_beta_sets.beta1[main]);
-    //    } else {
-    //      pruned_beta = fabs(pruning_beta_sets.beta2[pair_to_val(std::make_tuple(main, inter), p)]);
-    //    }
-    //    float max = fmax(basic_beta, pruned_beta);
-    //    float min = fmin(basic_beta, pruned_beta);
-
-    //    if (max / min > acceptable_diff && fabs(basic_beta) > 0.01) {
-    //      printf("basic[%ld,%ld = %ld] \t   %.2e \t =\\= \t %.2e \t pruning[%ld,%ld = %ld]\n", main, inter, k, basic_beta,
-    //             pruned_beta, main, inter, pair_to_val(std::make_tuple(main, inter), p));
-    //    }
-    //    g_assert_true(max/min <= acceptable_diff || fabs(basic_beta) < 0.01);
-    //    offset++;
-    //  }
-    //}
-    //for (long k = 0; k < p; k++) {
-    //  float basic_beta = fabs( beta_sets.beta2[k]);
-    //  float pruned_beta = fabs( pruning_beta_sets->beta1[k]);
-    //  float max = fmax(basic_beta, pruned_beta);
-    //  float min = fmin(basic_beta, pruned_beta);
-
-    //  if (max / min > acceptable_diff) {
-    //    printf("basic[%ld] \t   %.2f \t =\\= \t %.2f \t pruning[%ld]\n", k, beta[k],
-    //           beta_pruning[k], k);
-    //  }
-    //}
-    // opencl_cleanup(ocl_setup);
+    for (int i = 0; i < p; i++) {
+        free(last_rowsum[i]);
+    }
+    for (int i = 0; i < NumCores; i++) {
+        free(thread_caches[i].col_i);
+        free(thread_caches[i].col_j);
+    }
+    free(last_rowsum);
+    free(wont_update);
+    gsl_permutation_free(iter_permutation);
+    free_host_X(&Xu);
+    free(basic_rowsum);
+    free(p_rowsum);
+    free(old_rowsum);
+    free(pruned_rowsum);
+    free(last_max);
+    free(max_int_delta);
 }
 
 void test_row_list_without_columns()
