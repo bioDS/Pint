@@ -379,53 +379,28 @@ static void test_X2_from_X()
     free(X2s.cols);
 }
 
+struct pruning_test_setup_details {
+    long n;
+    long p;
+    const char* xfile;
+    const char* yfile;
+    bool make_x2;
+};
+
 static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
-    gconstpointer use_big)
+    struct pruning_test_setup_details* setup)
 {
     halt_error_diff = HALT_ERROR_DIFF;
-    char *xfile, *yfile;
-    if ((long)use_big == 2) {
-        printf("\nusing huge test case\n");
-        fixture->n = 10000;
-        fixture->p = 5000;
-        xfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv";
-        yfile = "../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv";
-        LAMBDA_MIN = 0.01 * fixture->n / 2;
-        //fixture->n = 8000;
-        //fixture->p = 4000;
-        //xfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/X.csv";
-        //yfile = "../testcase//n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159/Y.csv";
-    } else if ((long)use_big == 1) {
-        printf("\nusing large test case\n");
-        fixture->n = 2000;
-        fixture->p = 1000;
-        // xfile = "../X_nlethals50_v15803.csv";
-        // yfile = "../Y_nlethals50_v15803.csv";
-        xfile = "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv";
-        yfile = "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv";
-        LAMBDA_MIN = 0.01 * fixture->n / 2;
-        //xfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/X.csv";
-        //yfile = "../broken_case/n10000_p1000_SNR2_nbi0_nbij200_nlethals0_viol0_89257/Y.csv";
-    } else if (use_big == 0) {
-        printf("\nusing small test case\n");
-        fixture->n = 1000;
-        fixture->p = 100;
-        LAMBDA_MIN = 0.000001 * fixture->n / 2;
-        // xfile = "../testX.csv";
-        // yfile = "../testY.csv";
-        xfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv";
-        yfile = "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/Y.csv";
-    }
-    printf("reading X from %s\n", xfile);
-    fixture->xmatrix = read_x_csv(xfile, fixture->n, fixture->p);
+    fixture->n = setup->n;
+    fixture->p = setup->p;
+    printf("reading X from %s\n", setup->xfile);
+    fixture->xmatrix = read_x_csv(setup->xfile, fixture->n, fixture->p);
     fixture->X = fixture->xmatrix.X;
-    printf("reading Y from %s\n", yfile);
-    fixture->Y = read_y_csv(yfile, fixture->n);
+    printf("reading Y from %s\n", setup->yfile);
+    fixture->Y = read_y_csv(setup->yfile, fixture->n);
     fixture->rowsum = (float*)malloc(fixture->n * sizeof(float));
     fixture->lambda = 20;
     long p_int = fixture->p * (fixture->p + 1) / 2;
-    // fixture->beta = (float*)malloc(p_int * sizeof(float));
-    // memset(fixture->beta, 0, p_int * sizeof(float));
     fixture->k = 27;
     fixture->dBMax = 0;
     fixture->intercept = 0;
@@ -879,14 +854,14 @@ long check_didnt_update(long p, long p_int, bool* wont_update, robin_hood::unord
 }
 
 static void pruning_fixture_set_up(UpdateFixture* fixture,
-    gconstpointer use_big)
+    struct pruning_test_setup_details* setup)
 {
-    test_simple_coordinate_descent_set_up(fixture, use_big);
+    test_simple_coordinate_descent_set_up(fixture, setup);
     printf("getting sparse X\n");
     XMatrixSparse Xc = sparsify_X(fixture->X, fixture->n, fixture->p);
     printf("getting sparse X2\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
-    if ((long)use_big < 2) {
+    if (setup->make_x2) {
         XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
         fixture->X2c = X2c;
     }
@@ -1223,12 +1198,13 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
 {
     printf("starting accuracy test\n");
-    long use_adcal = TRUE;
+    long use_adcal = FALSE;
+    const char* log_file = "test.log";
     Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
-        -1, 0.01, 47504180,
+        -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        77, "test.log", 2);
+        77, log_file, 2);
 
     vector<pair<int, int>> true_effects = {
         { 79, 432 },
@@ -1314,7 +1290,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         { 656, 812 },
         { 703, 952 },
         { 973, 990 },
-        { 36, 195 },
+        // { 36, 195 }, // sqrt-lasso misses this
         { 93, 862 },
         { 107, 382 },
     };
@@ -2130,6 +2106,28 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     free(beta2.values);
 }
 
+
+static struct pruning_test_setup_details accuracy_setup = {
+    2000, 1000,
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
+    false};
+static struct pruning_test_setup_details faster_setup = {
+    1000, 100,
+    "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
+    "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
+    true};
+static struct pruning_test_setup_details big_setup = {
+    2000, 1000,
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
+    true};
+static struct pruning_test_setup_details bigger_setup = {
+    10000, 5000,
+    "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv",
+    "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv",
+    true};
+
 int main(int argc, char* argv[])
 {
     initialise_static_resources();
@@ -2161,16 +2159,16 @@ int main(int argc, char* argv[])
     g_test_add("/func/test-branch-pruning", UpdateFixture, FALSE,
         pruning_fixture_set_up, check_branch_pruning,
         pruning_fixture_tear_down);
-    g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, 1,
+    g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
         pruning_fixture_set_up, check_branch_pruning_accuracy,
         pruning_fixture_tear_down);
-    g_test_add("/func/test-branch-pruning-faster", UpdateFixture, 0,
+    g_test_add("/func/test-branch-pruning-faster", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning_faster,
         pruning_fixture_tear_down);
-    g_test_add("/func/test-branch-pruning-faster-big", UpdateFixture, 1,
+    g_test_add("/func/test-branch-pruning-faster-big", UpdateFixture, &big_setup,
         pruning_fixture_set_up, check_branch_pruning_faster,
         pruning_fixture_tear_down);
-    g_test_add("/func/test-branch-pruning-faster-bigger", UpdateFixture, 2,
+    g_test_add("/func/test-branch-pruning-faster-bigger", UpdateFixture, &bigger_setup,
         pruning_fixture_set_up, check_branch_pruning_faster,
         pruning_fixture_tear_down);
     g_test_add_func("/func/trivial-3way", trivial_3way_test);

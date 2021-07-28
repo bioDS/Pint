@@ -159,8 +159,6 @@ typedef struct {
 #include "log.h"
 
 long** X2_from_X(long** X, long n, long p);
-float* read_y_csv(char* fn, long n);
-XMatrix read_x_csv(char* fn, long n, long p);
 int_pair get_num(long num, long p);
 void free_static_resources();
 void initialise_static_resources();

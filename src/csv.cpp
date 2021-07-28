@@ -1,13 +1,13 @@
 #include "liblasso.h"
 
-XMatrix read_x_csv(char* fn, long n, long p)
+XMatrix read_x_csv(const char* fn, long n, long p)
 {
     char* buf = NULL;
     size_t line_size = 0;
-    long** X = malloc(p * sizeof(long*));
+    long** X = (long**)malloc(p * sizeof *X);
 
     for (long i = 0; i < p; i++)
-        X[i] = malloc(n * sizeof(long));
+        X[i] = (long*)malloc(n * sizeof *X[i]);
 
     FILE* fp = fopen(fn, "r");
     if (fp == NULL) {
@@ -63,7 +63,7 @@ XMatrix read_x_csv(char* fn, long n, long p)
     return xmatrix;
 }
 
-float* read_y_csv(char* fn, long n)
+float* read_y_csv(const char* fn, long n)
 {
     char* buf = malloc(BUF_SIZE);
     char* temp = malloc(BUF_SIZE);
