@@ -87,5 +87,7 @@ S8bCol col_to_s8b_col(long size, long* col)
         free(current_word);
         count++;
     }
+    queue_free(current_col);
+    queue_free(current_col_actual);
     return s8bCol;
 }

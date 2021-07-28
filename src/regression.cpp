@@ -854,6 +854,20 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         became_zero); // TODO: disable for release
     free_host_X(&Xu);
 
+    for (int i = 0; i < NumCores; i++) {
+        free(thread_caches[i].col_i);
+        free(thread_caches[i].col_j);
+    }
+    for (int i = 0; i < p; i++) {
+        free(last_rowsum[i]);
+    }
+    free(last_rowsum);
+    delete[] wont_update;
+    delete[] last_max;
+    free(max_int_delta);
+    active_set_free(active_set);
+    free(old_rowsum);
+
     return beta_sets;
 }
 
