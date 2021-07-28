@@ -128,7 +128,7 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
 
 SEXP read_log_(SEXP log_filename_)
 {
-    char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
+    const char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
 
     long restored_iter = -1;
     long restored_lambda_count = -1;
@@ -158,7 +158,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     long max_nz_beta = asInteger(max_nz_beta_);
     bool verbose = asLogical(verbose_);
     long max_lambdas = asInteger(max_lambdas_);
-    char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
+    const char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
     long depth = asInteger(depth_);
     long log_level_enum = asInteger(log_level_);
 
@@ -231,6 +231,6 @@ void R_init_Pint(DllInfo* info)
 {
     // R_RegisterCCallable("Pint", "lasso_", (DL_FUNC) &lasso_);
     R_registerRoutines(info, NULL, CallEntries, NULL, NULL);
-    R_useDynamicSymbols(info, FALSE);
+    R_useDynamicSymbols(info, (Rboolean)FALSE);
 }
 }

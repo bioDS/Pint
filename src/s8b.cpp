@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <liblasso.h>
-#include <glib-2.0/glib.h>
 
 using namespace std;
 
@@ -14,7 +13,6 @@ S8bWord to_s8b(long count, long* vals)
     long test = 0;
     for (long i = 0; i < count; i++) {
         test |= vals[count - i - 1];
-        g_assert_true(word.selector >= 0);
         if (i < count - 1)
             test <<= item_width[word.selector];
     }
