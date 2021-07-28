@@ -40,7 +40,10 @@ Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float* Y,
     float* rowsum, long n, long p, float lambda,
     robin_hood::unordered_flat_map<long, float>* beta, long k, float intercept,
     int_pair* precalc_get_num, long* column_cache);
+
 float soft_threshold(float z, float gamma);
+
+float calculate_error(float* Y, float* rowsum, long n);
 
 long adaptive_calibration_check_beta(float c_bar, float lambda_1,
     Sparse_Betas* beta_1, float lambda_2,

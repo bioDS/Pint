@@ -426,6 +426,8 @@ static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
         thread_column_caches[i] = (long*)malloc(fixture->n * sizeof *thread_column_caches[i]);
     }
     fixture->column_caches = thread_column_caches;
+    double error = calculate_error(fixture->Y, fixture->rowsum, fixture->n);
+    total_sqrt_error = std::sqrt(error);
     printf("done test init\n");
 }
 
@@ -1483,7 +1485,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     struct OpenCL_Setup ocl_setup; //TODO: remove this
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     Active_Set active_set = active_set_new(p_int, p);
-    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN; lambda *= 0.9) {
+    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/n; lambda *= 0.9) {
         long nz_beta = 0;
         // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
         //for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
@@ -1502,6 +1504,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         long last_iter_count = 0;
 
         //TODO: probably best to remove lambda scalling in all the tests too.
+        printf("lambda: %f\n", lambda);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
             &active_set, &ocl_setup, 2);
     }

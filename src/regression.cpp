@@ -130,12 +130,11 @@ long check_adaptive_calibration(float c_bar, Beta_Sequence* beta_sequence,
     return FALSE;
 }
 
-float calculate_error(long n, long p_int, float* Y, long** X, float p,
-    float intercept, float* rowsum)
+float calculate_error(float* Y, float* rowsum, long n)
 {
     float error = 0.0;
-    for (long row = 0; row < n; row++) {
-        float row_err = intercept - rowsum[row];
+    for (int row = 0; row < n; row++) {
+        float row_err = -rowsum[row];
         error += row_err * row_err;
     }
     return error;
@@ -671,7 +670,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         X2c_fake,
         Y,
         max_int_delta,
-        precalc_get_num,
+        //precalc_get_num,
+        NULL,
         NULL,
         Xu,
     };
@@ -681,7 +681,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     Active_Set active_set = active_set_new(p_int, p);
     float* old_rowsum = (float*)malloc(sizeof *old_rowsum * n);
     printf("final_lambda: %f\n", final_lambda);
-    error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
+    error = calculate_error(Y, rowsum, n);
     total_sqrt_error = std::sqrt(error);
     printf("initial error: %f\n", error);
     while (lambda > final_lambda && iter < max_lambda_count) {
@@ -732,7 +732,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
 #endif
         }
         double prev_error = error;
-        error = calculate_error(n, p_int, Y, X, p, intercept, rowsum);
+        error = calculate_error(Y, rowsum, n);
         total_sqrt_error = std::sqrt(error);
         printf("lambda %ld = %f, error %.4e, nz_beta %ld,%ld,%ld\n", lambda_count, lambda, error,
             beta_sets.beta1.size(), beta_sets.beta2.size(), beta_sets.beta3.size());
@@ -772,7 +772,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 
     Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
-    free(precalc_get_num);
+    //free(precalc_get_num);
 
     // TODO: this really should be 0. Fix things until it is.
     // Rprintf("checking how much rowsums have diverged:\n");
