@@ -1847,7 +1847,7 @@ void trivial_3way_test()
         -1, 0.01, 100,
         100, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        -1, "test.log", 3);
+        7, "test.log", 3);
     // auto beta = beta_sets.beta3;
 
     long total_effects = 0;
@@ -1874,18 +1874,20 @@ void trivial_3way_test()
     printf("beta 3:\n");
     print_beta_set(&beta_sets.beta3);
 
-    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 2.0);
+    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.4);
     long tmpval = pair_to_val(std::make_tuple(0, 3), p);
-    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) != 0.0);
+    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 1.5);
     tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
-    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -9.0);
+    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -8.0);
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
 
     for (long i = 0; i < p; i++) {
-        free(xm[i]);
+        delete[] xm[i];
     }
-    free(xm);
+    delete[] xm;
+    free_host_X(&Xu);
+    free_sparse_matrix(Xc);
 }
 
 void test_tuple_vals()

@@ -463,12 +463,15 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         real_p_int = (long)p * ((long)p + 1) * ((long)p - 1) / (2 * 3);
         break;
     }
-    double tmp = 396.952547477011765511e-3;
-    printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
-    printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
-    double final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
-    final_lambda /= n; // not very well justified, but seems like it might be helping.
-    // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.
+    double final_lambda = lambda_min;
+    if (lambda_min <= 0) {
+        //double tmp = 396.952547477011765511e-3;
+        //printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
+        printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
+        final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
+        final_lambda /= n; // not very well justified, but seems like it might be helping.
+        // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.
+    }
     printf("using final lambda: %f\n", final_lambda);
 
     // work out min lambda for sqrt lasso
@@ -848,6 +851,7 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     free(max_int_delta);
     active_set_free(active_set);
     free(old_rowsum);
+    free_inter_cache(p);
 
     return beta_sets;
 }

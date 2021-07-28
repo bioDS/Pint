@@ -169,6 +169,7 @@ typedef struct IC_Entry {
     bool skipped_this_iter;
     bool checked_this_iter;
     bool present;
+    bool was_present;
     float last_max;
     float* last_rowsum;
     // robin_hood::unordered_flat_map<long, float> last_rowsum;
@@ -177,6 +178,20 @@ typedef struct IC_Entry {
 // static robin_hood::unordered_flat_map<long, IC_Entry> inter_cache;
 static IC_Entry* inter_cache = NULL;
 // static bool inter_cache_init_done = false;
+void free_inter_cache(long p) {
+    if (NULL == inter_cache)
+        return;
+
+    long p_int = p * (p + 1) / 2;
+    for (long i = 0; i < p_int; i++) {
+        // if (NULL != inter_cache[i].last_rowsum) {
+        if (inter_cache[i].was_present) {
+            free(inter_cache[i].last_rowsum);
+            free(inter_cache[i].col.compressed_indices);
+        }
+    }
+    free(inter_cache);
+}
 
 void update_inter_cache(long k, long n, float* rowsum, float last_max, long* col, long col_len)
 {
@@ -184,10 +199,14 @@ void update_inter_cache(long k, long n, float* rowsum, float last_max, long* col
     //    inter_cache[k].skip = true;
     //    return;
     //}
-    if (!inter_cache[k].present) {
+    if (!inter_cache[k].was_present) {
         S8bCol comp_col = col_to_s8b_col(col_len, col);
         inter_cache[k].last_rowsum = (float*)malloc(col_len * sizeof *rowsum);
         inter_cache[k].col = comp_col;
+        inter_cache[k].present = true;
+        inter_cache[k].was_present = true;
+        inter_cache[k].skipped_this_iter = false;
+    } else if (!inter_cache[k].present) {
         inter_cache[k].present = true;
         inter_cache[k].skipped_this_iter = false;
     }
