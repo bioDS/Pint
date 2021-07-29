@@ -18,13 +18,13 @@ int main(int argc, const char** argv)
         return 1;
     }
 
-    int depth = atoi(argv[4]);
-    printf("using depth: %d (%s)\n", depth, argv[4]);
+    int depth = atoi(argv[3]);
+    printf("using depth: %d (%s)\n", depth, argv[3]);
     if (depth < 1 || depth > 3) {
       printf("depth must be between 1 and 3 inclusive.\n");
       exit(EXIT_FAILURE);
     }
-    const char* verbose = argv[5];
+    const char* verbose = argv[4];
     printf("verbose: %s\n", verbose);
     const char* output_filename = argv[10];
     FILE* output_file = NULL;
@@ -51,7 +51,7 @@ int main(int argc, const char** argv)
     float lambda;
 
     if ((lambda = strtod(argv[5], NULL)) == 0)
-        lambda = 3.604;
+        lambda =-1;
     printf("using lambda = %f\n", lambda);
 
     long N = atoi(argv[6]);
@@ -94,7 +94,7 @@ int main(int argc, const char** argv)
     printf("begginning coordinate descent\n");
     const char* log_file = "exe.log";
     auto beta_sets = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1,
-        5000, lambda, 300, VERBOSE, -1, 1.0001, log_level, argv, argc, FALSE, max_nz, log_file, depth);
+        -1, lambda, 300, VERBOSE, -1, 1.0001, log_level, argv, argc, FALSE, max_nz, log_file, depth);
     int nbeta_int = nbeta;
     auto beta = beta_sets.beta3;
     //nbeta_int = get_p_int(nbeta, max_interaction_distance);

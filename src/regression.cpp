@@ -430,7 +430,7 @@ long copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
 
 double phi_inv(double x)
 {
-    return std::sqrt(std::abs(2.0 * std::log(sqrt(2.0 * M_PI) * x)));
+    return sqrt(abs(2.0 * log(sqrt(2.0 * M_PI) * x)));
 }
 
 float total_sqrt_error = 0.0;
@@ -465,8 +465,8 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     }
     double final_lambda = lambda_min;
     if (lambda_min <= 0) {
-        //double tmp = 396.952547477011765511e-3;
-        //printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
+        double tmp = 396.952547477011765511e-3;
+        printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
         printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
         final_lambda = 1.1 * std::sqrt((double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
         final_lambda /= n; // not very well justified, but seems like it might be helping.
