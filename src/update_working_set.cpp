@@ -153,6 +153,7 @@ void free_inter_cache(long p) {
         }
     }
     free(inter_cache);
+    inter_cache = NULL;
 }
 
 void update_inter_cache(long k, long n, float* rowsum, float last_max, long* col, long col_len)
