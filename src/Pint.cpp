@@ -1,21 +1,22 @@
 #include "liblasso.h"
 
 struct C_Beta_Sets {
-    long   main_len;
-    long*  main_effects;
+    long main_len;
+    long* main_effects;
     float* main_strength;
-    long   int_len;
-    long*  int_i;
-    long*  int_j;
+    long int_len;
+    long* int_i;
+    long* int_j;
     float* int_strength;
-    long   trip_len;
-    long*  trip_a;
-    long*  trip_b;
-    long*  trip_c;
+    long trip_len;
+    long* trip_a;
+    long* trip_b;
+    long* trip_c;
     float* trip_strength;
 };
 
-struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets *beta_sets) {
+struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets)
+{
     long main_len = beta_sets->beta1.size();
     long int_len = beta_sets->beta2.size();
     long trip_len = beta_sets->beta3.size();
@@ -33,33 +34,33 @@ struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets *beta_sets) {
 
     long main_offset = 0;
     for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end(); it++) {
-        main_effects[main_offset] = it->first+1;
+        main_effects[main_offset] = it->first + 1;
         main_strength[main_offset] = it->second;
         main_offset++;
     }
     long int_offset = 0;
     for (auto it = beta_sets->beta2.begin(); it != beta_sets->beta2.end(); it++) {
         long val = it->first;
-        std::tuple<long,long> ij = val_to_pair(val, p);
-        int_i[int_offset] = std::get<0>(ij)+1;
-        int_j[int_offset] = std::get<1>(ij)+1;
+        std::tuple<long, long> ij = val_to_pair(val, p);
+        int_i[int_offset] = std::get<0>(ij) + 1;
+        int_j[int_offset] = std::get<1>(ij) + 1;
         int_strength[int_offset] = it->second;
         int_offset++;
     }
     long trip_offset = 0;
     for (auto it = beta_sets->beta3.begin(); it != beta_sets->beta3.end(); it++) {
         long val = it->first;
-        std::tuple<long,long,long> ij = val_to_triplet(val, p);
-        trip_a[trip_offset] = std::get<0>(ij)+1;
-        trip_b[trip_offset] = std::get<1>(ij)+1;
-        trip_c[trip_offset] = std::get<2>(ij)+1;
+        std::tuple<long, long, long> ij = val_to_triplet(val, p);
+        trip_a[trip_offset] = std::get<0>(ij) + 1;
+        trip_b[trip_offset] = std::get<1>(ij) + 1;
+        trip_c[trip_offset] = std::get<2>(ij) + 1;
         trip_strength[trip_offset] = it->second;
         trip_offset++;
     }
 
-    return C_Beta_Sets {main_len, main_effects, main_strength,
+    return C_Beta_Sets{ main_len, main_effects, main_strength,
         int_len, int_i, int_j, int_strength,
-        trip_len, trip_a, trip_b, trip_c, trip_strength};
+        trip_len, trip_a, trip_b, trip_c, trip_strength };
 }
 
 extern "C" {
@@ -91,19 +92,28 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     SEXP all_effects = PROTECT(allocVector(VECSXP, 9));
 
     for (long i = 0; i < cbs.main_len; i++) {
-        INTEGER(main_i)[i] = cbs.main_effects[i];
-        REAL(main_strength)[i] = cbs.main_strength[i];
+        INTEGER(main_i)
+        [i] = cbs.main_effects[i];
+        REAL(main_strength)
+        [i] = cbs.main_strength[i];
     }
     for (long i = 0; i < cbs.int_len; i++) {
-        INTEGER(int_i)[i] = cbs.int_i[i];
-        INTEGER(int_j)[i] = cbs.int_j[i];
-        REAL(int_strength)[i] = cbs.int_strength[i];
+        INTEGER(int_i)
+        [i] = cbs.int_i[i];
+        INTEGER(int_j)
+        [i] = cbs.int_j[i];
+        REAL(int_strength)
+        [i] = cbs.int_strength[i];
     }
     for (long i = 0; i < cbs.trip_len; i++) {
-        INTEGER(trip_a)[i] = cbs.trip_a[i];
-        INTEGER(trip_b)[i] = cbs.trip_b[i];
-        INTEGER(trip_c)[i] = cbs.trip_c[i];
-        REAL(trip_strength)[i] = cbs.trip_strength[i];
+        INTEGER(trip_a)
+        [i] = cbs.trip_a[i];
+        INTEGER(trip_b)
+        [i] = cbs.trip_b[i];
+        INTEGER(trip_c)
+        [i] = cbs.trip_c[i];
+        REAL(trip_strength)
+        [i] = cbs.trip_strength[i];
     }
 
     free(cbs.int_i);
@@ -166,10 +176,10 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     enum LOG_LEVEL log_level = NONE;
     switch (log_level_enum) {
-        case 1:
-            log_level = LAMBDA;
-        case 2:
-            log_level = ITER;
+    case 1:
+        log_level = LAMBDA;
+    case 2:
+        log_level = ITER;
     }
 
     if (log_level != NONE) {
@@ -203,7 +213,6 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     XMatrix xmatrix;
     xmatrix.actual_cols = n;
     xmatrix.X = X;
-
 
     Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),

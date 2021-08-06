@@ -811,7 +811,7 @@ static void check_permutation()
     parallel_shuffle(perm, perm_size / threads, perm_size % threads, threads);
 
     // found = malloc(perm_size * sizeof *found);
-    found = new long[perm_size];//malloc(perm_size * sizeof(long));
+    found = new long[perm_size]; //malloc(perm_size * sizeof(long));
     memset(found, 0, perm_size);
     for (long i = 0; i < perm_size; i++) {
         long val = perm->data[i];
@@ -1132,7 +1132,6 @@ struct to_append {
     long length;
 };
 
-
 //void target_setup(XMatrixSparse *Xc, XMatrix *xm) {
 //  long n = Xc->n;
 //  long p = Xc->p;
@@ -1410,7 +1409,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("getting time for un-pruned version: lambda min = %f\n", LAMBDA_MIN);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     // for (long lambda_ind = 0; lambda_ind < seq_length; lambda_ind ++) {
-    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/n; lambda *= 0.9) {
+    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN / n; lambda *= 0.9) {
         //long nz_beta = beta_sets.beta1.size()
         //+beta_sets.beta2.size()
         //+beta_sets.beta3.size();
@@ -1502,7 +1501,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     Active_Set active_set = active_set_new(p_int, p);
-    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN/(n/2); lambda *= 0.9) {
+    for (float lambda = 10000 * fixture->n / 2; lambda > LAMBDA_MIN / (n / 2); lambda *= 0.9) {
         long nz_beta = 0;
         // #pragma omp parallel for schedule(static) reduction(+:nz_beta)
         //for (auto it = beta_pruning.begin(); it != beta_pruning.end(); it++) {
@@ -1646,13 +1645,13 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     printf("basic had %ld nz beta, pruning had %ld\n", nz_beta_basic, nz_beta_pruning);
 
-    printf("basic error %.2f \t pruned err %.2f, %.0f%%\n", basic_error, pruned_error, 100.0*pruned_error/basic_error);
+    printf("basic error %.2f \t pruned err %.2f, %.0f%%\n", basic_error, pruned_error, 100.0 * pruned_error / basic_error);
     //printf("pruning time is composed of %.2f pruning, %.2f working set "
     //       "updates, "
     //       "and %.2f subproblem time\n",
     //       pruning_time, working_set_update_time, subproblem_time);
     g_assert_true(
-        pruned_error/basic_error < 1.05);
+        pruned_error / basic_error < 1.05);
 
     printf("working set upates were: %.2f main effect col, %.2f long col, %.2f "
            "reused col\n",
@@ -2060,13 +2059,13 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
 
     Sparse_Betas beta1;
     beta1.count = 5;
-    beta1.indices = new long[5] { 1, 4, 7, 21, 35 };
-    beta1.values = new float[5] { 1.2, -2.1, 2.1, 13.0, -11.2 };
+    beta1.indices = new long[5]{ 1, 4, 7, 21, 35 };
+    beta1.values = new float[5]{ 1.2, -2.1, 2.1, 13.0, -11.2 };
 
     Sparse_Betas beta2;
     beta2.count = 6;
-    beta2.indices = new long[6] { 1, 4, 7, 21, 35, 107 };
-    beta2.values = new float[6] { 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
+    beta2.indices = new long[6]{ 1, 4, 7, 21, 35, 107 };
+    beta2.values = new float[6]{ 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
 
     g_assert_true(beta2.indices[1] == 4);
     g_assert_true(fabs(beta2.values[2] - 2.3) < 0.001);
@@ -2091,27 +2090,30 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     free(beta2.values);
 }
 
-
 static struct pruning_test_setup_details accuracy_setup = {
     2000, 1000,
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
-    false};
+    false
+};
 static struct pruning_test_setup_details faster_setup = {
     1000, 100,
     "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
     "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
-    true};
+    true
+};
 static struct pruning_test_setup_details big_setup = {
     2000, 1000,
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
-    true};
+    true
+};
 static struct pruning_test_setup_details bigger_setup = {
     10000, 5000,
     "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv",
     "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv",
-    true};
+    true
+};
 
 int main(int argc, char* argv[])
 {

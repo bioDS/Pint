@@ -21,8 +21,8 @@ int main(int argc, const char** argv)
     int depth = atoi(argv[3]);
     printf("using depth: %d (%s)\n", depth, argv[3]);
     if (depth < 1 || depth > 3) {
-      printf("depth must be between 1 and 3 inclusive.\n");
-      exit(EXIT_FAILURE);
+        printf("depth must be between 1 and 3 inclusive.\n");
+        exit(EXIT_FAILURE);
     }
     const char* verbose = argv[4];
     printf("verbose: %s\n", verbose);
@@ -51,7 +51,7 @@ int main(int argc, const char** argv)
     float lambda;
 
     if ((lambda = strtod(argv[5], NULL)) == 0)
-        lambda =-1;
+        lambda = -1;
     printf("using lambda = %f\n", lambda);
 
     long N = atoi(argv[6]);

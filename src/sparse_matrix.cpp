@@ -18,7 +18,8 @@ void free_sparse_matrix(XMatrixSparse X)
     free(X.cols);
 }
 
-void free_row_set(struct row_set rs) {
+void free_row_set(struct row_set rs)
+{
     for (int i = 0; i < rs.num_rows; i++) {
         if (NULL != rs.rows[i])
             free(rs.rows[i]);
@@ -84,7 +85,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
         max_interaction_distance = p;
     printf("p_int: %ld\n", p_int);
 
-    X2.cols = (S8bCol *)malloc(sizeof *X2.cols * p_int);
+    X2.cols = (S8bCol*)malloc(sizeof *X2.cols * p_int);
 
     long done_percent = 0;
     long total_count = 0;
@@ -148,7 +149,7 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
                     if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
                         S8bWord* word = (S8bWord*)malloc(sizeof(
                             S8bWord)); // we (maybe?) can't rely on this being the size of a
-                            // pointer, so we'll add by reference
+                        // pointer, so we'll add by reference
                         S8bWord tempword = to_s8b(count, col_entries);
                         total_count += count;
                         memcpy(word, &tempword, sizeof(S8bWord));
@@ -227,7 +228,8 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     return X2;
 }
 
-void free_host_X(X_uncompressed *Xu) {
+void free_host_X(X_uncompressed* Xu)
+{
     free(Xu->host_X);
     free(Xu->host_col_nz);
     free(Xu->host_col_offsets);
@@ -238,17 +240,17 @@ void free_host_X(X_uncompressed *Xu) {
 
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
-    long* host_X =              (long*)calloc(Xc->total_entries, sizeof(long));
-    long* host_col_nz =         (long*)calloc(Xc->p, sizeof(long));
-    long* host_col_offsets =    (long*)calloc(Xc->p, sizeof(long));
-    long* host_X_row =          (long*)calloc(Xc->total_entries, sizeof(long));
-    long* host_row_nz =         (long*)calloc(Xc->n, sizeof(long));
-    long* host_row_offsets =    (long*)calloc(Xc->n, sizeof(long));
+    long* host_X = (long*)calloc(Xc->total_entries, sizeof(long));
+    long* host_col_nz = (long*)calloc(Xc->p, sizeof(long));
+    long* host_col_offsets = (long*)calloc(Xc->p, sizeof(long));
+    long* host_X_row = (long*)calloc(Xc->total_entries, sizeof(long));
+    long* host_row_nz = (long*)calloc(Xc->n, sizeof(long));
+    long* host_row_offsets = (long*)calloc(Xc->n, sizeof(long));
     long p = Xc->p;
     long n = Xc->n;
 
     // row-major dense X, for creating row inverted lists.
-    char(*full_X)[p] = (char (*)[p])calloc(n * p, sizeof(char));
+    char(*full_X)[p] = (char(*)[p])calloc(n * p, sizeof(char));
 
     // read through compressed matrix and construct continuous
     // uncompressed matrix

@@ -5,10 +5,10 @@
 static long log_file_offset;
 static int int_print_len;
 
-void init_print(FILE *log_file, long n, long p, long num_betas, const char** job_args,
+void init_print(FILE* log_file, long n, long p, long num_betas, const char** job_args,
     long job_args_num)
 {
-    int_print_len = std::log10(p*p*p) + 1;
+    int_print_len = std::log10(p * p * p) + 1;
     fprintf(log_file, "still running\n");
     for (long i = 0; i < job_args_num; i++) {
         fprintf(log_file, "%s ", job_args[i]);
@@ -20,7 +20,6 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
     fprintf(log_file, "%ld, %ld\n", n, p);
     log_file_offset = ftell(log_file);
 }
-
 
 // print to log: metadata required to resume from the log
 FILE* init_log(const char* filename, long n, long p, long num_betas, const char** job_args,
@@ -125,15 +124,15 @@ long check_can_restore_from_log(const char* filename, long n, long p, long num_b
 }
 
 // returns the opened log for future use.
-FILE* restore_from_log(const char* filename, bool check_args, long n, long p, 
+FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
     const char** job_args, long job_args_num, long* actual_iter,
     long* actual_lambda_count, float* actual_lambda_value,
-    Beta_Value_Sets *actual_beta_sets)
+    Beta_Value_Sets* actual_beta_sets)
 {
 
     long num_betas = 100;
     FILE* log_file = fopen(filename, "r+");
-    long buf_size = num_betas * (16+int_print_len) + 500;
+    long buf_size = num_betas * (16 + int_print_len) + 500;
     char* buffer = new char[buf_size];
     long beta1_size = -1, beta2_size = -1, beta3_size = -1;
     Rprintf("restoring from log\n");
@@ -145,7 +144,7 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
     ret = fgets(buffer, buf_size, log_file);
     ret = fgets(buffer, buf_size, log_file); // contains n, p
     sscanf(buffer, "%ld, %ld", &n, &p);
-    int_print_len = std::log10(p*p*p) + 1;
+    int_print_len = std::log10(p * p * p) + 1;
     log_file_offset = ftell(log_file);
     // init_print(log_file, n, p, num_betas, job_args, job_args_num);
 
@@ -159,11 +158,11 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
         // buffer contains ' %ld, %ld, %ld' [entries in row 1,2,3]
         sscanf(buffer, " %ld, %ld, %ld\n", &beta1_size, &beta2_size, &beta3_size);
         printf(": beta sizes: %ld, %ld, %ld\n", beta1_size, beta2_size, beta3_size);
-        long max_size = std::max(beta1_size, std::max(beta2_size, beta3_size))*(16+int_print_len);
+        long max_size = std::max(beta1_size, std::max(beta2_size, beta3_size)) * (16 + int_print_len);
         if (max_size > buf_size) {
             printf("setting new buf size for %ld entries\n", max_size);
             buf_size = max_size;
-            buffer = (char*)realloc(buffer, buf_size*(16+int_print_len) + 500);
+            buffer = (char*)realloc(buffer, buf_size * (16 + int_print_len) + 500);
         }
         printf(": using buf size: %ld\n", buf_size);
     };
@@ -263,7 +262,7 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
         // we actually only need the beta values, which are on the current line.
 
         // read beta 1/2/3 from the next three lines
-        auto read_beta = [&](auto beta_size, auto *beta_set) {
+        auto read_beta = [&](auto beta_size, auto* beta_set) {
             long offset = 0;
             ret = fgets(buffer, buf_size, log_file);
             if (NULL == ret) {
@@ -292,7 +291,7 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
         read_beta(beta3_size, &actual_beta_sets->beta3);
     }
 
-    delete [] buffer;
+    delete[] buffer;
     Rprintf("done restoring from log\n");
     return log_file;
 }
