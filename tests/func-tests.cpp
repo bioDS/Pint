@@ -18,7 +18,7 @@ using namespace std;
 
 #define HALT_ERROR_DIFF 1.01
 
-struct timespec start_time, end_time;
+extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, long depth);
