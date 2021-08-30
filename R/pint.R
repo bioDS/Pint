@@ -36,7 +36,7 @@ read_log <- function(log_filename="regression.log") {
     return(process_result(result))
 }
 
-interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none") {
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE) {
     Ym = as.matrix(Y)
     if (!dim(Ym)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
@@ -57,11 +57,29 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
 
     tmp = apply(X,2, `%*%`, Y)
     lambda_max = max(abs(tmp))
+    if (is.na(lambda_max)) {
+        stop(sprintf("cannot start at lambda_max of %d, ensure input does not contain NA\n", lambda_max))
+    }
     rm(tmp)
 
-    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, use_adaptive_calibration, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum)
+    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, use_adaptive_calibration, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased)
 
     rm(Ym)
 
-    return(process_result(result))
+    result_regularized <- process_result(result[[1]])
+    if (estimate_unbiased) {
+        result_unbiased <- process_result(result[[2]])
+    }
+    final_lambda <- result[[3]]
+
+
+    all_stats <- list(
+        "final_lambda" = final_lambda,
+        "regularized_results" = result_regularized
+    )
+    if (estimate_unbiased) {
+        all_stats <- c(all_stats, list("estimate_unbiased" = result_unbiased))
+    }
+
+    return(all_stats)
 }

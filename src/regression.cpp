@@ -143,6 +143,120 @@ float calculate_error(float* Y, float* rowsum, long n)
 float halt_error_diff;
 static auto rng = std::default_random_engine();
 
+void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
+    float* old_rowsum, Active_Set* active_set,
+    struct OpenCL_Setup* ocl_setup, long depth) {
+    XMatrixSparse Xc = vars->Xc;
+    X_uncompressed Xu = vars->Xu;
+    float** last_rowsum = vars->last_rowsum;
+    Thread_Cache* thread_caches = vars->thread_caches;
+    long n = vars->n;
+    Beta_Value_Sets* beta_sets = vars->beta_sets;
+    robin_hood::unordered_flat_map<long, float>* beta1 = &beta_sets->beta1;
+    robin_hood::unordered_flat_map<long, float>* beta2 = &beta_sets->beta2;
+    robin_hood::unordered_flat_map<long, float>* beta3 = &beta_sets->beta3;
+    robin_hood::unordered_flat_map<long, float>* beta = &beta_sets->beta3; // TODO: dont
+    float* last_max = vars->last_max;
+    bool* wont_update = vars->wont_update;
+    long p = vars->p;
+    long p_int = vars->p_int;
+    float* Y = vars->Y;
+    float* max_int_delta = vars->max_int_delta;
+    int_pair* precalc_get_num = vars->precalc_get_num;
+    long new_nz_beta = 0;
+    //gsl_permutation* iter_permutation = vars->iter_permutation;
+    // gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
+    //gsl_permutation* perm;
+
+    float error = 0.0;
+    for (long i = 0; i < n; i++) {
+        error += rowsum[i] * rowsum[i];
+    }
+    std::vector<std::pair<long, AS_Entry>> entry_vec1;
+    entry_vec1.reserve(active_set->entries1.size());
+    std::vector<std::pair<long, AS_Entry>> entry_vec2;
+    entry_vec2.reserve(active_set->entries2.size());
+    std::vector<std::pair<long, AS_Entry>> entry_vec3;
+    entry_vec3.reserve(active_set->entries3.size());
+
+    for (auto& e : active_set->entries1)
+        entry_vec1.push_back(std::make_pair(e.first, e.second));
+    for (auto& e : active_set->entries2)
+        entry_vec2.push_back(std::make_pair(e.first, e.second));
+    for (auto& e : active_set->entries3)
+        entry_vec3.push_back(std::make_pair(e.first, e.second));
+
+    std::shuffle(entry_vec1.begin(), entry_vec1.end(), rng);
+    std::shuffle(entry_vec2.begin(), entry_vec2.end(), rng);
+    std::shuffle(entry_vec3.begin(), entry_vec3.end(), rng);
+
+    auto run_beta = [&](auto* current_beta_set, auto& as_entries) {
+        for (const auto& it : as_entries) {
+            long k = std::get<0>(it);
+            AS_Entry entry = std::get<1>(it);
+            if (entry.present) {
+                long was_zero = TRUE;
+                if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0)
+                    was_zero = FALSE;
+                total_beta_updates++;
+                Changes changes = update_beta_cyclic(
+                    entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                    precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+                if (changes.actual_diff == 0.0) {
+                } else {
+                    total_beta_nz_updates++;
+                }
+                if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
+                    new_nz_beta++;
+                }
+                if (!was_zero && changes.removed) {
+                    new_nz_beta--;
+                }
+            } else {
+            }
+        }
+    };
+    long iter = 0;
+    for (iter = 0; iter < 100; iter++) {
+        if (VERBOSE)
+            printf("iter %ld\n", iter);
+        float prev_error = error;
+        // update entire working set
+        // #pragma omp parallel for num_threads(NumCores) schedule(static)
+        // shared(Y, rowsum, beta, precalc_get_num, perm)
+        // reduction(+:total_unchanged, total_changed, total_present,
+        // total_notpresent, new_nz_beta, total_beta_updates,
+        // total_beta_nz_updates)
+
+        auto print_entries = [&](robin_hood::unordered_flat_map<long, AS_Entry>* entries,
+                                 robin_hood::unordered_flat_map<long, float>* current_beta_set) {
+            printf("set contains: { ");
+            for (auto it = entries->begin(); it != entries->end(); it++) {
+                printf("%ld, ", it->first);
+            }
+            printf("}\n");
+        };
+
+        run_beta(&beta_sets->beta1, entry_vec1);
+        run_beta(&beta_sets->beta2, entry_vec2);
+        run_beta(&beta_sets->beta3, entry_vec3);
+
+        // check whether we need another iteration
+        error = 0.0;
+        for (long i = 0; i < n; i++) {
+            error += rowsum[i] * rowsum[i];
+        }
+        error = sqrt(error);
+        if (VERBOSE)
+            printf("error: %f\n", error);
+        if (prev_error / error < halt_error_diff) {
+            if (VERBOSE)
+                printf("done lambda %f after %ld iters\n", lambda, iter + 1);
+            break;
+        }
+    }
+}
+
 long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
     struct OpenCL_Setup* ocl_setup, long depth)
@@ -434,12 +548,12 @@ double phi_inv(double x)
 }
 
 float total_sqrt_error = 0.0;
-Beta_Value_Sets simple_coordinate_descent_lasso(
+Lasso_Result simple_coordinate_descent_lasso(
     XMatrix xmatrix, float* Y, long n, long p, long max_interaction_distance,
     float lambda_min, float lambda_max, long max_iter, long verbose,
     float frac_overlap_allowed, float hed, enum LOG_LEVEL log_level,
     const char** job_args, long job_args_num, long use_adaptive_calibration,
-    long mnz_beta, const char* log_filename, long depth)
+    long mnz_beta, const char* log_filename, long depth, char estimate_unbiased)
 {
     long max_nz_beta = mnz_beta;
     printf("n: %ld, p: %ld\n", n, p);
@@ -808,6 +922,42 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
         free(beta_sequence.betas);
         free(beta_sequence.lambdas);
     }
+    
+    /*
+     * Optionally attempt to provide an un-regularised estimate of the
+     * beta values for the current working set.
+    */
+    robin_hood::unordered_flat_map<long, float> unbiased_beta1;
+    robin_hood::unordered_flat_map<long, float> unbiased_beta2;
+    robin_hood::unordered_flat_map<long, float> unbiased_beta3;
+    Beta_Value_Sets unbiased_beta_sets = { unbiased_beta1, unbiased_beta2, unbiased_beta3, p };
+    if (estimate_unbiased) {
+        printf("original_error: %f\n", calculate_error(Y, rowsum, n));
+        unbiased_beta1 = beta1;
+        unbiased_beta2 = beta2;
+        unbiased_beta3 = beta3;
+        Iter_Vars iter_vars_pruned = {
+            Xc,
+            last_rowsum,
+            thread_caches,
+            n,
+            &unbiased_beta_sets,
+            last_max,
+            wont_update,
+            p,
+            p_int,
+            X2c_fake,
+            Y,
+            max_int_delta,
+            NULL,
+            NULL,
+            Xu,
+        };
+        // run_lambda_iters_pruned(&iter_vars_pruned, 0.0, rowsum,
+        subproblem_only(&iter_vars_pruned, 0.0, rowsum,
+            old_rowsum, &active_set, &ocl_setup, depth);
+        printf("un-regularized error: %f\n", calculate_error(Y, rowsum, n));
+    }
 
     // free beta sets
     free_sparse_matrix(Xc);
@@ -852,7 +1002,11 @@ Beta_Value_Sets simple_coordinate_descent_lasso(
     free(old_rowsum);
     free_inter_cache(p);
 
-    return beta_sets;
+    Lasso_Result result;
+    result.regularized_result = beta_sets;
+    result.unbiased_result = unbiased_beta_sets;
+    result.final_lambda = lambda;
+    return result;
 }
 
 static long firstchanged = FALSE;

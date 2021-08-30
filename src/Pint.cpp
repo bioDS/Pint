@@ -155,7 +155,7 @@ SEXP read_log_(SEXP log_filename_)
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
     SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_)
+    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -194,6 +194,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     long use_adaptive_calibration = asLogical(use_adaptive_calibration_);
 
+    char estimate_unbiased = asLogical(estimate_unbiased_);
+
     float halt_error_diff = asReal(halt_error_diff_);
 
     long** X = (long**)malloc(p * sizeof *X);
@@ -214,13 +216,26 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.actual_cols = n;
     xmatrix.X = X;
 
-    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
+    // Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
+    Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,
         halt_error_diff, log_level, NULL, 0, use_adaptive_calibration,
-        max_nz_beta, log_filename, depth);
+        max_nz_beta, log_filename, depth, estimate_unbiased);
+    float final_lambda = lasso_result.final_lambda;
 
-    SEXP all_effects = process_beta(&beta_sets);
+    SEXP regularized_effects = process_beta(&lasso_result.regularized_result);
+    SEXP unbiased_effects = process_beta(&lasso_result.unbiased_result);
+
+    SEXP results = PROTECT(allocVector(VECSXP, 3));
+    SEXP final_lambda_sexp = PROTECT(allocVector(REALSXP, 1));
+    REAL(final_lambda_sexp)[0] = final_lambda;
+    UNPROTECT(1);
+
+    SET_VECTOR_ELT(results, 0, regularized_effects);
+    SET_VECTOR_ELT(results, 1, unbiased_effects);
+    SET_VECTOR_ELT(results, 2, final_lambda_sexp);
+    UNPROTECT(3);
 
     free_static_resources();
 
@@ -229,7 +244,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     free(X);
     free(Y);
 
-    return all_effects;
+    return results;
 }
 
 static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 7 },

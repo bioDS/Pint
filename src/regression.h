@@ -23,12 +23,12 @@ typedef struct {
     bool removed;
 } Changes;
 
-Beta_Value_Sets simple_coordinate_descent_lasso(
+Lasso_Result simple_coordinate_descent_lasso(
     XMatrix X, float* Y, long n, long p, long max_interaction_distance,
     float lambda_min, float lambda_max, long max_iter, long VERBOSE,
     float frac_overlap_allowed, float halt_beta_diff,
     enum LOG_LEVEL log_level, const char** job_args, long job_args_num,
-    long use_adaptive_calibration, long max_nz_beta, const char* log_filename, long depth);
+    long use_adaptive_calibration, long max_nz_beta, const char* log_filename, long depth, char estimate_unbiased);
 float update_intercept_cyclic(float intercept, long** X, float* Y,
     robin_hood::unordered_flat_map<long, float>* beta, long n, long p);
 // Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, float *Y,

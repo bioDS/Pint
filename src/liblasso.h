@@ -1,3 +1,6 @@
+#ifndef LIBLASSO_H
+#define LIBLASSO_h
+
 // #define interesting_col 58
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
@@ -133,6 +136,12 @@ typedef struct {
 } Beta_Value_Sets;
 
 typedef struct {
+    Beta_Value_Sets regularized_result;
+    Beta_Value_Sets unbiased_result;
+    float final_lambda;
+} Lasso_Result;
+
+typedef struct {
     XMatrixSparse Xc;
     float** last_rowsum;
     Thread_Cache* thread_caches;
@@ -210,3 +219,5 @@ extern gsl_permutation* global_permutation_inverse;
 extern int_pair* cached_nums;
 extern long VERBOSE;
 extern float total_sqrt_error;
+
+#endif
