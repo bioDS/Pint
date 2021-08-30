@@ -516,9 +516,10 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
     long p_int = fixture->p * (fixture->p + 1) / 2;
     robin_hood::unordered_flat_map<long, float> beta = fixture->beta;
 
-    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
+    Lasso_Result lr = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2);
+        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2, FALSE);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
     beta = beta_sets.beta3; //TODO: don't
 
     float acceptable_diff = 10;
@@ -1200,11 +1201,12 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     printf("starting accuracy test\n");
     long use_adcal = FALSE;
     const char* log_file = "test.log";
-    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        77, log_file, 2);
+        77, log_file, 2, FALSE);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
 
     vector<pair<int, int>> true_effects = {
         { 79, 432 },
@@ -1295,11 +1297,12 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         { 107, 382 },
     };
 
-    beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+    lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 47504180,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        500, "test.log", 2);
+        500, "test.log", 2, FALSE);
+    beta_sets = lr.regularized_result;
 
     check_results();
     // beta_sets.beta2;
@@ -1848,11 +1851,12 @@ void trivial_3way_test()
     X_uncompressed Xu = construct_host_X(&Xc);
 
     const long use_adcal = FALSE;
-    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(X, Y, n, p,
+    Lasso_Result lr = simple_coordinate_descent_lasso(X, Y, n, p,
         -1, 0.01, 100,
         100, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        7, "test.log", 3);
+        7, "test.log", 3, FALSE);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
     long total_effects = 0;
@@ -2073,7 +2077,8 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     long result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth, FALSE);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
 
     long final_iter, final_lambda_count;
     float final_lambda_value;
