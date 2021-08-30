@@ -195,24 +195,11 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
             long k = std::get<0>(it);
             AS_Entry entry = std::get<1>(it);
             if (entry.present) {
-                long was_zero = TRUE;
-                if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0)
-                    was_zero = FALSE;
-                total_beta_updates++;
-                Changes changes = update_beta_cyclic(
-                    entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
-                    precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
-                if (changes.actual_diff == 0.0) {
-                } else {
-                    total_beta_nz_updates++;
+                if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0) {
+                    update_beta_cyclic(
+                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                        precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
                 }
-                if (was_zero && fabs(changes.actual_diff) > (double)0.0) {
-                    new_nz_beta++;
-                }
-                if (!was_zero && changes.removed) {
-                    new_nz_beta--;
-                }
-            } else {
             }
         }
     };
@@ -227,15 +214,6 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
         // reduction(+:total_unchanged, total_changed, total_present,
         // total_notpresent, new_nz_beta, total_beta_updates,
         // total_beta_nz_updates)
-
-        auto print_entries = [&](robin_hood::unordered_flat_map<long, AS_Entry>* entries,
-                                 robin_hood::unordered_flat_map<long, float>* current_beta_set) {
-            printf("set contains: { ");
-            for (auto it = entries->begin(); it != entries->end(); it++) {
-                printf("%ld, ", it->first);
-            }
-            printf("}\n");
-        };
 
         run_beta(&beta_sets->beta1, entry_vec1);
         run_beta(&beta_sets->beta2, entry_vec2);
@@ -933,9 +911,12 @@ Lasso_Result simple_coordinate_descent_lasso(
     Beta_Value_Sets unbiased_beta_sets = { unbiased_beta1, unbiased_beta2, unbiased_beta3, p };
     if (estimate_unbiased) {
         printf("original_error: %f\n", calculate_error(Y, rowsum, n));
-        unbiased_beta1 = beta1;
-        unbiased_beta2 = beta2;
-        unbiased_beta3 = beta3;
+        for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end(); it++)
+            unbiased_beta_sets.beta1[it->first] = it->second;
+        for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end(); it++)
+            unbiased_beta_sets.beta2[it->first] = it->second;
+        for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end(); it++)
+            unbiased_beta_sets.beta3[it->first] = it->second;
         Iter_Vars iter_vars_pruned = {
             Xc,
             last_rowsum,
