@@ -20,11 +20,11 @@ process_result <- function(result) {
     strength <- result[[5]]
     df_int <- data.frame(i,j,strength)
 
-    a <- result[[6]]
-    b <- result[[7]]
-    c <- result[[8]]
+    i <- result[[6]]
+    j <- result[[7]]
+    k <- result[[8]]
     strength <- result[[9]]
-    df_trip <- data.frame(a,b,c,strength)
+    df_trip <- data.frame(i,j,k,strength)
 
     intercept <- result[[10]]
 
