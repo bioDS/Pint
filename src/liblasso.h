@@ -139,6 +139,8 @@ typedef struct {
     Beta_Value_Sets regularized_result;
     Beta_Value_Sets unbiased_result;
     float final_lambda;
+    float regularized_intercept;
+    float unbiased_intercept;
 } Lasso_Result;
 
 typedef struct {
@@ -158,6 +160,7 @@ typedef struct {
     int_pair* precalc_get_num;
     gsl_permutation* iter_permutation;
     struct X_uncompressed Xu;
+    float intercept;
 } Iter_Vars;
 
 #include "csv.h"

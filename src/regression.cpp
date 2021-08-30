@@ -44,6 +44,20 @@ void check_beta_order(robin_hood::unordered_flat_map<long, float>* beta,
     }
 }
 
+float update_intercept(float *rowsum, float *Y, int n, float lambda, float intercept) {
+    float sumn = 0.0;
+    for (int i = 0; i < n; i++) {
+        sumn -= rowsum[i];
+    }
+    float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / n; // square root lasso
+    float diff = new_value - intercept;
+    
+    for (int i = 0; i < n; i++) {
+        rowsum[i] += diff;
+    }
+    return new_value;
+}
+
 // check a particular pair of betas in the adaptive calibration scheme
 long adaptive_calibration_check_beta(float c_bar, float lambda_1,
     Sparse_Betas* beta_1, float lambda_2,
@@ -145,7 +159,7 @@ static auto rng = std::default_random_engine();
 
 void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, long depth) {
+    struct OpenCL_Setup* ocl_setup, long depth, char use_intercept) {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
     float** last_rowsum = vars->last_rowsum;
@@ -197,7 +211,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
             if (entry.present) {
                 if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0) {
                     update_beta_cyclic(
-                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
                         precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
                 }
             }
@@ -208,6 +222,10 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
         if (VERBOSE)
             printf("iter %ld\n", iter);
         float prev_error = error;
+        
+        if (use_intercept) {
+            vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
+        }
         // update entire working set
         // #pragma omp parallel for num_threads(NumCores) schedule(static)
         // shared(Y, rowsum, beta, precalc_get_num, perm)
@@ -237,7 +255,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
 
 long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, long depth)
+    struct OpenCL_Setup* ocl_setup, long depth, char use_intercept)
 {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
@@ -410,7 +428,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                         was_zero = FALSE;
                     total_beta_updates++;
                     Changes changes = update_beta_cyclic(
-                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, 0,
+                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
                         precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
                     if (changes.actual_diff == 0.0) {
                         total_unchanged++;
@@ -450,6 +468,9 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                 printf("}\n");
             };
 
+            if (use_intercept) {
+                vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
+            }
             run_beta(&beta_sets->beta1, entry_vec1);
             run_beta(&beta_sets->beta2, entry_vec2);
             run_beta(&beta_sets->beta3, entry_vec3);
@@ -531,7 +552,8 @@ Lasso_Result simple_coordinate_descent_lasso(
     float lambda_min, float lambda_max, long max_iter, long verbose,
     float frac_overlap_allowed, float hed, enum LOG_LEVEL log_level,
     const char** job_args, long job_args_num, long use_adaptive_calibration,
-    long mnz_beta, const char* log_filename, long depth, char estimate_unbiased)
+    long mnz_beta, const char* log_filename, long depth,
+    char estimate_unbiased, char use_intercept)
 {
     long max_nz_beta = mnz_beta;
     printf("n: %ld, p: %ld\n", n, p);
@@ -734,6 +756,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         rowsum[i] = -Y[i];
     }
     XMatrixSparse X2c_fake;
+    intercept = 0.0;
     Iter_Vars iter_vars_pruned = {
         Xc,
         last_rowsum,
@@ -750,6 +773,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         NULL,
         NULL,
         Xu,
+        intercept
     };
     long nz_beta = 0;
     // struct OpenCL_Setup ocl_setup = setup_working_set_kernel(Xu, n, p);
@@ -778,7 +802,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         if (VERBOSE)
             printf("nz_beta %ld\n", nz_beta);
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth);
+            old_rowsum, &active_set, &ocl_setup, depth, use_intercept);
 
         {
             long nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
@@ -838,6 +862,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         }
         lambda_count++;
     }
+    intercept = iter_vars_pruned.intercept;
     iter_count = iter;
     if (log_level != NONE)
         close_log(log_file);
@@ -908,6 +933,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     robin_hood::unordered_flat_map<long, float> unbiased_beta1;
     robin_hood::unordered_flat_map<long, float> unbiased_beta2;
     robin_hood::unordered_flat_map<long, float> unbiased_beta3;
+    float unbiased_intercept = intercept;
     Beta_Value_Sets unbiased_beta_sets = { unbiased_beta1, unbiased_beta2, unbiased_beta3, p };
     if (estimate_unbiased) {
         printf("original_error: %f\n", calculate_error(Y, rowsum, n));
@@ -933,11 +959,13 @@ Lasso_Result simple_coordinate_descent_lasso(
             NULL,
             NULL,
             Xu,
+            unbiased_intercept,
         };
         // run_lambda_iters_pruned(&iter_vars_pruned, 0.0, rowsum,
         subproblem_only(&iter_vars_pruned, 0.0, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth);
+            old_rowsum, &active_set, &ocl_setup, depth, use_intercept);
         printf("un-regularized error: %f\n", calculate_error(Y, rowsum, n));
+        unbiased_intercept = iter_vars_pruned.intercept;
     }
 
     // free beta sets
@@ -987,6 +1015,8 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.regularized_result = beta_sets;
     result.unbiased_result = unbiased_beta_sets;
     result.final_lambda = lambda;
+    result.regularized_intercept = intercept;
+    result.unbiased_intercept = unbiased_intercept;
     return result;
 }
 
@@ -1130,22 +1160,4 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, long n, long p,
     }
 
     return changes;
-}
-
-float update_intercept_cyclic(float intercept, long** X, float* Y,
-    robin_hood::unordered_flat_map<long, float> beta,
-    long n, long p)
-{
-    float new_intercept = 0.0;
-    float sumn = 0.0, sumx = 0.0;
-
-    for (long i = 0; i < n; i++) {
-        sumx = 0.0;
-        for (long j = 0; j < p; j++) {
-            sumx += X[i][j] * beta[j];
-        }
-        sumn += Y[i] - sumx;
-    }
-    new_intercept = sumn / n;
-    return new_intercept;
 }

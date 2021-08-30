@@ -21,7 +21,7 @@ using namespace std;
 extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
-    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, long depth);
+    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, long depth, char use_intercept);
 static long total_basic_beta_updates = 0;
 static long total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
@@ -518,7 +518,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
 
     Lasso_Result lr = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2, FALSE);
+        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     beta = beta_sets.beta3; //TODO: don't
 
@@ -1205,7 +1205,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        77, log_file, 2, FALSE);
+        77, log_file, 2, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     vector<pair<int, int>> true_effects = {
@@ -1301,7 +1301,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 47504180,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        500, "test.log", 2, FALSE);
+        500, "test.log", 2, FALSE, FALSE);
     beta_sets = lr.regularized_result;
 
     check_results();
@@ -1525,7 +1525,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, NULL, 2);
+            &active_set, NULL, 2, FALSE);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1855,7 +1855,7 @@ void trivial_3way_test()
         -1, 0.01, 100,
         100, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        7, "test.log", 3, FALSE);
+        7, "test.log", 3, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
@@ -2077,7 +2077,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     long result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth, FALSE);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     long final_iter, final_lambda_count;

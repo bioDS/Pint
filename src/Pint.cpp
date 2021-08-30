@@ -72,7 +72,7 @@ struct effect {
     float strength;
 };
 
-SEXP process_beta(Beta_Value_Sets* beta_sets)
+SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept)
 {
     struct C_Beta_Sets cbs = cpp_bs_to_c(beta_sets);
     long main_count = 0, int_count = 0;
@@ -80,6 +80,7 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     long total_int_count = cbs.int_len;
     long total_trip_count = cbs.trip_len;
 
+    SEXP intercept = PROTECT(allocVector(REALSXP, 1));
     SEXP main_i = PROTECT(allocVector(INTSXP, total_main_count));
     SEXP main_strength = PROTECT(allocVector(REALSXP, total_main_count));
     SEXP int_i = PROTECT(allocVector(INTSXP, total_int_count));
@@ -89,7 +90,7 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     SEXP trip_b = PROTECT(allocVector(INTSXP, total_trip_count));
     SEXP trip_c = PROTECT(allocVector(INTSXP, total_trip_count));
     SEXP trip_strength = PROTECT(allocVector(REALSXP, total_trip_count));
-    SEXP all_effects = PROTECT(allocVector(VECSXP, 9));
+    SEXP all_effects = PROTECT(allocVector(VECSXP, 10));
 
     for (long i = 0; i < cbs.main_len; i++) {
         INTEGER(main_i)
@@ -122,6 +123,8 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     free(cbs.trip_b);
     free(cbs.trip_c);
 
+
+    REAL(intercept)[0] = f_intercept;
     SET_VECTOR_ELT(all_effects, 0, main_i);
     SET_VECTOR_ELT(all_effects, 1, main_strength);
     SET_VECTOR_ELT(all_effects, 2, int_i);
@@ -131,8 +134,9 @@ SEXP process_beta(Beta_Value_Sets* beta_sets)
     SET_VECTOR_ELT(all_effects, 6, trip_b);
     SET_VECTOR_ELT(all_effects, 7, trip_c);
     SET_VECTOR_ELT(all_effects, 8, trip_strength);
+    SET_VECTOR_ELT(all_effects, 9, intercept);
 
-    UNPROTECT(10);
+    UNPROTECT(11);
     return all_effects;
 }
 
@@ -147,7 +151,8 @@ SEXP read_log_(SEXP log_filename_)
 
     restore_from_log(log_filename, false, 0, 0, 0, 0, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
 
-    SEXP all_effects = process_beta(&restored_beta_sets);
+    // intercept isn't in log at the moment
+    SEXP all_effects = process_beta(&restored_beta_sets, 0.0);
 
     return all_effects;
 }
@@ -155,7 +160,7 @@ SEXP read_log_(SEXP log_filename_)
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
     SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_)
+    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_, SEXP use_intercept_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -193,8 +198,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     }
 
     long use_adaptive_calibration = asLogical(use_adaptive_calibration_);
-
     char estimate_unbiased = asLogical(estimate_unbiased_);
+    char use_intercept = asLogical(use_intercept_);
 
     float halt_error_diff = asReal(halt_error_diff_);
 
@@ -221,11 +226,13 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,
         halt_error_diff, log_level, NULL, 0, use_adaptive_calibration,
-        max_nz_beta, log_filename, depth, estimate_unbiased);
+        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept);
     float final_lambda = lasso_result.final_lambda;
+    float regularized_intercept = lasso_result.regularized_intercept;
+    float unbiased_intercept = lasso_result.unbiased_intercept;
 
-    SEXP regularized_effects = process_beta(&lasso_result.regularized_result);
-    SEXP unbiased_effects = process_beta(&lasso_result.unbiased_result);
+    SEXP regularized_effects = process_beta(&lasso_result.regularized_result, regularized_intercept);
+    SEXP unbiased_effects = process_beta(&lasso_result.unbiased_result, unbiased_intercept);
 
     SEXP results = PROTECT(allocVector(VECSXP, 3));
     SEXP final_lambda_sexp = PROTECT(allocVector(REALSXP, 1));
