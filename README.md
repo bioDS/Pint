@@ -4,16 +4,31 @@
 
 This repo is an installable R package, you can install a locally cloned copy with `R CMD INSTALL ./cloned-location`.
 
-This library provides a single function that performs lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
+This library provides a single function that performs square root lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
 
 ```
-interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = 0.05, frac_overlap_allowed = 0.05, halt_error_diff=1.0001, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1)
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE) {
 ```
 A list of non-zero pairwise/interaction and main effects is returned.
 
+More precisely:
+
+`final_lambda` : the final value of $\lambda$.
+
+`intercept` : (if `use_intercept=TRUE`) the intercept value.
+
+`main_effects` : $i, \beta_i$ for individual columns $X_i$
+
+`pairwise_effects` (if `depth` $\geq 2$) $i,j, \beta_{i,j}$ for $X_i \circ X_j$
+
+`triple_effects` (if `depth` $\geq 3$) $i,j,k, \beta_{i,j,k}$ for $X_i \circ X_j \circ X_k$
+
+`estimate_unbiased` : (if `estimate_unbiased=TRUE`) $\beta_i, \beta_{i,j}, \beta_{i,j,k}$ fit with $\lambda = 0$, including only the effects that are non-zero for $lambda = $ final_lambda.
+For an estimate of the best fit, while excluding columns lasso regression sets to zero.
+
 For an example that finds non-zero interactions with pint, before finding a more accurate estimate of effect strengths and various summary statistics with lm() see `lm_example.R`
 
-# Utils
+# Standalone Executable
 There is an executable version (primarily for testing) that can be run on X/Y as .csv files.
 
 ### Build Utils
