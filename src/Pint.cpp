@@ -237,12 +237,11 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP results = PROTECT(allocVector(VECSXP, 3));
     SEXP final_lambda_sexp = PROTECT(allocVector(REALSXP, 1));
     REAL(final_lambda_sexp)[0] = final_lambda;
-    UNPROTECT(1);
+    UNPROTECT(2);
 
     SET_VECTOR_ELT(results, 0, regularized_effects);
     SET_VECTOR_ELT(results, 1, unbiased_effects);
     SET_VECTOR_ELT(results, 2, final_lambda_sexp);
-    UNPROTECT(3);
 
     free_static_resources();
 

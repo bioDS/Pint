@@ -1017,6 +1017,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.final_lambda = lambda;
     result.regularized_intercept = intercept;
     result.unbiased_intercept = unbiased_intercept;
+#pragma omp barrier
     return result;
 }
 
