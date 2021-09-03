@@ -221,7 +221,6 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.actual_cols = n;
     xmatrix.X = X;
 
-    // Beta_Value_Sets beta_sets = simple_coordinate_descent_lasso(
     Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,
@@ -231,13 +230,12 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     float regularized_intercept = lasso_result.regularized_intercept;
     float unbiased_intercept = lasso_result.unbiased_intercept;
 
-    SEXP regularized_effects = process_beta(&lasso_result.regularized_result, regularized_intercept);
-    SEXP unbiased_effects = process_beta(&lasso_result.unbiased_result, unbiased_intercept);
+    SEXP regularized_effects = PROTECT(process_beta(&lasso_result.regularized_result, regularized_intercept));
+    SEXP unbiased_effects = PROTECT(process_beta(&lasso_result.unbiased_result, unbiased_intercept));
 
     SEXP results = PROTECT(allocVector(VECSXP, 3));
     SEXP final_lambda_sexp = PROTECT(allocVector(REALSXP, 1));
     REAL(final_lambda_sexp)[0] = final_lambda;
-    UNPROTECT(2);
 
     SET_VECTOR_ELT(results, 0, regularized_effects);
     SET_VECTOR_ELT(results, 1, unbiased_effects);
@@ -250,6 +248,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     free(X);
     free(Y);
 
+    UNPROTECT(4);
     return results;
 }
 
@@ -259,7 +258,6 @@ static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 7 }
 
 void R_init_Pint(DllInfo* info)
 {
-    // R_RegisterCCallable("Pint", "lasso_", (DL_FUNC) &lasso_);
     R_registerRoutines(info, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(info, (Rboolean)FALSE);
 }
