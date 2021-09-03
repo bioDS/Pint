@@ -75,10 +75,9 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     final_lambda <- result[[3]]
 
 
-    all_stats <- list(
-        "final_lambda" = final_lambda,
-        "regularized_results" = result_regularized
-    )
+    all_stats <- c(
+        list("final_lambda" = final_lambda),
+        result_regularized)
     if (estimate_unbiased) {
         all_stats <- c(all_stats, list("estimate_unbiased" = result_unbiased))
     }
