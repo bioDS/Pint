@@ -1,29 +1,25 @@
 #include "liblasso.h"
+#include <fstream>
 
 XMatrix read_x_csv(const char* fn, long n, long p)
 {
-    char* buf = NULL;
-    size_t line_size = 0;
     long** X = (long**)malloc(p * sizeof *X);
 
     for (long i = 0; i < p; i++)
         X[i] = (long*)malloc(n * sizeof *X[i]);
 
-    FILE* fp = fopen(fn, "r");
-    if (fp == NULL) {
-        perror("opening failed");
-    }
+    std::ifstream in_file(fn, std::ifstream::in);
 
     long col = 0, row = 0, actual_cols = p;
     long readline_result = 0;
-    while ((readline_result = getline(&buf, &line_size, fp)) > 0) {
+    for (std::string buf; std::getline(in_file, buf); ) {
         // remove name from beginning (for the moment)
         long i = 1;
         while (buf[i] != '"')
             i++;
         i++;
         // read to the end of the line
-        while (buf[i] != '\n' && i < line_size) {
+        while (buf[i] != '\n' && i < buf.length()) {
             if (buf[i] == ',') {
                 i++;
                 continue;
@@ -56,7 +52,7 @@ XMatrix read_x_csv(const char* fn, long n, long p)
         printf("number of columns < p, should p have been %ld?\n", actual_cols);
         p = actual_cols;
     }
-    free(buf);
+    in_file.close();
     XMatrix xmatrix;
     xmatrix.X = X;
     xmatrix.actual_cols = actual_cols;
