@@ -1,2 +1,2 @@
-PKG_CXXFLAGS = @PKG_CFLAGS@ -std=c++14 -fopenmp -Ofast -ffast-math -flto -g -I./
+PKG_CXXFLAGS = @PKG_CFLAGS@ -std=c++14 -fopenmp -Ofast -ffast-math -flto -g -DR_PACKAGE
 PKG_LIBS = @PKG_LIBS@ -lgomp -g
