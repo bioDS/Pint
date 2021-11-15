@@ -1,15 +1,8 @@
 #ifndef LIBLASSO_H
 #define LIBLASSO_H
 
-// #define interesting_col 58
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
-// #define interesting_col 54
-// #define interesting_col 2
-//#define interesting_col 101
-//#define interesting_val 4194
-//#define interesting_col1 4  -1
-//#define interesting_col2 195 -1
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
