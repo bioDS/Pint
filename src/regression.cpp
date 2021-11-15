@@ -5,7 +5,6 @@
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
-#include <gsl/gsl_complex.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -176,11 +175,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     long p_int = vars->p_int;
     float* Y = vars->Y;
     float* max_int_delta = vars->max_int_delta;
-    int_pair* precalc_get_num = vars->precalc_get_num;
     long new_nz_beta = 0;
-    //gsl_permutation* iter_permutation = vars->iter_permutation;
-    // gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
-    //gsl_permutation* perm;
 
     float error = 0.0;
     for (long i = 0; i < n; i++) {
@@ -212,7 +207,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
                 if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0) {
                     update_beta_cyclic(
                         entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
-                        precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+                        thread_caches[omp_get_thread_num()].col_i);
                 }
             }
         }
@@ -273,11 +268,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     long p_int = vars->p_int;
     float* Y = vars->Y;
     float* max_int_delta = vars->max_int_delta;
-    int_pair* precalc_get_num = vars->precalc_get_num;
     long new_nz_beta = 0;
-    //gsl_permutation* iter_permutation = vars->iter_permutation;
-    // gsl_rng* rng = gsl_rng_alloc(gsl_rng_default);
-    //gsl_permutation* perm;
 
     float error = 0.0;
     for (long i = 0; i < n; i++) {
@@ -429,7 +420,7 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
                     total_beta_updates++;
                     Changes changes = update_beta_cyclic(
                         entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
-                        precalc_get_num, thread_caches[omp_get_thread_num()].col_i);
+                        thread_caches[omp_get_thread_num()].col_i);
                     if (changes.actual_diff == 0.0) {
                         total_unchanged++;
                     } else {
@@ -499,12 +490,8 @@ long run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
         // (float)(total_changed*100)/(float)(total_changed+total_unchanged));
         // printf("%.1f%% of active set was blank\n",
         // (float)total_present/(float)(total_present+total_notpresent));
-        //if (active_set->length > 0) {
-        //    gsl_permutation_free(perm);
-        //}
     }
 
-    // gsl_rng_free(rng);
     if (VERBOSE)
         printf("new nz beta: %ld\n", new_nz_beta);
     return new_nz_beta;
@@ -644,9 +631,6 @@ Lasso_Result simple_coordinate_descent_lasso(
     float cpu_time_used;
 
     long set_min_lambda = FALSE;
-    //gsl_permutation* iter_permutation = gsl_permutation_alloc(p_int);
-    gsl_rng* iter_rng;
-    //gsl_permutation_init(iter_permutation);
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     // final_lambda = lambda_min;
     long max_lambda_count = max_iter;
@@ -770,8 +754,6 @@ Lasso_Result simple_coordinate_descent_lasso(
         X2c_fake,
         Y,
         max_int_delta,
-        NULL,
-        NULL,
         Xu,
         intercept
     };
@@ -956,8 +938,6 @@ Lasso_Result simple_coordinate_descent_lasso(
             X2c_fake,
             Y,
             max_int_delta,
-            NULL,
-            NULL,
             Xu,
             unbiased_intercept,
         };
@@ -970,8 +950,6 @@ Lasso_Result simple_coordinate_descent_lasso(
 
     // free beta sets
     free_sparse_matrix(Xc);
-    //gsl_permutation_free(iter_permutation);
-    gsl_rng_free(iter_rng);
     for (long i = 0; i < max_num_threads; i++) {
         free(thread_column_caches[i]);
     }
@@ -1095,8 +1073,7 @@ Changes update_beta_cyclic_old(
 Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, long n, long p,
     float lambda,
     robin_hood::unordered_flat_map<long, float>* beta,
-    long k, float intercept, int_pair* precalc_get_num,
-    long* column_entry_cache)
+    long k, float intercept, long* column_entry_cache)
 {
     float sumk = col.nz;
     float bk = 0.0;

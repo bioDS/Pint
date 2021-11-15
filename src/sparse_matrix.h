@@ -25,7 +25,6 @@ typedef struct XMatrixSparse {
     long* col_nwords;
     long* col_start;
     // unsigned short **col_nz_indices;
-    gsl_permutation* permutation;
     // S8bWord **compressed_indices;
     S8bWord* compressed_indices;
     long n;

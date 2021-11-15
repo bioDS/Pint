@@ -1,7 +1,5 @@
 #include "../src/liblasso.h"
 #include <glib-2.0/glib.h>
-#include <gsl/gsl_permutation.h>
-#include <gsl/gsl_rng.h>
 #include <locale.h>
 #include <omp.h>
 #include <stdlib.h>
@@ -474,9 +472,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
     float dBMax;
     for (long j = 0; j < 10; j++)
         for (long i = 0; i < p_int; i++) {
-            // long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-            long k = fixture->xmatrix_sparse.permutation->data[i];
-            // long k = i;
+            long k = i;
             Changes changes = update_beta_cyclic_old(
                 fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n,
                 fixture->p, fixture->lambda, &beta, k, 0, fixture->precalc_get_num,
@@ -486,8 +482,7 @@ static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
 
     long no_agreeing = 0;
     for (long i = 0; i < p_int; i++) {
-        long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
-        // long k = i;
+        long k = i;
         printf("testing beta[%ld] (%f) ~ %f [", i, beta[i],
             small_X2_correct_beta[k]);
 
@@ -525,7 +520,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
     float acceptable_diff = 10;
     long no_agreeing = 0;
     for (long i = 0; i < p_int; i++) {
-        long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
+        long k = i;
         printf("testing beta[%ld] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
 
         if ((beta[k] < glmnet_beta[i] + acceptable_diff) && (beta[k] > glmnet_beta[i] - acceptable_diff)) {
@@ -784,15 +779,11 @@ static void check_permutation()
 
     long perm_size = 3235; //<< 12 + 67;
     printf("perm_size %ld\n", perm_size);
-    gsl_permutation* perm = gsl_permutation_alloc(perm_size);
-    gsl_permutation_init(perm);
-
-    parallel_shuffle(perm, perm_size / threads, perm_size % threads, threads);
 
     long* found = new long[perm_size];
     memset(found, 0, perm_size * sizeof *found);
     for (long i = 0; i < perm_size; i++) {
-        size_t val = perm->data[i];
+        size_t val = i;
         found[val] = 1;
         printf("found %ld\n", val);
     }
@@ -802,20 +793,16 @@ static void check_permutation()
         g_assert_true(found[i] == 1);
     }
     delete[] found;
-    gsl_permutation_free(perm);
 
     perm_size = 123123; //<< 12 + 67;
     printf("perm_size %ld\n", perm_size);
-    perm = gsl_permutation_alloc(perm_size);
-    gsl_permutation_init(perm);
 
-    parallel_shuffle(perm, perm_size / threads, perm_size % threads, threads);
 
     // found = malloc(perm_size * sizeof *found);
     found = new long[perm_size]; //malloc(perm_size * sizeof(long));
     memset(found, 0, perm_size);
     for (long i = 0; i < perm_size; i++) {
-        long val = perm->data[i];
+        long val = i;
         found[val] = 1;
         printf("found %ld\n", val);
     }
@@ -825,14 +812,12 @@ static void check_permutation()
         g_assert_true(found[i] == 1);
     }
     delete[] found;
-    gsl_permutation_free(perm);
 }
 
 long check_didnt_update(long p, long p_int, bool* wont_update, robin_hood::unordered_flat_map<long, float> beta)
 {
     long no_disagreeing = 0;
     for (long i = 0; i < p_int; i++) {
-        // long k = gsl_permutation_get(fixture->xmatrix_sparse.permutation, i);
         long k = i;
         // long k = fixture->xmatrix_sparse.permutation->data[i];
         // printf("testing beta[%ld] (%f)\n", k, beta[k]);
@@ -1041,7 +1026,7 @@ static void check_branch_pruning(UpdateFixture* fixture,
 
 static long last_updated_val = -1;
 // nothing in vars is changed
-float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum)
+float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum, int_pair *precalc_get_num)
 {
     XMatrixSparse Xc = vars->Xc;
     float** last_rowsum = vars->last_rowsum;
@@ -1060,8 +1045,6 @@ float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum)
     XMatrixSparse X2c = vars->X2c;
     float* Y = vars->Y;
     float* max_int_delta = vars->max_int_delta;
-    int_pair* precalc_get_num = vars->precalc_get_num;
-    gsl_permutation* iter_permutation = vars->iter_permutation;
 
     float error = 0.0;
     for (long i = 0; i < n; i++) {
@@ -1073,10 +1056,8 @@ float run_lambda_iters(Iter_Vars* vars, float lambda, float* rowsum)
         // last_iter_count = iter;
         float prev_error = error;
 
-        parallel_shuffle(iter_permutation, permutation_split_size, final_split_size,
-            permutation_splits);
 #pragma omp parallel for num_threads(NumCores)                                 \
-    shared(X2c, Y, rowsum, beta, precalc_get_num) schedule(static) reduction(+ \
+    shared(X2c, Y, rowsum, beta) schedule(static) reduction(+ \
                                                                              : total_basic_beta_updates, total_basic_beta_nz_updates)
         for (long k = 0; k < p_int; k++) {
             // for (long main_effect = 0; main_effect < p; main_effect++) {
@@ -1337,7 +1318,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     float* Y = fixture->Y;
 
     const long MAX_NZ_BETA = 2000;
-    gsl_permutation* iter_permutation = gsl_permutation_alloc(p_int);
 
     Thread_Cache thread_caches[NumCores];
 
@@ -1403,8 +1383,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         X2c,
         fixture->Y,
         max_int_delta,
-        fixture->precalc_get_num,
-        iter_permutation,
         Xu,
     };
     struct timespec start, end;
@@ -1433,7 +1411,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         long last_iter_count = 0;
 
         if (Xc.p <= 1000) {
-            run_lambda_iters(&iter_vars_basic, lambda, rowsum);
+            run_lambda_iters(&iter_vars_basic, lambda, rowsum, fixture->precalc_get_num);
         }
     }
     printf("last updated val: %ld\n", last_updated_val);
@@ -1492,8 +1470,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         X2c_fake,
         fixture->Y,
         max_int_delta,
-        fixture->precalc_get_num,
-        iter_permutation,
         Xu,
     };
 
@@ -1669,7 +1645,6 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     }
     free(last_rowsum);
     free(wont_update);
-    gsl_permutation_free(iter_permutation);
     free_host_X(&Xu);
     free(basic_rowsum);
     free(p_rowsum);

@@ -16,7 +16,6 @@ Active_Set active_set_new(long max_length, long p)
     Active_Set as;
     as.length = 0;
     as.max_length = max_length;
-    as.permutation = NULL;
     as.p = p;
     return as;
 }
@@ -44,8 +43,6 @@ void active_set_free(Active_Set as)
     as.entries1.clear();
     as.entries2.clear();
     as.entries3.clear();
-    if (NULL != as.permutation)
-        gsl_permutation_free(as.permutation);
 }
 
 bool active_set_present(Active_Set* as, long value)
@@ -497,8 +494,6 @@ char update_working_set(struct X_uncompressed Xu, XMatrixSparse Xc,
     struct OpenCL_Setup* setup, float* last_max,
     long depth)
 {
-    long p_int = p * (p + 1) / 2;
-
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,

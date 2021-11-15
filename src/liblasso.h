@@ -11,9 +11,6 @@
 //#define interesting_col1 4  -1
 //#define interesting_col2 195 -1
 #include <errno.h>
-#include <gsl/gsl_permutation.h>
-#include <gsl/gsl_randist.h>
-#include <gsl/gsl_rng.h>
 #include <limits.h>
 #include <math.h>
 #include <stdalign.h>
@@ -114,7 +111,6 @@ typedef struct {
     robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
     long length;
     long max_length;
-    gsl_permutation* permutation;
     long p;
     // S8bCol *compressed_cols;
 } Active_Set;
@@ -157,8 +153,6 @@ typedef struct {
     XMatrixSparse X2c;
     float* Y;
     float* max_int_delta;
-    int_pair* precalc_get_num;
-    gsl_permutation* iter_permutation;
     struct X_uncompressed Xu;
     float intercept;
 } Iter_Vars;
@@ -174,8 +168,6 @@ long** X2_from_X(long** X, long n, long p);
 int_pair get_num(long num, long p);
 void free_static_resources();
 void initialise_static_resources();
-void parallel_shuffle(gsl_permutation* permutation, long split_size,
-    long final_split_size, long splits);
 long get_p_int(long p, long max_interaction_distance);
 int_pair* get_all_nums(long p, long max_interaction_distance);
 
@@ -217,8 +209,6 @@ extern float halt_error_diff;
 #define NUM_MAX_ROWSUMS 1
 extern float max_rowsums[NUM_MAX_ROWSUMS];
 extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
-extern gsl_permutation* global_permutation;
-extern gsl_permutation* global_permutation_inverse;
 extern int_pair* cached_nums;
 extern long VERBOSE;
 extern float total_sqrt_error;

@@ -1,5 +1,4 @@
 #include "../../src/liblasso.h"
-#include <gsl/gsl_vector.h>
 #include <stdlib.h>
 
 enum Output_Mode { quit,

@@ -34,8 +34,7 @@ float update_intercept_cyclic(float intercept, long** X, float* Y,
 // Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, float *Y,
 Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, long n, long p,
     float lambda, robin_hood::unordered_flat_map<long, float>* beta, long k,
-    float intercept, int_pair* precalc_get_num,
-    long* column_cache);
+    float intercept, long* column_cache);
 Changes update_beta_cyclic_old(XMatrixSparse xmatrix_sparse, float* Y,
     float* rowsum, long n, long p, float lambda,
     robin_hood::unordered_flat_map<long, float>* beta, long k, float intercept,
