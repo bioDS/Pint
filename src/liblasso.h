@@ -1,5 +1,5 @@
 #ifndef LIBLASSO_H
-#define LIBLASSO_h
+#define LIBLASSO_H
 
 // #define interesting_col 58
 #include "flat_hash_map.hpp"
@@ -25,17 +25,13 @@
 #include <string.h>
 #include <time.h>
 
-// #define NOT_R
-
-#include <config.h>
-#ifdef NOT_R
-#define Rprintf(args...) printf(args);
-#else
+#ifdef R_PACKAGE
 extern "C" {
 #include <R.h>
 }
+#else
+#define Rprintf(args...) printf(args);
 #endif
-
 
 typedef struct {
     long* col_i;

@@ -7,7 +7,6 @@ conf_data.set('NOT_R', true)
 configure_file(output: 'config.h', configuration: conf_data)
 
 add_project_arguments([
-  '-I' + meson.build_root(),
   '-ffast-math',
   '-fno-stack-protector',
   '-fpermissive',

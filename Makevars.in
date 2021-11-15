@@ -1,0 +1,2 @@
+PKG_CFLAGS = @PKG_CFLAGS@ -fopenmp -fpermissive -Ofast -ffast-math -I -g -fsanitize=address -std=c++14 ./
+PKG_LIBS = @PKG_LIBS@ -lgomp -DR_PACKAGE
