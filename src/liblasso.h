@@ -26,6 +26,10 @@ extern "C" {
 #define Rprintf(args...) printf(args);
 #endif
 
+#ifdef __WIN32
+#define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
+#endif
+
 typedef struct {
     long* col_i;
     long* col_j;
