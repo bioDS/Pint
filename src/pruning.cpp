@@ -44,8 +44,6 @@ float pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
     return estimate;
 }
 
-float exact_multiple() {}
-
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
 float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
     float last_max, float* last_rowsum,

@@ -159,8 +159,6 @@ static auto rng = std::default_random_engine();
 void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
     struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept) {
-    XMatrixSparse Xc = vars->Xc;
-    X_uncompressed Xu = vars->Xu;
     float** last_rowsum = vars->last_rowsum;
     Thread_Cache* thread_caches = vars->thread_caches;
     int_fast64_t n = vars->n;
@@ -450,14 +448,14 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             // total_notpresent, new_nz_beta, total_beta_updates,
             // total_beta_nz_updates)
 
-            auto print_entries = [&](robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries,
-                                     robin_hood::unordered_flat_map<int_fast64_t, float>* current_beta_set) {
-                printf("set contains: { ");
-                for (auto it = entries->begin(); it != entries->end(); it++) {
-                    printf("%ld, ", it->first);
-                }
-                printf("}\n");
-            };
+            //auto print_entries = [&](robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries,
+            //                         robin_hood::unordered_flat_map<int_fast64_t, float>* current_beta_set) {
+            //    printf("set contains: { ");
+            //    for (auto it = entries->begin(); it != entries->end(); it++) {
+            //        printf("%ld, ", it->first);
+            //    }
+            //    printf("}\n");
+            //};
 
             if (use_intercept) {
                 vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
@@ -645,7 +643,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         thread_column_caches[i] = (int_fast64_t*)malloc(largest_col * sizeof *thread_column_caches[i]);
     }
 
-    FILE* log_file;
+    FILE* log_file = NULL;
     int_fast64_t iter = 0;
     if (log_level != NONE && check_can_restore_from_log(log_filename, n, p, p_int, job_args, job_args_num)) {
         Rprintf("We can restore from a partial log!\n");
@@ -846,7 +844,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     }
     intercept = iter_vars_pruned.intercept;
     iter_count = iter;
-    if (log_level != NONE)
+    if (log_level != NONE && log_file != NULL)
         close_log(log_file);
     Rprintf("\nfinished at lambda = %f\n", lambda);
     Rprintf("after %ld total iters\n", iter_count);
@@ -1106,17 +1104,12 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int_fast64_t n, 
     // float new_value = soft_threshold(sumn, lambda) / sumk;
     // float new_value = soft_threshold(sumn, lambda*n) / sumk;
     float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / sumk; // square root lasso
-    //if (VERBOSE && k == interesting_val) {
-    //    printf("lambda: %f\n", lambda);
-    //    printf("sumn: %f\n", sumn);
-    //    printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
-    //}
     float Bk_diff = new_value - bk;
     Changes changes;
     changes.removed = false;
     changes.actual_diff = Bk_diff;
     changes.pre_lambda_diff = sumn;
-    auto tp = val_to_triplet(k, p);
+    // auto tp = val_to_triplet(k, p);
     if (new_value == 0.0) {
         beta->erase(k);
         changes.removed = true;

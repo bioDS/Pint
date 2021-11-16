@@ -14,7 +14,7 @@ XMatrix read_x_csv(const char* fn, int_fast64_t n, int_fast64_t p)
     int_fast64_t readline_result = 0;
     for (std::string buf; std::getline(in_file, buf); ) {
         // remove name from beginning (for the moment)
-        int_fast64_t i = 1;
+        long unsigned int i = 1;
         while (buf[i] != '"')
             i++;
         i++;

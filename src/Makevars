@@ -1,2 +1,2 @@
-PKG_CXXFLAGS = -std=c++14 -fopenmp -Ofast -ffast-math -flto -DR_PACKAGE -g
+PKG_CXXFLAGS = -std=c++14 -fopenmp -Ofast -ffast-math -flto -DR_PACKAGE -g -Wno-unused-variable
 PKG_LIBS = -lgomp

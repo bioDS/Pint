@@ -114,19 +114,12 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
             // that was actually covered by the limit.
             int_fast64_t sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
             colno = j + suma + sumb;
-            // if (tmp != colno) {
-            // segfault for debugger
-            // printf("%ld != %ld\ni,j a,b sa,sb = %ld,%ld %ld,%ld %ld,%ld", tmp,
-            // colno, i, j, a, b, suma, sumb);
-            // (*(int_fast64_t*)NULL)++;
-            // }
-
             // Read through the the current column entries, and append them to X2 as
             // an s8b-encoded list of offsets
             int_fast64_t* col_entries = (int_fast64_t*)malloc(60 * sizeof *col_entries);
             int_fast64_t count = 0;
             int_fast64_t largest_entry = 0;
-            int_fast64_t max_bits = max_size_given_entries[0];
+            // int_fast64_t max_bits = max_size_given_entries[0];
             int_fast64_t diff = 0;
             int_fast64_t prev_row = -1;
             int_fast64_t total_nz_entries = 0;
@@ -142,7 +135,7 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
                         used++;
                         tdiff >>= 1;
                     }
-                    max_bits = max_size_given_entries[count + 1];
+                    // max_bits = max_size_given_entries[count + 1];
                     // if the current diff won't fit in the s8b word, push the word and
                     // start a new one
                     if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
@@ -155,7 +148,7 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
                         queue_push_tail(current_col, word);
                         count = 0;
                         largest_entry = 0;
-                        max_bits = max_size_given_entries[1];
+                        // max_bits = max_size_given_entries[1];
                     }
                     // things for the next iter
                     // g_assert_true(count < 60);

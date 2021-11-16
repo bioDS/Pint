@@ -28,7 +28,7 @@ S8bCol col_to_s8b_col(int_fast64_t size, int_fast64_t* col)
     int_fast64_t col_entries[60];
     int_fast64_t count = 0;
     int_fast64_t largest_entry = 0;
-    int_fast64_t max_bits = max_size_given_entries[0];
+    // int_fast64_t max_bits = max_size_given_entries[0];
     int_fast64_t diff = 0;
     int_fast64_t total_nz_entries = 0;
     Queue* current_col = queue_new();
@@ -44,7 +44,7 @@ S8bCol col_to_s8b_col(int_fast64_t size, int_fast64_t* col)
             used++;
             tdiff >>= 1;
         }
-        max_bits = max_size_given_entries[count + 1];
+        // max_bits = max_size_given_entries[count + 1];
         // if the current diff won't fit in the s8b word, push the word and start
         // a new one
         if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
@@ -54,7 +54,7 @@ S8bCol col_to_s8b_col(int_fast64_t size, int_fast64_t* col)
             queue_push_tail(current_col, word);
             count = 0;
             largest_entry = 0;
-            max_bits = max_size_given_entries[1];
+            // max_bits = max_size_given_entries[1];
         }
         // things for the next iter
         col_entries[count] = diff;

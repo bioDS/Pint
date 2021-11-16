@@ -178,7 +178,7 @@ void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float las
     for (int_fast64_t i = 0; i < col_len; i++) {
         int_fast64_t entry = col[i];
         if (entry > n) {
-            fprintf(stderr, "broken entry %d in inter %d\n", entry, k);
+            fprintf(stderr, "broken entry %ld in inter %ld\n", entry, k);
             exit(EXIT_FAILURE);
         }
         inter_cache[k].last_rowsum[i] = rowsum[entry];

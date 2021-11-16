@@ -5,6 +5,8 @@
 static int_fast64_t log_file_offset;
 static int int_print_len;
 
+#define ARG_BUF_SIZE 500
+
 void init_print(FILE* log_file, int_fast64_t n, int_fast64_t p, int_fast64_t num_betas, const char** job_args,
     int_fast64_t job_args_num)
 {
@@ -95,10 +97,10 @@ int_fast64_t check_can_restore_from_log(const char* filename, int_fast64_t n, in
     if (log_file == NULL) {
         return FALSE;
     }
-    char* our_args = (char*)malloc(500);
+    char* our_args = (char*)malloc(ARG_BUF_SIZE);
     char* buffer = (char*)malloc(buf_size);
 
-    memset(our_args, 0, sizeof(our_args));
+    memset(our_args, 0, ARG_BUF_SIZE);
     for (int_fast64_t i = 0; i < job_args_num; i++) {
         sprintf(our_args + strlen(our_args), "%s ", job_args[i]);
     }
@@ -110,6 +112,9 @@ int_fast64_t check_can_restore_from_log(const char* filename, int_fast64_t n, in
     if (strcmp(buffer, "still running\n") == 0) {
         // there was an interrupted run, we should check if it was this one.
         ret = fgets(buffer, buf_size, log_file);
+        if (ret == NULL) {
+            fprintf(stderr, "error reading log file\n");
+        }
         // printf("comparing '%s', '%s'\n", buffer, our_args);
         if (strcmp(buffer, our_args) == 0) {
             // the files were the same!
