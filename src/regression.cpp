@@ -502,7 +502,7 @@ int_fast64_t copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
     int_fast64_t count = 0;
     auto from_beta = from_set->beta1;
     int_fast64_t total_size = from_set->beta1.size() + from_set->beta2.size() + from_set->beta3.size();
-    to_set->indices = new long[total_size];
+    to_set->indices = new int_fast64_t[total_size];
     to_set->values = new float[total_size];
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
         // to_set->betas.insert_or_assign(c->first, c->second);

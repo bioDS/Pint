@@ -22,14 +22,14 @@ struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets)
     int_fast64_t trip_len = beta_sets->beta3.size();
     int_fast64_t p = beta_sets->p;
 
-    int_fast64_t* main_effects = new long[main_len];
+    int_fast64_t* main_effects = new int_fast64_t[main_len];
     float* main_strength = new float[main_len];
-    int_fast64_t* int_i = new long[int_len];
-    int_fast64_t* int_j = new long[int_len];
+    int_fast64_t* int_i = new int_fast64_t[int_len];
+    int_fast64_t* int_j = new int_fast64_t[int_len];
     float* int_strength = new float[int_len];
-    int_fast64_t* trip_a = new long[trip_len];
-    int_fast64_t* trip_b = new long[trip_len];
-    int_fast64_t* trip_c = new long[trip_len];
+    int_fast64_t* trip_a = new int_fast64_t[trip_len];
+    int_fast64_t* trip_b = new int_fast64_t[trip_len];
+    int_fast64_t* trip_c = new int_fast64_t[trip_len];
     float* trip_strength = new float[trip_len];
 
     int_fast64_t main_offset = 0;

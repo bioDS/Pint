@@ -781,7 +781,7 @@ static void check_permutation()
     int_fast64_t perm_size = 3235; //<< 12 + 67;
     printf("perm_size %ld\n", perm_size);
 
-    int_fast64_t* found = new long[perm_size];
+    int_fast64_t* found = new int_fast64_t[perm_size];
     memset(found, 0, perm_size * sizeof *found);
     for (int_fast64_t i = 0; i < perm_size; i++) {
         size_t val = i;
@@ -800,7 +800,7 @@ static void check_permutation()
 
 
     // found = malloc(perm_size * sizeof *found);
-    found = new long[perm_size]; //malloc(perm_size * sizeof(int_fast64_t));
+    found = new int_fast64_t[perm_size]; //malloc(perm_size * sizeof(int_fast64_t));
     memset(found, 0, perm_size);
     for (int_fast64_t i = 0; i < perm_size; i++) {
         int_fast64_t val = i;
@@ -1667,7 +1667,7 @@ void test_row_list_without_columns()
     };
     int_fast64_t** xm = new int_fast64_t*[p];
     for (int_fast64_t j = 0; j < p; j++) {
-        xm[j] = new long[n];
+        xm[j] = new int_fast64_t[n];
     }
     for (int_fast64_t i = 0; i < n; i++)
         for (int_fast64_t j = 0; j < p; j++) {
@@ -1745,7 +1745,7 @@ void trivial_3way_test()
     };
     int_fast64_t** xm = new int_fast64_t*[p];
     for (int_fast64_t j = 0; j < p; j++) {
-        xm[j] = new long[n];
+        xm[j] = new int_fast64_t[n];
     }
     for (int_fast64_t i = 0; i < n; i++)
         for (int_fast64_t j = 0; j < p; j++) {
@@ -2039,12 +2039,12 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
 
     Sparse_Betas beta1;
     beta1.count = 5;
-    beta1.indices = new long[5]{ 1, 4, 7, 21, 35 };
+    beta1.indices = new int_fast64_t[5]{ 1, 4, 7, 21, 35 };
     beta1.values = new float[5]{ 1.2, -2.1, 2.1, 13.0, -11.2 };
 
     Sparse_Betas beta2;
     beta2.count = 6;
-    beta2.indices = new long[6]{ 1, 4, 7, 21, 35, 107 };
+    beta2.indices = new int_fast64_t[6]{ 1, 4, 7, 21, 35, 107 };
     beta2.values = new float[6]{ 1.7, -2.1, 2.3, 12.0, -11.3, 0.8 };
 
     g_assert_true(beta2.indices[1] == 4);
