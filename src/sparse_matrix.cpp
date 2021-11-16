@@ -106,11 +106,10 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
             // worked out by hand as being equivalent to the offset we would have
             // reached.
             int_fast64_t a = min(i, p - d); // number of iters limited by d.
-            int_fast64_t b = max(i - (p - d),
-                0l); // number of iters of i limited by p rather than d.
+            int_fast64_t b = max(i - (p - d), (int_fast64_t)0); // number of iters of i limited by p rather than d.
             // int_fast64_t tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
             int_fast64_t suma = a * (d - 1);
-            int_fast64_t k = max(p - d + b, 0l);
+            int_fast64_t k = max(p - d + b, (int_fast64_t)0);
             // sumb is the amount we would have reached w/o the limit - the amount
             // that was actually covered by the limit.
             int_fast64_t sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
