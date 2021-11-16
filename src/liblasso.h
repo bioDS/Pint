@@ -31,20 +31,20 @@ extern "C" {
 #endif
 
 typedef struct {
-    long* col_i;
-    long* col_j;
-    robin_hood::unordered_flat_map<long, float> lf_map;
+    int_fast64_t* col_i;
+    int_fast64_t* col_j;
+    robin_hood::unordered_flat_map<int_fast64_t, float> lf_map;
 } Thread_Cache;
 typedef struct {
-    long val;
+    int_fast64_t val;
     // disable padding for now, pretty sure we don't need it.
-    // alignas(64) long val;
+    // alignas(64) int_fast64_t val;
     // char padding[64 - sizeof(long)];
 } pad_int;
 
 typedef struct {
-    long i;
-    long j;
+    int_fast64_t i;
+    int_fast64_t j;
 } int_pair;
 
 enum LOG_LEVEL {
@@ -54,19 +54,19 @@ enum LOG_LEVEL {
 };
 
 struct X_uncompressed {
-    long* host_X;
-    long* host_col_nz;
-    long* host_col_offsets;
-    long* host_X_row;
-    long* host_row_nz;
-    long* host_row_offsets;
-    long n;
-    long p;
+    int_fast64_t* host_X;
+    int_fast64_t* host_col_nz;
+    int_fast64_t* host_col_offsets;
+    int_fast64_t* host_X_row;
+    int_fast64_t* host_row_nz;
+    int_fast64_t* host_row_offsets;
+    int_fast64_t n;
+    int_fast64_t p;
     size_t total_size;
 };
 struct AS_Properties {
-    long was_present : 1;
-    long present : 1;
+    int_fast64_t was_present : 1;
+    int_fast64_t present : 1;
 };
 
 struct OpenCL_Setup {
@@ -88,7 +88,7 @@ struct OpenCL_Setup {
 //};
 
 /*
- * Fits 6 to a cache line. As long as schedule is static, this should be fine.
+ * Fits 6 to a cache line. As int_fast64_t as schedule is static, this should be fine.
  */
 
 #include "s8b.h"
@@ -96,32 +96,32 @@ struct OpenCL_Setup {
 #include "tuple_val.h"
 
 typedef struct {
-    // long *entries;
+    // int_fast64_t *entries;
     // struct AS_Properties *properties;
     // struct AS_Entry *entries;
-    robin_hood::unordered_flat_map<long, struct AS_Entry> entries1;
-    robin_hood::unordered_flat_map<long, struct AS_Entry> entries2;
-    robin_hood::unordered_flat_map<long, struct AS_Entry> entries3;
-    long length;
-    long max_length;
-    long p;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries1;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries2;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries3;
+    int_fast64_t length;
+    int_fast64_t max_length;
+    int_fast64_t p;
     // S8bCol *compressed_cols;
 } Active_Set;
 
 struct AS_Entry {
-    long val : 62;
-    long was_present : 1;
-    long present : 1;
+    int_fast64_t val : 62;
+    int_fast64_t was_present : 1;
+    int_fast64_t present : 1;
     S8bCol col;
     float *last_rowsum;
     float last_max;
 };
 
 typedef struct {
-    robin_hood::unordered_flat_map<long, float> beta1;
-    robin_hood::unordered_flat_map<long, float> beta2;
-    robin_hood::unordered_flat_map<long, float> beta3;
-    long p;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    int_fast64_t p;
 } Beta_Value_Sets;
 
 typedef struct {
@@ -136,13 +136,13 @@ typedef struct {
     XMatrixSparse Xc;
     float** last_rowsum;
     Thread_Cache* thread_caches;
-    long n;
-    // robin_hood::unordered_flat_map<long, float> *beta;
+    int_fast64_t n;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> *beta;
     Beta_Value_Sets* beta_sets;
     float* last_max;
     bool* wont_update;
-    long p;
-    long p_int;
+    int_fast64_t p;
+    int_fast64_t p_int;
     XMatrixSparse X2c;
     float* Y;
     float* max_int_delta;
@@ -157,12 +157,12 @@ typedef struct {
 #include "update_working_set.h"
 #include "log.h"
 
-long** X2_from_X(long** X, long n, long p);
-int_pair get_num(long num, long p);
+int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
+int_pair get_num(int_fast64_t num, int_fast64_t p);
 void free_static_resources();
 void initialise_static_resources();
-long get_p_int(long p, long max_interaction_distance);
-int_pair* get_all_nums(long p, long max_interaction_distance);
+int_fast64_t get_p_int(int_fast64_t p, int_fast64_t max_interaction_distance);
+int_pair* get_all_nums(int_fast64_t p, int_fast64_t max_interaction_distance);
 
 #define TRUE 1
 #define FALSE 0
@@ -179,31 +179,31 @@ extern double pruning_time;
 extern double working_set_update_time;
 extern double subproblem_time;
 
-extern long used_branches;
-extern long pruned_branches;
+extern int_fast64_t used_branches;
+extern int_fast64_t pruned_branches;
 
-extern long NumCores;
-extern long permutation_splits;
-extern long permutation_split_size;
-extern long final_split_size;
-extern const long NORMALISE_Y;
-extern long skipped_updates;
-extern long total_updates;
-extern long skipped_updates_entries;
-extern long total_updates_entries;
-extern long zero_updates;
-extern long zero_updates_entries;
-extern long* colsum;
+extern int_fast64_t NumCores;
+extern int_fast64_t permutation_splits;
+extern int_fast64_t permutation_split_size;
+extern int_fast64_t final_split_size;
+extern const int_fast64_t NORMALISE_Y;
+extern int_fast64_t skipped_updates;
+extern int_fast64_t total_updates;
+extern int_fast64_t skipped_updates_entries;
+extern int_fast64_t total_updates_entries;
+extern int_fast64_t zero_updates;
+extern int_fast64_t zero_updates_entries;
+extern int_fast64_t* colsum;
 extern float* col_ysum;
-extern long total_beta_updates;
-extern long total_beta_nz_updates;
+extern int_fast64_t total_beta_updates;
+extern int_fast64_t total_beta_nz_updates;
 extern float halt_error_diff;
 
 #define NUM_MAX_ROWSUMS 1
 extern float max_rowsums[NUM_MAX_ROWSUMS];
 extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 extern int_pair* cached_nums;
-extern long VERBOSE;
+extern int_fast64_t VERBOSE;
 extern float total_sqrt_error;
 
 #endif

@@ -1,4 +1,4 @@
-std::tuple<long, long> val_to_pair(long val, long range);
-std::tuple<long, long, long> val_to_triplet(long val, long range);
-long pair_to_val(std::tuple<long, long> tp, long range);
-long triplet_to_val(std::tuple<long, long, long> tp, long range);
+std::tuple<int_fast64_t, long> val_to_pair(int_fast64_t val, int_fast64_t range);
+std::tuple<int_fast64_t, int_fast64_t, long> val_to_triplet(int_fast64_t val, int_fast64_t range);
+int_fast64_t pair_to_val(std::tuple<int_fast64_t, long> tp, int_fast64_t range);
+int_fast64_t triplet_to_val(std::tuple<int_fast64_t, int_fast64_t, long> tp, int_fast64_t range);

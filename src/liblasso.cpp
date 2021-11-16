@@ -3,21 +3,21 @@
 #include <limits.h>
 #include <omp.h>
 
-long NumCores = 1;
-long permutation_splits = 1;
-long permutation_split_size;
-long final_split_size;
+int_fast64_t NumCores = 1;
+int_fast64_t permutation_splits = 1;
+int_fast64_t permutation_split_size;
+int_fast64_t final_split_size;
 
-const long NORMALISE_Y = 0;
-long skipped_updates = 0;
-long total_updates = 0;
-long skipped_updates_entries = 0;
-long total_updates_entries = 0;
-long zero_updates = 0;
-long zero_updates_entries = 0;
+const int_fast64_t NORMALISE_Y = 0;
+int_fast64_t skipped_updates = 0;
+int_fast64_t total_updates = 0;
+int_fast64_t skipped_updates_entries = 0;
+int_fast64_t total_updates_entries = 0;
+int_fast64_t zero_updates = 0;
+int_fast64_t zero_updates_entries = 0;
 
-long VERBOSE = 1;
-long* colsum;
+int_fast64_t VERBOSE = 1;
+int_fast64_t* colsum;
 float* col_ysum;
 
 float max_rowsums[NUM_MAX_ROWSUMS];
@@ -27,10 +27,10 @@ double pruning_time = 0.0;
 double working_set_update_time = 0.0;
 double subproblem_time = 0.0;
 
-long used_branches = 0;
-long pruned_branches = 0;
+int_fast64_t used_branches = 0;
+int_fast64_t pruned_branches = 0;
 
-long min(long a, long b)
+int_fast64_t min(int_fast64_t a, int_fast64_t b)
 {
     if (a < b)
         return a;
@@ -52,9 +52,9 @@ void free_static_resources()
         free(cached_nums);
 }
 
-long get_p_int(long p, long dist)
+int_fast64_t get_p_int(int_fast64_t p, int_fast64_t dist)
 {
-    long p_int = 0;
+    int_fast64_t p_int = 0;
     if (dist <= 0 || dist >= p / 2)
         p_int = (p * (p + 1)) / 2;
     else {
@@ -68,7 +68,7 @@ long get_p_int(long p, long dist)
     return p_int;
 }
 
-long max(long a, long b)
+int_fast64_t max(int_fast64_t a, int_fast64_t b)
 {
     if (a > b)
         return a;
@@ -88,30 +88,30 @@ float soft_threshold(float z, float gamma)
         return val;
 }
 
-float get_sump(long p, long k, long i, robin_hood::unordered_flat_map<long, float> beta, long** X)
+float get_sump(int_fast64_t p, int_fast64_t k, int_fast64_t i, robin_hood::unordered_flat_map<int_fast64_t, float> beta, int_fast64_t** X)
 {
     float sump = 0;
-    for (long j = 0; j < p; j++) {
+    for (int_fast64_t j = 0; j < p; j++) {
         if (j != k)
             sump += X[i][j] * beta[j];
     }
     return sump;
 }
 
-int_pair get_num(long num, long p)
+int_pair get_num(int_fast64_t num, int_fast64_t p)
 {
     return cached_nums[num];
 }
 
-int_pair* get_all_nums(long p, long max_interaction_distance)
+int_pair* get_all_nums(int_fast64_t p, int_fast64_t max_interaction_distance)
 {
-    long p_int = get_p_int(p, max_interaction_distance);
+    int_fast64_t p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance == -1)
         max_interaction_distance = p_int / 2 + 1;
     int_pair* nums = (int_pair*)malloc(p_int * sizeof(int_pair));
-    long offset = 0;
-    for (long i = 0; i < p; i++) {
-        for (long j = i; j < min(p, i + max_interaction_distance); j++) {
+    int_fast64_t offset = 0;
+    for (int_fast64_t i = 0; i < p; i++) {
+        for (int_fast64_t j = i; j < min(p, i + max_interaction_distance); j++) {
             int_pair ip;
             ip.i = i;
             ip.j = j;
@@ -132,14 +132,14 @@ int_pair* get_all_nums(long p, long max_interaction_distance)
  * This should never happen.
  */
 
-long** X2_from_X(long** X, long n, long p)
+int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p)
 {
-    long** X2 = (long**)malloc(n * sizeof *X2);
-    for (long row = 0; row < n; row++) {
-        X2[row] = (long*)malloc(((p * (p + 1)) / 2) * sizeof *X2[row]);
-        long offset = 0;
-        for (long i = 0; i < p; i++) {
-            for (long j = i; j < p; j++) {
+    int_fast64_t** X2 = (int_fast64_t**)malloc(n * sizeof *X2);
+    for (int_fast64_t row = 0; row < n; row++) {
+        X2[row] = (int_fast64_t*)malloc(((p * (p + 1)) / 2) * sizeof *X2[row]);
+        int_fast64_t offset = 0;
+        for (int_fast64_t i = 0; i < p; i++) {
+            for (int_fast64_t j = i; j < p; j++) {
                 X2[row][offset++] = X[row][i] * X[row][j];
             }
         }

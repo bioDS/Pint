@@ -1,20 +1,20 @@
 #include "liblasso.h"
 #include <fstream>
 
-XMatrix read_x_csv(const char* fn, long n, long p)
+XMatrix read_x_csv(const char* fn, int_fast64_t n, int_fast64_t p)
 {
-    long** X = (long**)malloc(p * sizeof *X);
+    int_fast64_t** X = (int_fast64_t**)malloc(p * sizeof *X);
 
-    for (long i = 0; i < p; i++)
-        X[i] = (long*)malloc(n * sizeof *X[i]);
+    for (int_fast64_t i = 0; i < p; i++)
+        X[i] = (int_fast64_t*)malloc(n * sizeof *X[i]);
 
     std::ifstream in_file(fn, std::ifstream::in);
 
-    long col = 0, row = 0, actual_cols = p;
-    long readline_result = 0;
+    int_fast64_t col = 0, row = 0, actual_cols = p;
+    int_fast64_t readline_result = 0;
     for (std::string buf; std::getline(in_file, buf); ) {
         // remove name from beginning (for the moment)
-        long i = 1;
+        int_fast64_t i = 1;
         while (buf[i] != '"')
             i++;
         i++;
@@ -59,7 +59,7 @@ XMatrix read_x_csv(const char* fn, long n, long p)
     return xmatrix;
 }
 
-float* read_y_csv(const char* fn, long n)
+float* read_y_csv(const char* fn, int_fast64_t n)
 {
     char* buf = (char*)malloc(BUF_SIZE);
     char* temp = (char*)malloc(BUF_SIZE);
@@ -71,7 +71,7 @@ float* read_y_csv(const char* fn, long n)
         perror("opening failed");
     }
 
-    long col = 0, i = 0;
+    int_fast64_t col = 0, i = 0;
     while (fgets(buf, BUF_SIZE, fp) != NULL) {
         i = 1;
         // skip the name
@@ -82,7 +82,7 @@ float* read_y_csv(const char* fn, long n)
             i++;
         // read the rest of the line as a float
         memset(temp, 0, BUF_SIZE);
-        long j = 0;
+        int_fast64_t j = 0;
         while (buf[i] != '\n')
             temp[j++] = buf[i++];
         Y[col] = atof(temp);
@@ -94,11 +94,11 @@ float* read_y_csv(const char* fn, long n)
     if (NORMALISE_Y == 1) {
         printf("%ld, normalising y values\n", NORMALISE_Y);
         float mean = 0.0;
-        for (long i = 0; i < n; i++) {
+        for (int_fast64_t i = 0; i < n; i++) {
             mean += Y[i];
         }
         mean /= n;
-        for (long i = 0; i < n; i++) {
+        for (int_fast64_t i = 0; i < n; i++) {
             Y[i] -= mean;
         }
     }

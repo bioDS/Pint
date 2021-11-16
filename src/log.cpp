@@ -2,15 +2,15 @@
 #include <cstdio>
 #include <cstdlib>
 
-static long log_file_offset;
+static int_fast64_t log_file_offset;
 static int int_print_len;
 
-void init_print(FILE* log_file, long n, long p, long num_betas, const char** job_args,
-    long job_args_num)
+void init_print(FILE* log_file, int_fast64_t n, int_fast64_t p, int_fast64_t num_betas, const char** job_args,
+    int_fast64_t job_args_num)
 {
     int_print_len = std::log10(p * p * p) + 1;
     fprintf(log_file, "still running\n");
-    for (long i = 0; i < job_args_num; i++) {
+    for (int_fast64_t i = 0; i < job_args_num; i++) {
         fprintf(log_file, "%s ", job_args[i]);
     }
     fprintf(log_file, "\n");
@@ -22,21 +22,21 @@ The remaining log is {[ ]done/[w]ip} $current_iter, $current_lambda\\n $beta_1, 
 }
 
 // print to log: metadata required to resume from the log
-FILE* init_log(const char* filename, long n, long p, long num_betas, const char** job_args,
-    long job_args_num)
+FILE* init_log(const char* filename, int_fast64_t n, int_fast64_t p, int_fast64_t num_betas, const char** job_args,
+    int_fast64_t job_args_num)
 {
     FILE* log_file = fopen(filename, "w+");
     init_print(log_file, n, p, num_betas, job_args, job_args_num);
     return log_file;
 }
 
-static long log_pos = 0;
+static int_fast64_t log_pos = 0;
 // save the current beta values to a log, so the program can be resumed if it is
 // interrupted
-void save_log(long iter, float lambda_value, long lambda_count, Beta_Value_Sets* beta_sets,
+void save_log(int_fast64_t iter, float lambda_value, int_fast64_t lambda_count, Beta_Value_Sets* beta_sets,
     FILE* log_file)
 {
-    long real_n_betas = beta_sets->beta1.size() + beta_sets->beta2.size() + beta_sets->beta3.size();
+    int_fast64_t real_n_betas = beta_sets->beta1.size() + beta_sets->beta2.size() + beta_sets->beta3.size();
     // Rather than filling the log with beta values, we want to only keep two
     // copies. The current one, and a backup in case we stop while writing the
     // current one.
@@ -49,7 +49,7 @@ void save_log(long iter, float lambda_value, long lambda_count, Beta_Value_Sets*
     log_pos = (log_pos + 1) % 2;
 
     // indicate that this entry is a work in progress
-    long log_entry_start_pos = ftell(log_file);
+    int_fast64_t log_entry_start_pos = ftell(log_file);
     fprintf(log_file, "w");
 
     // write num beta1/2/3 values
@@ -70,7 +70,7 @@ void save_log(long iter, float lambda_value, long lambda_count, Beta_Value_Sets*
     }
     fprintf(log_file, "\n");
 
-    long log_entry_end_pos = ftell(log_file);
+    int_fast64_t log_entry_end_pos = ftell(log_file);
     // make sure second entry is invalid (we might have overwritten bits of it)
     if (use_first_entry)
         fprintf(log_file, "w");
@@ -86,11 +86,11 @@ void close_log(FILE* log_file)
     fclose(log_file);
 }
 
-long check_can_restore_from_log(const char* filename, long n, long p, long num_betas,
-    const char** job_args, long job_args_num)
+int_fast64_t check_can_restore_from_log(const char* filename, int_fast64_t n, int_fast64_t p, int_fast64_t num_betas,
+    const char** job_args, int_fast64_t job_args_num)
 {
-    long buf_size = num_betas * 16 + 500;
-    long can_use = FALSE;
+    int_fast64_t buf_size = num_betas * 16 + 500;
+    int_fast64_t can_use = FALSE;
     FILE* log_file = fopen(filename, "r");
     if (log_file == NULL) {
         return FALSE;
@@ -99,7 +99,7 @@ long check_can_restore_from_log(const char* filename, long n, long p, long num_b
     char* buffer = (char*)malloc(buf_size);
 
     memset(our_args, 0, sizeof(our_args));
-    for (long i = 0; i < job_args_num; i++) {
+    for (int_fast64_t i = 0; i < job_args_num; i++) {
         sprintf(our_args + strlen(our_args), "%s ", job_args[i]);
     }
     sprintf(our_args + strlen(our_args), "\n");
@@ -124,17 +124,17 @@ long check_can_restore_from_log(const char* filename, long n, long p, long num_b
 }
 
 // returns the opened log for future use.
-FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
-    const char** job_args, long job_args_num, long* actual_iter,
-    long* actual_lambda_count, float* actual_lambda_value,
+FILE* restore_from_log(const char* filename, bool check_args, int_fast64_t n, int_fast64_t p,
+    const char** job_args, int_fast64_t job_args_num, int_fast64_t* actual_iter,
+    int_fast64_t* actual_lambda_count, float* actual_lambda_value,
     Beta_Value_Sets* actual_beta_sets)
 {
 
-    long num_betas = 100;
+    int_fast64_t num_betas = 100;
     FILE* log_file = fopen(filename, "r+");
-    long buf_size = num_betas * (16 + int_print_len) + 500;
+    int_fast64_t buf_size = num_betas * (16 + int_print_len) + 500;
     char* buffer = new char[buf_size];
-    long beta1_size = -1, beta2_size = -1, beta3_size = -1;
+    int_fast64_t beta1_size = -1, beta2_size = -1, beta3_size = -1;
     Rprintf("restoring from log\n");
 
     // the first 5 rows are commentary & X size.
@@ -150,15 +150,15 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
 
     // now we're at the first saved line, check whether it's a complete
     // checkpoint.
-    long can_restore = TRUE;
-    long first_pos = ftell(log_file);
+    int_fast64_t can_restore = TRUE;
+    int_fast64_t first_pos = ftell(log_file);
 
     // assumes the line has already been read into buffer.
     auto read_beta_sizes = [&]() {
         // buffer contains ' %ld, %ld, %ld' [entries in row 1,2,3]
         sscanf(buffer, " %ld, %ld, %ld\n", &beta1_size, &beta2_size, &beta3_size);
         printf(": beta sizes: %ld, %ld, %ld\n", beta1_size, beta2_size, beta3_size);
-        long max_size = std::max(beta1_size, std::max(beta2_size, beta3_size)) * (16 + int_print_len);
+        int_fast64_t max_size = std::max(beta1_size, std::max(beta2_size, beta3_size)) * (16 + int_print_len);
         if (max_size > buf_size) {
             printf("setting new buf size for %ld entries\n", max_size);
             buf_size = max_size;
@@ -198,8 +198,8 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
         read_beta_sizes();
         ret = fgets(buffer, buf_size, log_file); // read lambda/iter info.
         // the first one was fine, but the second one may be more recent.
-        long first_iter, first_lambda_count;
-        long second_iter, second_lambda_count;
+        int_fast64_t first_iter, first_lambda_count;
+        int_fast64_t second_iter, second_lambda_count;
         float first_lambda_value;
         float second_lambda_value;
         sscanf(buffer, "%ld, %ld, %e\n", &first_iter, &first_lambda_count,
@@ -208,7 +208,7 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
 
         skip_entries();
         ret = fgets(buffer, buf_size, log_file); //there's a newline between the two
-        long second_pos = ftell(log_file);
+        int_fast64_t second_pos = ftell(log_file);
         ret = fgets(buffer, buf_size, log_file);
 
         // check the second entry, but only if it exists.
@@ -248,7 +248,7 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
     if (can_restore) {
         printf(": restoring from log\n");
         // buffer contains the current lambda and iter values.
-        long first_iter = -1, first_lambda_count = -1;
+        int_fast64_t first_iter = -1, first_lambda_count = -1;
         float first_lambda_value = -1;
         printf("final buf: '%s'\n", buffer);
         read_beta_sizes();
@@ -263,16 +263,16 @@ FILE* restore_from_log(const char* filename, bool check_args, long n, long p,
 
         // read beta 1/2/3 from the next three lines
         auto read_beta = [&](auto beta_size, auto* beta_set) {
-            long offset = 0;
+            int_fast64_t offset = 0;
             ret = fgets(buffer, buf_size, log_file);
             if (NULL == ret) {
                 fprintf(stderr, "error reading log file %s\n", filename);
             }
-            for (long i = 0; i < beta_size; i++) {
+            for (int_fast64_t i = 0; i < beta_size; i++) {
                 // printf("values_buf: '%s'\n", buffer + offset);
-                long beta_no = -1;
+                int_fast64_t beta_no = -1;
                 float beta_val = -1.0;
-                long ret = sscanf(buffer + offset, "%ld,%e, ", &beta_no, &beta_val);
+                int_fast64_t ret = sscanf(buffer + offset, "%ld,%e, ", &beta_no, &beta_val);
                 if (ret != 2) {
                     fprintf(stderr, "failed to match value in log, bad things will now happen\n");
                     fprintf(stderr, "log value was '%s'\n", buffer + offset);

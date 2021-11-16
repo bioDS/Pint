@@ -1,53 +1,53 @@
 typedef struct XMatrix {
-    long** X;
-    long actual_cols;
+    int_fast64_t** X;
+    int_fast64_t actual_cols;
 } XMatrix;
 
 typedef struct column_set_entry {
-    long value;
-    long nextEntry;
+    int_fast64_t value;
+    int_fast64_t nextEntry;
 } ColEntry;
 
 typedef struct Column_Set {
-    long size;
+    int_fast64_t size;
     ColEntry* cols;
 } Column_Set;
 
 struct row_set {
-    long** rows;
-    long* row_lengths;
-    long num_rows;
+    int_fast64_t** rows;
+    int_fast64_t* row_lengths;
+    int_fast64_t num_rows;
     // S8bCol* s8b_rows;
 };
 
 typedef struct XMatrixSparse {
     pad_int* col_nz;
-    long* col_nwords;
-    long* col_start;
+    int_fast64_t* col_nwords;
+    int_fast64_t* col_start;
     // unsigned short **col_nz_indices;
     // S8bWord **compressed_indices;
     S8bWord* compressed_indices;
-    long n;
-    long p;
-    long total_words;
-    long total_entries;
+    int_fast64_t n;
+    int_fast64_t p;
+    int_fast64_t total_words;
+    int_fast64_t total_entries;
     S8bCol* cols;
     S8bCol* rows;
     // Also include row entries for update_working_set
-    //pad_long *row_nz;
-    //long *row_nwords;
+    //pad_int_fast64_t *row_nz;
+    //int_fast64_t *row_nwords;
     //S8bWord *row_compressed_indices;
 } XMatrixSparse;
 
 void free_sparse_matrix(XMatrixSparse X);
 typedef struct XMatrix_sparse_row {
     unsigned short** row_nz_indices;
-    long* row_nz;
+    int_fast64_t* row_nz;
 } XMatrix_sparse_row;
 
-XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
-    long max_interaction_distance, long shuffle);
-XMatrixSparse sparsify_X(long** X, long n, long p);
+XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
+    int_fast64_t max_interaction_distance, int_fast64_t shuffle);
+XMatrixSparse sparsify_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches);
 void free_row_set(struct row_set rs);

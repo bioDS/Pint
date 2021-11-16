@@ -1,56 +1,56 @@
 #include "liblasso.h"
 
 struct C_Beta_Sets {
-    long main_len;
-    long* main_effects;
+    int_fast64_t main_len;
+    int_fast64_t* main_effects;
     float* main_strength;
-    long int_len;
-    long* int_i;
-    long* int_j;
+    int_fast64_t int_len;
+    int_fast64_t* int_i;
+    int_fast64_t* int_j;
     float* int_strength;
-    long trip_len;
-    long* trip_a;
-    long* trip_b;
-    long* trip_c;
+    int_fast64_t trip_len;
+    int_fast64_t* trip_a;
+    int_fast64_t* trip_b;
+    int_fast64_t* trip_c;
     float* trip_strength;
 };
 
 struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets)
 {
-    long main_len = beta_sets->beta1.size();
-    long int_len = beta_sets->beta2.size();
-    long trip_len = beta_sets->beta3.size();
-    long p = beta_sets->p;
+    int_fast64_t main_len = beta_sets->beta1.size();
+    int_fast64_t int_len = beta_sets->beta2.size();
+    int_fast64_t trip_len = beta_sets->beta3.size();
+    int_fast64_t p = beta_sets->p;
 
-    long* main_effects = new long[main_len];
+    int_fast64_t* main_effects = new long[main_len];
     float* main_strength = new float[main_len];
-    long* int_i = new long[int_len];
-    long* int_j = new long[int_len];
+    int_fast64_t* int_i = new long[int_len];
+    int_fast64_t* int_j = new long[int_len];
     float* int_strength = new float[int_len];
-    long* trip_a = new long[trip_len];
-    long* trip_b = new long[trip_len];
-    long* trip_c = new long[trip_len];
+    int_fast64_t* trip_a = new long[trip_len];
+    int_fast64_t* trip_b = new long[trip_len];
+    int_fast64_t* trip_c = new long[trip_len];
     float* trip_strength = new float[trip_len];
 
-    long main_offset = 0;
+    int_fast64_t main_offset = 0;
     for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end(); it++) {
         main_effects[main_offset] = it->first + 1;
         main_strength[main_offset] = it->second;
         main_offset++;
     }
-    long int_offset = 0;
+    int_fast64_t int_offset = 0;
     for (auto it = beta_sets->beta2.begin(); it != beta_sets->beta2.end(); it++) {
-        long val = it->first;
-        std::tuple<long, long> ij = val_to_pair(val, p);
+        int_fast64_t val = it->first;
+        std::tuple<int_fast64_t, long> ij = val_to_pair(val, p);
         int_i[int_offset] = std::get<0>(ij) + 1;
         int_j[int_offset] = std::get<1>(ij) + 1;
         int_strength[int_offset] = it->second;
         int_offset++;
     }
-    long trip_offset = 0;
+    int_fast64_t trip_offset = 0;
     for (auto it = beta_sets->beta3.begin(); it != beta_sets->beta3.end(); it++) {
-        long val = it->first;
-        std::tuple<long, long, long> ij = val_to_triplet(val, p);
+        int_fast64_t val = it->first;
+        std::tuple<int_fast64_t, int_fast64_t, long> ij = val_to_triplet(val, p);
         trip_a[trip_offset] = std::get<0>(ij) + 1;
         trip_b[trip_offset] = std::get<1>(ij) + 1;
         trip_c[trip_offset] = std::get<2>(ij) + 1;
@@ -68,17 +68,17 @@ extern "C" {
 #include <Rinternals.h>
 
 struct effect {
-    long i, j;
+    int_fast64_t i, j;
     float strength;
 };
 
 SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept)
 {
     struct C_Beta_Sets cbs = cpp_bs_to_c(beta_sets);
-    long main_count = 0, int_count = 0;
-    long total_main_count = cbs.main_len;
-    long total_int_count = cbs.int_len;
-    long total_trip_count = cbs.trip_len;
+    int_fast64_t main_count = 0, int_count = 0;
+    int_fast64_t total_main_count = cbs.main_len;
+    int_fast64_t total_int_count = cbs.int_len;
+    int_fast64_t total_trip_count = cbs.trip_len;
 
     SEXP intercept = PROTECT(allocVector(REALSXP, 1));
     SEXP main_i = PROTECT(allocVector(INTSXP, total_main_count));
@@ -92,13 +92,13 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept)
     SEXP trip_strength = PROTECT(allocVector(REALSXP, total_trip_count));
     SEXP all_effects = PROTECT(allocVector(VECSXP, 10));
 
-    for (long i = 0; i < cbs.main_len; i++) {
+    for (int_fast64_t i = 0; i < cbs.main_len; i++) {
         INTEGER(main_i)
         [i] = cbs.main_effects[i];
         REAL(main_strength)
         [i] = cbs.main_strength[i];
     }
-    for (long i = 0; i < cbs.int_len; i++) {
+    for (int_fast64_t i = 0; i < cbs.int_len; i++) {
         INTEGER(int_i)
         [i] = cbs.int_i[i];
         INTEGER(int_j)
@@ -106,7 +106,7 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept)
         REAL(int_strength)
         [i] = cbs.int_strength[i];
     }
-    for (long i = 0; i < cbs.trip_len; i++) {
+    for (int_fast64_t i = 0; i < cbs.trip_len; i++) {
         INTEGER(trip_a)
         [i] = cbs.trip_a[i];
         INTEGER(trip_b)
@@ -144,8 +144,8 @@ SEXP read_log_(SEXP log_filename_)
 {
     const char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
 
-    long restored_iter = -1;
-    long restored_lambda_count = -1;
+    int_fast64_t restored_iter = -1;
+    int_fast64_t restored_lambda_count = -1;
     float restored_lambda_value = -1.0;
     Beta_Value_Sets restored_beta_sets;
 
@@ -165,17 +165,17 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     double* x = REAL(X_);
     double* y = REAL(Y_);
     SEXP dim = getAttrib(X_, R_DimSymbol);
-    long n = INTEGER(dim)[0];
-    long p = INTEGER(dim)[1];
+    int_fast64_t n = INTEGER(dim)[0];
+    int_fast64_t p = INTEGER(dim)[1];
     float frac_overlap_allowed = asReal(frac_overlap_allowed_);
-    long max_interaction_distance = asInteger(max_interaction_distance_);
-    long p_int = get_p_int(p, max_interaction_distance);
-    long max_nz_beta = asInteger(max_nz_beta_);
+    int_fast64_t max_interaction_distance = asInteger(max_interaction_distance_);
+    int_fast64_t p_int = get_p_int(p, max_interaction_distance);
+    int_fast64_t max_nz_beta = asInteger(max_nz_beta_);
     bool verbose = asLogical(verbose_);
-    long max_lambdas = asInteger(max_lambdas_);
+    int_fast64_t max_lambdas = asInteger(max_lambdas_);
     const char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
-    long depth = asInteger(depth_);
-    long log_level_enum = asInteger(log_level_);
+    int_fast64_t depth = asInteger(depth_);
+    int_fast64_t log_level_enum = asInteger(log_level_);
 
     initialise_static_resources();
 
@@ -197,23 +197,23 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         printf("updating once per iteration\n");
     }
 
-    long use_adaptive_calibration = asLogical(use_adaptive_calibration_);
+    int_fast64_t use_adaptive_calibration = asLogical(use_adaptive_calibration_);
     char estimate_unbiased = asLogical(estimate_unbiased_);
     char use_intercept = asLogical(use_intercept_);
 
     float halt_error_diff = asReal(halt_error_diff_);
 
-    long** X = (long**)malloc(p * sizeof *X);
-    for (long i = 0; i < p; i++)
-        X[i] = (long*)malloc(n * sizeof *X[i]);
+    int_fast64_t** X = (int_fast64_t**)malloc(p * sizeof *X);
+    for (int_fast64_t i = 0; i < p; i++)
+        X[i] = (int_fast64_t*)malloc(n * sizeof *X[i]);
 
-    for (long i = 0; i < p; i++) {
-        for (long j = 0; j < n; j++) {
+    for (int_fast64_t i = 0; i < p; i++) {
+        for (int_fast64_t j = 0; j < n; j++) {
             X[i][j] = (int)(x[j + i * n]);
         }
     }
     float* Y = (float*)malloc(n * sizeof(float));
-    for (long i = 0; i < n; i++) {
+    for (int_fast64_t i = 0; i < n; i++) {
         Y[i] = (float)y[i];
     }
 
@@ -243,7 +243,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     free_static_resources();
 
-    for (long i = 0; i < p; i++)
+    for (int_fast64_t i = 0; i < p; i++)
         free(X[i]);
     free(X);
     free(Y);

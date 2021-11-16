@@ -10,7 +10,7 @@ Queue* queue_new()
     return new_queue;
 }
 
-long queue_is_empty(Queue* q)
+int_fast64_t queue_is_empty(Queue* q)
 {
     if (q->length == 0)
         return TRUE;
@@ -34,7 +34,7 @@ void queue_push_tail(Queue* q, void* item)
     q->length++;
 }
 
-long queue_get_length(Queue* q) { return q->length; }
+int_fast64_t queue_get_length(Queue* q) { return q->length; }
 
 void* queue_pop_head(Queue* q)
 {

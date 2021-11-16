@@ -1,19 +1,19 @@
 typedef struct S8bWord {
-    unsigned long selector : 4;
-    unsigned long values : 60;
+    unsigned int selector : 4;
+    unsigned long long values: 60;
 } S8bWord;
 
 typedef struct {
     S8bWord* compressed_indices;
-    long nz;
-    long nwords;
+    int_fast64_t nz;
+    int_fast64_t nwords;
 } S8bCol;
 
 const static char item_width[16] = { 0, 0, 1, 2, 3, 4, 5, 6,
     7, 8, 10, 12, 15, 20, 30, 60 };
 const static unsigned char group_size[16] = { 240, 120, 60, 30, 20, 15, 12, 10,
     8, 7, 6, 5, 4, 3, 2, 1 };
-const static long masks[16] = { 0,
+const static int_fast64_t masks[16] = { 0,
     0,
     (1 << 1) - 1,
     (1 << 2) - 1,
@@ -32,5 +32,5 @@ const static long masks[16] = { 0,
 const static unsigned short max_size_given_entries[61] = {60,30,20,15,12,10,8,7,6,6, 5, 5, 4, 4, 4, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,0};
 const static unsigned short selector_given_count[241] = {15, 15, 14, 13, 12, 11, 10, 9, 8, 7, 7, 6, 6, 5, 5, 5, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-S8bWord to_s8b(long count, long* vals);
-S8bCol col_to_s8b_col(long size, long* col);
+S8bWord to_s8b(int_fast64_t count, int_fast64_t* vals);
+S8bCol col_to_s8b_col(int_fast64_t size, int_fast64_t* col);

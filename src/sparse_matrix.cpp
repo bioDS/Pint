@@ -5,14 +5,14 @@
 
 using namespace std;
 
-XMatrixSparse sparsify_X(long** X, long n, long p)
+XMatrixSparse sparsify_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p)
 {
     return sparse_X2_from_X(X, n, p, 1, FALSE);
 }
 
 void free_sparse_matrix(XMatrixSparse X)
 {
-    for (long i = 0; i < X.p; i++) {
+    for (int_fast64_t i = 0; i < X.p; i++) {
         free(X.cols[i].compressed_indices);
     }
     free(X.cols);
@@ -30,23 +30,23 @@ void free_row_set(struct row_set rs)
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
 {
-    long p = Xc.p;
-    long n = Xc.n;
+    int_fast64_t p = Xc.p;
+    int_fast64_t n = Xc.n;
     struct row_set rs;
     rs.num_rows = n;
-    long** new_rows = (long**)calloc(n, sizeof *new_rows);
-    long* row_lengths = (long*)calloc(n, sizeof *row_lengths);
+    int_fast64_t** new_rows = (int_fast64_t**)calloc(n, sizeof *new_rows);
+    int_fast64_t* row_lengths = (int_fast64_t*)calloc(n, sizeof *row_lengths);
 
     // #pragma omp parallel for
-    for (long row = 0; row < n; row++) {
+    for (int_fast64_t row = 0; row < n; row++) {
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
-        long* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
+        int_fast64_t* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
         // check inverted list for interactions aint row_main
-        // long *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
-        long row_pos = 0;
-        for (long i = 0; i < Xu.host_row_nz[row]; i++) {
-            long col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
-            // long col = X_row[i];
+        // int_fast64_t *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
+        int_fast64_t row_pos = 0;
+        for (int_fast64_t i = 0; i < Xu.host_row_nz[row]; i++) {
+            int_fast64_t col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
+            // int_fast64_t col = X_row[i];
             if (!remove[col]) {
                 row_cache[row_pos] = col;
                 row_pos++;
@@ -55,7 +55,7 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
 
         row_lengths[row] = row_pos;
         if (row_pos > 0)
-            new_rows[row] = (long*)malloc(row_pos * sizeof *new_rows);
+            new_rows[row] = (int_fast64_t*)malloc(row_pos * sizeof *new_rows);
         memcpy(new_rows[row], row_cache, row_pos * sizeof *new_rows);
     }
 
@@ -68,14 +68,14 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
  * max_interaction_distance: interactions will be up to, but not including, this
  * distance from each other. set to 1 for no interactions.
  */
-XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
-    long max_interaction_distance, long shuffle)
+XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
+    int_fast64_t max_interaction_distance, int_fast64_t shuffle)
 {
     XMatrixSparse X2;
-    long colno, length;
+    int_fast64_t colno, length;
 
-    long iter_done = 0;
-    long p_int = p * (p + 1) / 2;
+    int_fast64_t iter_done = 0;
+    int_fast64_t p_int = p * (p + 1) / 2;
     // TODO: for the moment we use the maximum possible p_int for allocation,
     // because things assume it.
     // TODO: this is wrong for dist == 1! (i.e. the main only case). Or at least,
@@ -87,58 +87,58 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
 
     X2.cols = (S8bCol*)malloc(sizeof *X2.cols * p_int);
 
-    long done_percent = 0;
-    long total_count = 0;
-    long total_sum = 0;
+    int_fast64_t done_percent = 0;
+    int_fast64_t total_count = 0;
+    int_fast64_t total_sum = 0;
     // size_t testcol = -INT_MAX;
     colno = 0;
-    long d = max_interaction_distance;
-    long limit_instead = ((p - d) * p - (p - d) * (p - d - 1) / 2 - (p - d));
+    int_fast64_t d = max_interaction_distance;
+    int_fast64_t limit_instead = ((p - d) * p - (p - d) * (p - d - 1) / 2 - (p - d));
 // TODO: iter_done isn't exactly being updated safely
 #pragma omp parallel for shared(X2, X, iter_done) private(length, colno) num_threads(NumCores) reduction(+ \
                                                                                                          : total_count, total_sum) schedule(static)
-    for (long i = 0; i < p; i++) {
-        for (long j = i; j < min(i + max_interaction_distance, (long)p); j++) {
-            long val;
+    for (int_fast64_t i = 0; i < p; i++) {
+        for (int_fast64_t j = i; j < min(i + max_interaction_distance, (int_fast64_t)p); j++) {
+            int_fast64_t val;
             // GQueue *current_col = g_queue_new();
             // GQueue *current_col_actual = g_queue_new();
             Queue* current_col = queue_new();
             // worked out by hand as being equivalent to the offset we would have
             // reached.
-            long a = min(i, p - d); // number of iters limited by d.
-            long b = max(i - (p - d),
+            int_fast64_t a = min(i, p - d); // number of iters limited by d.
+            int_fast64_t b = max(i - (p - d),
                 0l); // number of iters of i limited by p rather than d.
-            // long tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
-            long suma = a * (d - 1);
-            long k = max(p - d + b, 0l);
+            // int_fast64_t tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
+            int_fast64_t suma = a * (d - 1);
+            int_fast64_t k = max(p - d + b, 0l);
             // sumb is the amount we would have reached w/o the limit - the amount
             // that was actually covered by the limit.
-            long sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
+            int_fast64_t sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
             colno = j + suma + sumb;
             // if (tmp != colno) {
             // segfault for debugger
             // printf("%ld != %ld\ni,j a,b sa,sb = %ld,%ld %ld,%ld %ld,%ld", tmp,
             // colno, i, j, a, b, suma, sumb);
-            // (*(long*)NULL)++;
+            // (*(int_fast64_t*)NULL)++;
             // }
 
             // Read through the the current column entries, and append them to X2 as
             // an s8b-encoded list of offsets
-            long* col_entries = (long*)malloc(60 * sizeof *col_entries);
-            long count = 0;
-            long largest_entry = 0;
-            long max_bits = max_size_given_entries[0];
-            long diff = 0;
-            long prev_row = -1;
-            long total_nz_entries = 0;
-            for (long row = 0; row < n; row++) {
+            int_fast64_t* col_entries = (int_fast64_t*)malloc(60 * sizeof *col_entries);
+            int_fast64_t count = 0;
+            int_fast64_t largest_entry = 0;
+            int_fast64_t max_bits = max_size_given_entries[0];
+            int_fast64_t diff = 0;
+            int_fast64_t prev_row = -1;
+            int_fast64_t total_nz_entries = 0;
+            for (int_fast64_t row = 0; row < n; row++) {
                 val = X[i][row] * X[j][row];
                 if (val == 1) {
                     total_nz_entries++;
                     diff = row - prev_row;
                     total_sum += diff;
-                    long used = 0;
-                    long tdiff = diff;
+                    int_fast64_t used = 0;
+                    int_fast64_t tdiff = diff;
                     while (tdiff > 0) {
                         used++;
                         tdiff >>= 1;
@@ -199,9 +199,9 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
             done_percent++;
         }
     }
-    long total_words = 0;
-    long total_entries = 0;
-    for (long i = 0; i < p_int; i++) {
+    int_fast64_t total_words = 0;
+    int_fast64_t total_entries = 0;
+    for (int_fast64_t i = 0; i < p_int; i++) {
         total_words += X2.cols[i].nwords;
         total_entries += X2.cols[i].nz;
     }
@@ -212,9 +212,9 @@ XMatrixSparse sparse_X2_from_X(long** X, long n, long p,
     X2.total_entries = total_entries;
 
     S8bWord* compressed_indices;
-    long* col_start;
-    long* col_nz;
-    long offset = 0;
+    int_fast64_t* col_start;
+    int_fast64_t* col_nz;
+    int_fast64_t offset = 0;
 
     permutation_splits = NumCores;
     permutation_split_size = p_int / permutation_splits;
@@ -240,40 +240,39 @@ void free_host_X(X_uncompressed* Xu)
 
 struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
-    long* host_X = (long*)calloc(Xc->total_entries, sizeof(long));
-    long* host_col_nz = (long*)calloc(Xc->p, sizeof(long));
-    long* host_col_offsets = (long*)calloc(Xc->p, sizeof(long));
-    long* host_X_row = (long*)calloc(Xc->total_entries, sizeof(long));
-    long* host_row_nz = (long*)calloc(Xc->n, sizeof(long));
-    long* host_row_offsets = (long*)calloc(Xc->n, sizeof(long));
-    long p = Xc->p;
-    long n = Xc->n;
+    int_fast64_t* host_X = (int_fast64_t*)calloc(Xc->total_entries, sizeof(int_fast64_t));
+    int_fast64_t* host_col_nz = (int_fast64_t*)calloc(Xc->p, sizeof(int_fast64_t));
+    int_fast64_t* host_col_offsets = (int_fast64_t*)calloc(Xc->p, sizeof(int_fast64_t));
+    int_fast64_t* host_X_row = (int_fast64_t*)calloc(Xc->total_entries, sizeof(int_fast64_t));
+    int_fast64_t* host_row_nz = (int_fast64_t*)calloc(Xc->n, sizeof(int_fast64_t));
+    int_fast64_t* host_row_offsets = (int_fast64_t*)calloc(Xc->n, sizeof(int_fast64_t));
+    int_fast64_t p = Xc->p;
+    int_fast64_t n = Xc->n;
 
-    // row-major dense X, for creating row inverted lists.
-    char(*full_X)[p] = (char(*)[p])calloc(n * p, sizeof(char));
+    char *full_X = (char*)calloc(n * p, sizeof(char));
 
     // read through compressed matrix and construct continuous
     // uncompressed matrix
     size_t offset = 0;
-    for (long k = 0; k < p; k++) {
+    for (int k = 0; k < p; k++) {
         host_col_offsets[k] = offset;
         host_col_nz[k] = Xc->cols[k].nz;
-        long* col = &host_X[offset];
+        int_fast64_t* col = &host_X[offset];
         // read column
         {
-            long col_entry_pos = 0;
-            long entry = -1;
-            for (long i = 0; i < Xc->cols[k].nwords; i++) {
+            int_fast64_t col_entry_pos = 0;
+            int_fast64_t entry = -1;
+            for (int_fast64_t i = 0; i < Xc->cols[k].nwords; i++) {
                 S8bWord word = Xc->cols[k].compressed_indices[i];
-                long values = word.values;
-                for (long j = 0; j <= group_size[word.selector]; j++) {
-                    long diff = values & masks[word.selector];
+                uint_fast64_t values = word.values;
+                for (int_fast64_t j = 0; j <= group_size[word.selector]; j++) {
+                    int_fast64_t diff = values & masks[word.selector];
                     if (diff != 0) {
                         entry += diff;
                         col[col_entry_pos] = entry;
                         col_entry_pos++;
                         offset++;
-                        full_X[entry][k] = 1;
+                        full_X[entry*p+k] = 1;
                     }
                     values >>= item_width[word.selector];
                 }
@@ -283,12 +282,12 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
 
     // construct row-major indices.
     offset = 0;
-    for (long row = 0; row < n; row++) {
+    for (int_fast64_t row = 0; row < n; row++) {
         host_row_offsets[row] = offset;
-        long* col = &host_X[offset];
-        long row_nz = 0;
-        for (long col = 0; col < p; col++) {
-            if (full_X[row][col] == 1) {
+        int_fast64_t* col = &host_X[offset];
+        int_fast64_t row_nz = 0;
+        for (int_fast64_t col = 0; col < p; col++) {
+            if (full_X[row*p+col] == 1) {
                 host_X_row[offset] = col;
                 row_nz++;
                 offset++;

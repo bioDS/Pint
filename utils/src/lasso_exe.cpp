@@ -10,7 +10,7 @@ int main(int argc, const char** argv)
     if (argc != 11) {
         fprintf(stderr, "usage: ./lasso_exe X.csv Y.csv [depth] verbose=T/F [max lambda] N P [max nz] [q/t/filename] [log_level [i]ter/[l]ambda/[n]one]\n");
         printf("actual args(%d): '", argc);
-        for (long i = 0; i < argc; i++) {
+        for (int_fast64_t i = 0; i < argc; i++) {
             printf("%s ", argv[i]);
         }
         printf("\n");
@@ -53,11 +53,11 @@ int main(int argc, const char** argv)
         lambda = -1;
     printf("using lambda = %f\n", lambda);
 
-    long N = atoi(argv[6]);
-    long P = atoi(argv[7]);
+    int_fast64_t N = atoi(argv[6]);
+    int_fast64_t P = atoi(argv[7]);
     printf("using N = %ld, P = %ld\n", N, P);
 
-    long max_nz = atoi(argv[8]);
+    int_fast64_t max_nz = atoi(argv[8]);
     printf("using max nz beta: %ld\n", max_nz);
 
     enum LOG_LEVEL log_level = NONE;
@@ -75,8 +75,8 @@ int main(int argc, const char** argv)
     XMatrix xmatrix = read_x_csv(argv[1], N, P);
     float* Y = read_y_csv(argv[2], N);
 
-    long** X2;
-    long nbeta;
+    int_fast64_t** X2;
+    int_fast64_t nbeta;
     nbeta = xmatrix.actual_cols;
     X2 = xmatrix.X;
     printf("using nbeta = %ld\n", nbeta);
@@ -102,19 +102,19 @@ int main(int argc, const char** argv)
     //	fprintf(stderr, "failed to estimate beta values\n");
     //	return 1;
     //}
-    //for (long i = 0; i < nbeta_int; i++) {
+    //for (int_fast64_t i = 0; i < nbeta_int; i++) {
     //	printf("%f ", beta[i]);
     //}
     //printf("\n");
 
     printf("indices non-zero (|x| != 0):\n");
-    long printed = 0;
-    long sig_beta_count = 0;
+    int_fast64_t printed = 0;
+    int_fast64_t sig_beta_count = 0;
     //TODO: remove hack to avoid printing too much for the terminal
 
     printf("\n\n");
 
-    for (long i = 0; i < xmatrix.actual_cols; i++)
+    for (int_fast64_t i = 0; i < xmatrix.actual_cols; i++)
         free(xmatrix.X[i]);
     free(xmatrix.X);
     free(Y);
@@ -123,25 +123,25 @@ int main(int argc, const char** argv)
     case terminal:
         printf("main:\n");
         for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end(); it++) {
-            long val = it->first;
+            int_fast64_t val = it->first;
             float coef = it->second;
             printf("%ld: %f\n", val, coef);
         }
         printf("int:\n");
         for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end(); it++) {
-            long val = it->first;
+            int_fast64_t val = it->first;
             auto ij = val_to_pair(val, nbeta);
             float coef = it->second;
             printf("%ld,%ld: %f\n", std::get<0>(ij), std::get<1>(ij), coef);
         }
         printf("trip:\n");
         for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end(); it++) {
-            long val = it->first;
+            int_fast64_t val = it->first;
             auto abc = val_to_triplet(val, nbeta);
             float coef = it->second;
             printf("%ld,%ld,%ld: %f\n", std::get<0>(abc), std::get<1>(abc), std::get<2>(abc), coef);
         }
-        //for (long i = 0; i < nbeta_int && printed < 100; i++) {
+        //for (int_fast64_t i = 0; i < nbeta_int && printed < 100; i++) {
         //    if (fabs((beta)[i]) > 0) {
         //        printed++;
         //        sig_beta_count++;
@@ -154,7 +154,7 @@ int main(int argc, const char** argv)
         //}
         break;
     case file:
-        for (long i = 0; i < nbeta_int; i++) {
+        for (int_fast64_t i = 0; i < nbeta_int; i++) {
             if (beta[i] != 0.0) {
                 printed++;
                 sig_beta_count++;

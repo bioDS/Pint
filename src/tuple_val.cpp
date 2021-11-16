@@ -1,34 +1,34 @@
 #include "liblasso.h"
 //TODO: test these
 
-std::tuple<long, long> val_to_pair(long val, long range)
+std::tuple<int_fast64_t, long> val_to_pair(int_fast64_t val, int_fast64_t range)
 {
-    long a = val / range;
-    long b = val % range;
+    int_fast64_t a = val / range;
+    int_fast64_t b = val % range;
     a -= 1;
     return std::make_tuple(a, b);
 }
 
-std::tuple<long, long, long> val_to_triplet(long val, long range)
+std::tuple<int_fast64_t, int_fast64_t, long> val_to_triplet(int_fast64_t val, int_fast64_t range)
 {
-    long a = val / (range * range);
-    long b = (val - (a * range * range)) / (range);
-    long c = val % range;
+    int_fast64_t a = val / (range * range);
+    int_fast64_t b = (val - (a * range * range)) / (range);
+    int_fast64_t c = val % range;
     a -= 1;
     return std::make_tuple(a, b, c);
 }
 
-long pair_to_val(std::tuple<long, long> tp, long range)
+int_fast64_t pair_to_val(std::tuple<int_fast64_t, long> tp, int_fast64_t range)
 {
-    long a = std::get<0>(tp);
-    long b = std::get<1>(tp);
+    int_fast64_t a = std::get<0>(tp);
+    int_fast64_t b = std::get<1>(tp);
     return (a + 1) * range + b;
 }
 
-long triplet_to_val(std::tuple<long, long, long> tp, long range)
+int_fast64_t triplet_to_val(std::tuple<int_fast64_t, int_fast64_t, long> tp, int_fast64_t range)
 {
-    long a = std::get<0>(tp);
-    long b = std::get<1>(tp);
-    long c = std::get<2>(tp);
+    int_fast64_t a = std::get<0>(tp);
+    int_fast64_t b = std::get<1>(tp);
+    int_fast64_t c = std::get<2>(tp);
     return (a + 1) * range * range + b * range + c;
 }
