@@ -1,2 +1,0 @@
-PKG_CFLAGS = @PKG_CFLAGS@ -fopenmp -I../ 
-PKG_LIBS = @PKG_LIBS@ -lgomp

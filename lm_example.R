@@ -8,7 +8,7 @@ require(Pint)
 # Y <- ...
 
 # find non-zero interactions
-fit <- pairwise_lasso(X, Y, max_nz_beta=2000)
+fit <- interaction_lasso(X, Y, max_nz_beta=2000)
 
 # matrix containing only non-zero effects
 Z <- X[,fit$main_effects$i]

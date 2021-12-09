@@ -1,97 +1,209 @@
+#ifndef LIBLASSO_H
+#define LIBLASSO_H
+
+#include "flat_hash_map.hpp"
+#include "robin_hood.h"
+#include <errno.h>
+#include <limits.h>
+#include <math.h>
+#include <stdalign.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// #include <CL/opencl.h>
+#include <math.h>
+#include <omp.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>
-#include <math.h>
-#include <gsl/gsl_permutation.h>
+#include <time.h>
+
+#ifdef R_PACKAGE
+extern "C" {
+#include <R.h>
+}
+#else
+#define Rprintf(args...) printf(args);
+#endif
+
+#ifdef __WIN32
+#define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
+#endif
+
+typedef struct {
+    int_fast64_t* col_i;
+    int_fast64_t* col_j;
+    robin_hood::unordered_flat_map<int_fast64_t, float> lf_map;
+} Thread_Cache;
+typedef struct {
+    int_fast64_t val;
+    // disable padding for now, pretty sure we don't need it.
+    // alignas(64) int_fast64_t val;
+    // char padding[64 - sizeof(long)];
+} pad_int;
+
+typedef struct {
+    int_fast64_t i;
+    int_fast64_t j;
+} int_pair;
+
+enum LOG_LEVEL {
+    ITER,
+    LAMBDA,
+    NONE,
+};
+
+struct X_uncompressed {
+    int_fast64_t* host_X;
+    int_fast64_t* host_col_nz;
+    int_fast64_t* host_col_offsets;
+    int_fast64_t* host_X_row;
+    int_fast64_t* host_row_nz;
+    int_fast64_t* host_row_offsets;
+    int_fast64_t n;
+    int_fast64_t p;
+    size_t total_size;
+};
+struct AS_Properties {
+    int_fast64_t was_present : 1;
+    int_fast64_t present : 1;
+};
+
+struct OpenCL_Setup {
+};
+//struct OpenCL_Setup {
+//    cl_context context;
+//    cl_kernel kernel;
+//    cl_command_queue command_queue;
+//    cl_program program;
+//    cl_mem target_X;
+//    cl_mem target_col_nz;
+//    cl_mem target_col_offsets;
+//    cl_mem target_wont_update;
+//    cl_mem target_rowsum;
+//    cl_mem target_beta;
+//    cl_mem target_updateable_items;
+//    cl_mem target_append;
+//    cl_mem target_last_max;
+//};
+
+/*
+ * Fits 6 to a cache line. As int_fast64_t as schedule is static, this should be fine.
+ */
+
+#include "s8b.h"
+#include "sparse_matrix.h"
+#include "tuple_val.h"
+
+typedef struct {
+    // int_fast64_t *entries;
+    // struct AS_Properties *properties;
+    // struct AS_Entry *entries;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries1;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries2;
+    robin_hood::unordered_flat_map<int_fast64_t, struct AS_Entry> entries3;
+    int_fast64_t length;
+    int_fast64_t max_length;
+    int_fast64_t p;
+    // S8bCol *compressed_cols;
+} Active_Set;
+
+struct AS_Entry {
+    int_fast64_t val : 62;
+    int_fast64_t was_present : 1;
+    int_fast64_t present : 1;
+    S8bCol col;
+    float *last_rowsum;
+    float last_max;
+};
+
+typedef struct {
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    int_fast64_t p;
+} Beta_Value_Sets;
+
+typedef struct {
+    Beta_Value_Sets regularized_result;
+    Beta_Value_Sets unbiased_result;
+    float final_lambda;
+    float regularized_intercept;
+    float unbiased_intercept;
+} Lasso_Result;
+
+typedef struct {
+    XMatrixSparse Xc;
+    float** last_rowsum;
+    Thread_Cache* thread_caches;
+    int_fast64_t n;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> *beta;
+    Beta_Value_Sets* beta_sets;
+    float* last_max;
+    bool* wont_update;
+    int_fast64_t p;
+    int_fast64_t p_int;
+    XMatrixSparse X2c;
+    float* Y;
+    float* max_int_delta;
+    struct X_uncompressed Xu;
+    float intercept;
+} Iter_Vars;
+
+#include "csv.h"
+#include "pruning.h"
+#include "queue.h"
+#include "regression.h"
+#include "update_working_set.h"
+#include "log.h"
+
+int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
+int_pair get_num(int_fast64_t num, int_fast64_t p);
+void free_static_resources();
+void initialise_static_resources();
+int_fast64_t get_p_int(int_fast64_t p, int_fast64_t max_interaction_distance);
+int_pair* get_all_nums(int_fast64_t p, int_fast64_t max_interaction_distance);
+
+#define TRUE 1
+#define FALSE 0
 
 #define VECTOR_SIZE 3
 // are all ids the same size?
 #define ID_LEN 20
 #define BUF_SIZE 16384
 
-static int VERBOSE;
+// pad by an entire cache line, just to be safe.
+#define PADDING 64
 
-enum LOG_LEVEL {
-	ITER,
-	LAMBDA,
-	NONE,
-};
+extern double pruning_time;
+extern double working_set_update_time;
+extern double subproblem_time;
 
-typedef struct S8bWord {
-	unsigned int selector : 4;
-	unsigned long values: 60;
-} S8bWord;
+extern int_fast64_t used_branches;
+extern int_fast64_t pruned_branches;
 
-static int item_width[16] = {0,   0,   1,  2,  3,  4,  5,  6,  7, 8, 10, 12, 15, 20, 30, 60};
-static int group_size[16] = {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6,  5,  4,  3,  2,  1};
-static long masks[16] = {0, 0, (1<<1)-1,(1<<2)-1,(1<<3)-1,(1<<4)-1,(1<<5)-1,(1<<6)-1,(1<<7)-1,(1<<8)-1,(1<<10)-1,(1<<12)-1,(1<<15)-1,(1<<20)-1,(1<<30)-1,((long)1<<60)-1};
+extern int_fast64_t NumCores;
+extern int_fast64_t permutation_splits;
+extern int_fast64_t permutation_split_size;
+extern int_fast64_t final_split_size;
+extern const int_fast64_t NORMALISE_Y;
+extern int_fast64_t skipped_updates;
+extern int_fast64_t total_updates;
+extern int_fast64_t skipped_updates_entries;
+extern int_fast64_t total_updates_entries;
+extern int_fast64_t zero_updates;
+extern int_fast64_t zero_updates_entries;
+extern int_fast64_t* colsum;
+extern float* col_ysum;
+extern int_fast64_t total_beta_updates;
+extern int_fast64_t total_beta_nz_updates;
+extern float halt_error_diff;
 
-S8bWord to_s8b(int count, int *vals);
+#define NUM_MAX_ROWSUMS 1
+extern float max_rowsums[NUM_MAX_ROWSUMS];
+extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
+extern int_pair* cached_nums;
+extern int_fast64_t VERBOSE;
+extern float total_sqrt_error;
 
-typedef struct XMatrix {
-	int **X;
-	int actual_cols;
-} XMatrix;
-
-typedef struct column_set_entry {
-	int value;
-	int nextEntry;
-} ColEntry;
-
-typedef struct Column_Set {
-	int size;
-	ColEntry *cols;
-} Column_Set;
-
-typedef struct XMatrix_sparse {
-	int *col_nz;
-	int *col_nwords;
-	unsigned short **col_nz_indices;
-	gsl_permutation *permutation;
-	S8bWord **compressed_indices;
-} XMatrix_sparse;
-
-typedef struct XMatrix_sparse_row {
-	unsigned short **row_nz_indices;
-	int *row_nz;
-} XMatrix_sparse_row;
-
-typedef struct {
-	int i; int j;
-} int_pair;
-
-typedef struct {
-	double *betas;
-	int *indices;
-	int count;
-} Sparse_Betas;
-
-//TODO: maybe this should be sparse?
-typedef struct {
-	long count;
-	Sparse_Betas *betas;
-	double *lambdas;
-	long vec_length;
-} Beta_Sequence;
-
-int **X2_from_X(int **X, int n, int p);
-XMatrix_sparse sparse_X2_from_X(int **X, int n, int p, long max_interaction_distance, int shuffle);
-double *simple_coordinate_descent_lasso(XMatrix X, double *Y, int n, int p, long max_interaction_distance,
-		double lambda_min, double lambda_max, int max_iter, int VERBOSE, double frac_overlap_allowed,
-		double halt_beta_diff, enum LOG_LEVEL log_level, char **job_args, int job_args_num, int use_adaptive_calibration, int max_nz_beta);
-double update_intercept_cyclic(double intercept, int **X, double *Y, double *beta, int n, int p);
-double update_beta_cyclic(XMatrix X, XMatrix_sparse xmatrix_sparse, double *Y, double *rowsum, int n, int p, double lambda,
-						  double *beta, long k, double intercept, int_pair *precalc_get_num, int *column_cache);
-double soft_threshold(double z, double gamma);
-double *read_y_csv(char *fn, int n);
-XMatrix read_x_csv(char *fn, int n, int p);
-int_pair get_num(long num, long p);
-void free_static_resources();
-void initialise_static_resources();
-void parallel_shuffle(gsl_permutation* permutation, long split_size, long final_split_size, long splits);
-long get_p_int(long p, long max_interaction_distance);
-
-#define TRUE 1
-#define FALSE 0
+#endif
