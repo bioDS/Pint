@@ -9,6 +9,39 @@ This library provides a single function that performs square root lasso regulari
 ```
 output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE)
 ```
+
+## Arguments:
+
+`X` : A binary $n \times p$ matrix.
+
+`Y` : A vector of $n$ real values.
+
+`lambda_min` : optionally set the final value of lambda. If $ < 0$ the default value of $ϕ⁻¹(\frac{0.95}{2 \times p})$ is used.
+
+`frac_overlap_allowed` : currently not used
+
+`halt_error_diff` : The loss-threshold to determine when an iteration is complete.
+
+`max_interaction_distance` : currently not used
+
+`used_adaptive_calibration` : currently not used
+
+`max_nz_beta` : If >=0, halt after this many $\beta$ values are non-zero (note the the current $\lambda$ iteration will be completed first, so more values may be set).
+
+`max_lambdas` : maximum number of iterations (i.e. number of $\lambda$ values).
+
+`log_filename` : name of file to save current progress in case the process needs to be interrupted and resumed.
+
+`log_level` : options are 'none' (no logging), and 'lambda' where progress is saved after each $\lambda$ iteration is completed. N.B. This has not been thoroughly tested.
+
+`depth` : Maximum number of columns that may be included in an interaction. If depth=1, only main effects (columns on their own) are included. If depth=2, pairwise interactions are also included. If depth=3 main effects, pairwise and three-way interactions are included.
+
+`estimate_unbiased` : once the non-zero $\beta$ values have been determined, optionally re-fit with $\lambda=0$ to avoid the minimising effect on $\beta$ values, while still keeping the result sparse.
+
+`use_intercept` : If True, allow a non-zero intercept.
+
+## Return Values
+
 A list of non-zero pairwise/interaction and main effects is returned.
 
 More precisely:
