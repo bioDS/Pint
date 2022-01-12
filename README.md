@@ -4,6 +4,12 @@
 
 This repo is an installable R package, you can install a locally cloned copy with `R CMD INSTALL ./cloned-location`.
 
+Alternatively, install directly from github with:
+```
+library(devtools)
+install_github("bioDS/Pint")
+```
+
 This library provides a single function that performs square root lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
 
 ```
