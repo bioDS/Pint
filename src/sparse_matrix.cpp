@@ -153,8 +153,15 @@ bool check_cols_match(std::vector<int_fast64_t> cola, std::vector<int_fast64_t> 
     return true;
 }
 
-IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set)
+IndiCols get_empty_indicols() {
+    IndiCols id; // empty hash map is valid, this should be fine.
+    return id;
+}
+
+IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols last_result)
 {
+    auto cols_matching_defining_id = last_result.cols_matching_defining_id;
+    // robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_matching_defining_id;
     // robin_hood::unordered_flat_map<uint64_t, int_fast64_t> hashes_to_main;
     // robin_hood::unordered_flat_map<uint64_t, std::tuple<int_fast64_t,int_fast64_t>> hashes_to_pair;
     robin_hood::unordered_flat_map<int64_t, std::vector<int64_t> >col_ids_for_hashvalue;
@@ -206,15 +213,14 @@ IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct
     }
 
     vector<std::pair<int_fast64_t, std::vector<int_fast64_t>>> set_defining_cols;
-    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_matching_defining_id;
     //TODO: fake a hash collision for testing
-    robin_hood::unordered_flat_map<int_fast64_t, bool> first_of_their_kind;
+    // robin_hood::unordered_flat_map<int_fast64_t, bool> first_of_their_kind;
     for (auto hv_pair : col_ids_for_hashvalue) {
         uint64_t hash_value = hv_pair.first;
         printf("hash: %ld: ", hash_value);
         auto col_ids = hv_pair.second;
         int_fast64_t first_col_id = col_ids[0];
-        first_of_their_kind[first_col_id] = true;
+        // first_of_their_kind[first_col_id] = true;
 
         auto first_col = get_col_by_id(Xu, first_col_id);
         // robin_hood::unordered_flat_set<int_fast64_t> set_defining_col_ids;
@@ -288,7 +294,7 @@ IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct
     //printf("\n");
     printf("num unique pairwise columns: %ld (%.1f%%)\n", cols_matching_defining_id.size(), double(100.0*cols_matching_defining_id.size()/(double)(get_p_int(Xu.p, Xu.p))));
 
-    IndiCols id;
+    IndiCols id = {cols_matching_defining_id};
     return id;
 }
 

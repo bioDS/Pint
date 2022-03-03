@@ -1,3 +1,4 @@
+#include "robin_hood.h"
 #include <cstdint>
 typedef struct XMatrix {
     int_fast64_t** X;
@@ -46,8 +47,7 @@ typedef struct {
 } SingleCol;
 
 typedef struct {
-    int num_first_cols;
-    int *first_col_list;
+    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_matching_defining_id;
 } IndiCols;
 
 void free_sparse_matrix(XMatrixSparse X);
@@ -64,5 +64,6 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
 void free_row_set(struct row_set rs);
 X_uncompressed construct_host_X(XMatrixSparse* Xc);
 void free_host_X(X_uncompressed *Xu);
-IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set);
+IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols last_result);
 std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id);
+IndiCols get_empty_indicols();

@@ -1742,14 +1742,14 @@ struct simple_matrix {
     X_uncompressed Xu;
 };
 struct simple_matrix setup_simple_matrix() {
-    int_fast64_t n = 5, p = 5;
+    int_fast64_t n = 5, p = 6;
     // no need to transpose this reading it, xm comes like this.
     const int_fast64_t xm_a[n][p] = {
-        { 1, 1, 1, 0, 0 },
-        { 1, 0, 1, 1, 0 },
-        { 0, 1, 1, 1, 1 },
-        { 1, 1, 0, 0, 0 },
-        { 1, 1, 1, 0, 0 },
+        { 1, 1, 1, 0, 0, 1 },
+        { 1, 0, 1, 1, 0, 1 },
+        { 0, 1, 1, 1, 1, 0 },
+        { 1, 1, 0, 0, 0, 1 },
+        { 1, 1, 1, 0, 0, 1 },
     };
     int_fast64_t** xm = new int_fast64_t*[p];
     for (int_fast64_t j = 0; j < p; j++) {
@@ -1757,7 +1757,7 @@ struct simple_matrix setup_simple_matrix() {
     }
     for (int_fast64_t i = 0; i < n; i++)
         for (int_fast64_t j = 0; j < p; j++) {
-            xm[i][j] = xm_a[j][i];
+            xm[j][i] = xm_a[i][j];
         }
     XMatrixSparse Xc = sparsify_X(xm, n, p);
     X_uncompressed Xu = construct_host_X(&Xc);
@@ -1886,11 +1886,11 @@ void trivial_3way_test()
     printf("beta 3:\n");
     print_beta_set(&beta_sets.beta3);
 
-    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.4);
+    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.08);
     int_fast64_t tmpval = pair_to_val(std::make_tuple(0, 3), p);
     g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 1.5);
     tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
-    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -8.0);
+    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -4.0);
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
 
@@ -2105,13 +2105,13 @@ static void test_simple_indistinguishable_cols()
     bool wont_update[sm.Xu.p];
     for (int i = 0; i < sm.Xu.p; i++)
         wont_update[i] = false;
-    // wont_update[2] = true;
+    wont_update[2] = true;
+    wont_update[3] = true;
     Thread_Cache thread_caches[NumCores];
     for (int_fast64_t i = 0; i < NumCores; i++) {
         thread_caches[i].col_i = (int_fast64_t*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
         thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
     }
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     
     int_fast64_t ida = 0, idb = 2, idc = 3;
     auto comb_ind = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(ida, idb), Xu.p);
@@ -2125,8 +2125,55 @@ static void test_simple_indistinguishable_cols()
     testcol = get_col_by_id(sm.Xu, comb_ind);
     g_assert_true(testcol.size() == 1);
     g_assert_true(testcol[0] == 1);
-    
-    IndiCols indi = get_indistinguishable_cols(Xu, wont_update, new_row_set);
+
+    IndiCols indi = get_empty_indicols();
+
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
+
+    // we excluded 2 & 3
+    g_assert_false(indi.cols_matching_defining_id.contains(2));
+    g_assert_false(indi.cols_matching_defining_id.contains(3));
+
+    // check 4 & 1 == 4
+    auto key_41 = pair_to_val(std::tuple<int, int>(1, 4), sm.p);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
+    g_assert_true(indi.cols_matching_defining_id[4].size() == 2);
+
+    wont_update[2] = false;
+    free_row_set(new_row_set);
+    new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
+    auto key_42 = pair_to_val(std::tuple<int, int>(2, 4), sm.p);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_42));
+    g_assert_true(indi.cols_matching_defining_id[4].size() == 3);
+
+    wont_update[3] = false;
+    free_row_set(new_row_set);
+    new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_42));
+    auto key_43 = pair_to_val(std::tuple<int, int>(3, 4), sm.p);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_43));
+    g_assert_true(indi.cols_matching_defining_id[4].contains(pair_to_val(std::tuple<int,int>(1,3), sm.p)));
+    g_assert_true(indi.cols_matching_defining_id[4].size() == 5);
+
+    // 0,3 == 3,5
+    auto ind_03 = pair_to_val(std::tuple<int,int>(0,3), sm.p);
+    auto ind_35 = pair_to_val(std::tuple<int,int>(3,5), sm.p);
+    g_assert_true(indi.cols_matching_defining_id.contains(ind_03) ||
+                  indi.cols_matching_defining_id.contains(ind_35));
+    if (indi.cols_matching_defining_id.contains(ind_03)) {
+        g_assert_true(indi.cols_matching_defining_id[ind_03].size() == 2);
+        g_assert_true(indi.cols_matching_defining_id[ind_03].contains(ind_35));
+    } else {
+        g_assert_true(indi.cols_matching_defining_id[ind_35].size() == 2);
+        g_assert_true(indi.cols_matching_defining_id[ind_35].contains(ind_03));
+    }
+
+    g_assert_true(indi.cols_matching_defining_id.size() == 9);
     
     free_row_set(new_row_set);
     for (int_fast64_t i = 0; i < NumCores; i++) {
