@@ -53,7 +53,7 @@ enum LOG_LEVEL {
     NONE,
 };
 
-struct X_uncompressed {
+typedef struct {
     int_fast64_t* host_X;
     int_fast64_t* host_col_nz;
     int_fast64_t* host_col_offsets;
@@ -63,7 +63,7 @@ struct X_uncompressed {
     int_fast64_t n;
     int_fast64_t p;
     size_t total_size;
-};
+} X_uncompressed;
 struct AS_Properties {
     int_fast64_t was_present : 1;
     int_fast64_t present : 1;
@@ -146,7 +146,7 @@ typedef struct {
     XMatrixSparse X2c;
     float* Y;
     float* max_int_delta;
-    struct X_uncompressed Xu;
+    X_uncompressed Xu;
     float intercept;
 } Iter_Vars;
 

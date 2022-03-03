@@ -1,6 +1,12 @@
 #include "liblasso.h"
+#include "robin_hood.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
+#include <ctime>
+#include <array>
+#include <vector>
+#include <xxhash64.h>
 #include <omp.h>
 
 using namespace std;
@@ -62,6 +68,228 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
     rs.rows = new_rows;
     rs.row_lengths = row_lengths;
     return rs;
+}
+
+std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
+    std::vector<int_fast64_t> new_col;
+    if (id < Xu.p) {
+        int_fast64_t col_len = Xu.host_col_nz[id];
+        int_fast64_t* entries = &Xu.host_X[Xu.host_col_offsets[id]];
+        for (int i = 0; i < col_len; i++) {
+            new_col.push_back(entries[i]);
+        }
+    } else if (id < Xu.p*Xu.p) {
+        auto pair = val_to_pair(id, Xu.p);
+        auto ida = std::get<0>(pair);
+        auto idb = std::get<1>(pair);
+        int_fast64_t ca_len = Xu.host_col_nz[ida];
+        int_fast64_t* ca_entries = &Xu.host_X[Xu.host_col_offsets[ida]];
+        int_fast64_t cb_len = Xu.host_col_nz[idb];
+        int_fast64_t* cb_entries = &Xu.host_X[Xu.host_col_offsets[idb]];
+        int_fast64_t ca_ind = 0, cb_ind = 0;
+        while(ca_ind < ca_len && cb_ind < cb_len) {
+            while(ca_ind < ca_len && ca_entries[ca_ind] < cb_entries[cb_ind])
+                ca_ind++;
+            while(cb_ind < cb_len && ca_entries[ca_ind] > cb_entries[cb_ind])
+                cb_ind++;
+            if (ca_entries[ca_ind] == cb_entries[cb_ind]) {
+                new_col.push_back(ca_entries[ca_ind]);
+                ca_ind++;
+                cb_ind++;
+            }
+        }
+    } else {
+        auto triple = val_to_triplet(id, Xu.p);
+        auto ida = std::get<0>(triple);
+        auto idb = std::get<1>(triple);
+        auto idc = std::get<2>(triple);
+        int_fast64_t ca_len = Xu.host_col_nz[ida];
+        int_fast64_t* ca_entries = &Xu.host_X[Xu.host_col_offsets[ida]];
+        int_fast64_t cb_len = Xu.host_col_nz[idb];
+        int_fast64_t* cb_entries = &Xu.host_X[Xu.host_col_offsets[idb]];
+        int_fast64_t cc_len = Xu.host_col_nz[idc];
+        int_fast64_t* cc_entries = &Xu.host_X[Xu.host_col_offsets[idc]];
+        int_fast64_t ca_ind = 0, cb_ind = 0, cc_ind = 0;
+        while(ca_ind < ca_len && cb_ind < cb_len && cc_ind < cc_len) {
+            while(ca_ind < ca_len &&
+                ca_entries[ca_ind] < std::max(cb_entries[cb_ind], cc_entries[cc_ind]))
+                ca_ind++;
+            while(cb_ind < cb_len &&
+                cb_entries[cb_ind] < std::max(ca_entries[ca_ind], cc_entries[cc_ind]))
+                cb_ind++;
+            while(cc_ind < cc_len &&
+                cc_entries[cc_ind] < std::max(ca_entries[ca_ind], cb_entries[cb_ind]))
+                cc_ind++;
+            if (ca_entries[ca_ind] == cb_entries[cb_ind] && ca_entries[ca_ind] == cc_entries[cc_ind]) {
+                new_col.push_back(ca_entries[ca_ind]);
+                ca_ind++;
+                cb_ind++;
+                cc_ind++;
+            }
+        }
+
+    }
+    return new_col;
+}
+
+SingleCol get_inter_col(X_uncompressed Xu, int_fast64_t cola, int_fast64_t colb) {
+        int_fast64_t cola_len = Xu.host_col_nz[cola];
+        int_fast64_t* cola_vals = &Xu.host_X[Xu.host_col_offsets[cola]];
+        int_fast64_t colb_len = Xu.host_col_nz[colb];
+        int_fast64_t* colb_vals = &Xu.host_X[Xu.host_col_offsets[colb]];
+}
+
+// bool check_cols_match(X_uncompressed Xu, int_fast64_t cola, int_fast64_t colb) {
+    
+// }
+
+bool check_cols_match(std::vector<int_fast64_t> cola, std::vector<int_fast64_t> colb) {
+    if (cola.size() != colb.size())
+        return false;
+    for (int i = 0; i < cola.size(); i++) {
+        if (cola[i] != colb[i])
+            return false;
+    }
+    return true;
+}
+
+IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set)
+{
+    // robin_hood::unordered_flat_map<uint64_t, int_fast64_t> hashes_to_main;
+    // robin_hood::unordered_flat_map<uint64_t, std::tuple<int_fast64_t,int_fast64_t>> hashes_to_pair;
+    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t> >col_ids_for_hashvalue;
+    for (int_fast64_t main = 0; main < Xu.p; main++) {
+        if (wont_update[main])
+            continue;
+        int_fast64_t main_col_len = Xu.host_col_nz[main];
+        int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
+        uint64_t main_hash = XXHash64::hash(column_entries, main_col_len*sizeof(int_fast64_t));
+        // main_hash = 5; //TODO: testing only, remove.
+        // hashes_to_main[main_hash] = main;
+        printf("col %ld hash %ld\n", main, main_hash);
+        col_ids_for_hashvalue[main_hash].push_back(main);
+    }
+    
+    // use rolling hash for interactions
+    for (int_fast64_t main_col = 0; main_col < Xu.p; main_col++) {
+        if (wont_update[main_col])
+            continue;
+        int_fast64_t main_col_len = Xu.host_col_nz[main_col];
+        int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main_col]];
+        robin_hood::unordered_flat_map<int_fast64_t, XXHash64> int_col_hash;
+
+        for (int_fast64_t col_pos_ind = 0; col_pos_ind < main_col_len; col_pos_ind++) {
+            int_fast64_t col_pos = column_entries[col_pos_ind];
+
+            // int_fast64_t col_pos_row_len = Xu.host_row_nz[col_pos];
+            // int_fast64_t* row_entries = &Xu.host_X_row[Xu.host_row_offsets[col_pos]];
+            int_fast64_t col_pos_row_len = relevant_row_set.row_lengths[col_pos];
+            int_fast64_t* row_entries = relevant_row_set.rows[col_pos];
+            int_fast64_t int_row_ind = 0;
+            while (int_row_ind < col_pos_row_len && row_entries[int_row_ind] <= main_col) { //N.B. we rely on the second condition not being evaluated if the first is false.
+                int_row_ind++;
+            }
+            for (; int_row_ind < col_pos_row_len; int_row_ind++) {
+                int_fast64_t int_row = row_entries[int_row_ind];
+                int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+            }
+        }
+        for (auto pair : int_col_hash) {
+           int_fast64_t inter_col = pair.first;
+           XXHash64 hasher = pair.second;
+           uint64_t hash_result = hasher.hash();
+        //    hash_result = 5; //TODO: for testing only
+           uint64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main_col, inter_col), Xu.p);
+           col_ids_for_hashvalue[hash_result].push_back(inter_id);
+        //    printf("inter %ld-%ld, hash: %ld\n", main_col, inter_col, hash_result);
+        }
+    }
+
+    vector<std::pair<int_fast64_t, std::vector<int_fast64_t>>> set_defining_cols;
+    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_matching_defining_id;
+    //TODO: fake a hash collision for testing
+    robin_hood::unordered_flat_map<int_fast64_t, bool> first_of_their_kind;
+    for (auto hv_pair : col_ids_for_hashvalue) {
+        uint64_t hash_value = hv_pair.first;
+        printf("hash: %ld: ", hash_value);
+        auto col_ids = hv_pair.second;
+        int_fast64_t first_col_id = col_ids[0];
+        first_of_their_kind[first_col_id] = true;
+
+        auto first_col = get_col_by_id(Xu, first_col_id);
+        // robin_hood::unordered_flat_set<int_fast64_t> set_defining_col_ids;
+        set_defining_cols.push_back(std::pair<int_fast64_t, std::vector<int_fast64_t>>(first_col_id, first_col));
+        cols_matching_defining_id[first_col_id].insert(first_col_id);
+        // set_defining_col_ids.insert(first_col_id);
+        //TODO: check columns actually match and handle hash collisions
+        for (auto cid : col_ids) { //TODO: skip first
+            //get_col_from_id()
+            // printf("getting col id %ld\n", cid);
+            auto this_col = get_col_by_id(Xu, cid);
+            vector<std::pair<int_fast64_t, std::vector<int_fast64_t>>> new_cols;
+            bool found_match = false;
+            for (auto existing_pair : set_defining_cols) {
+                int_fast64_t existing_set_defining_col_id = existing_pair.first;
+                std::vector<int_fast64_t> existing_set_defining_col = existing_pair.second;
+
+                if (check_cols_match(existing_set_defining_col, this_col)) {
+                    // this is of the same type as first col
+                    // printf("col id %ld matches %ld\n", cid, existing_set_defining_col_id);
+                    cols_matching_defining_id[existing_set_defining_col_id].insert(cid);
+                    found_match = true;
+                } else {
+                    // printf("col id %ld doesn't match %ld!\n", cid, existing_set_defining_col_id);
+                }
+            }
+            if (!found_match) {
+                // hash collision, this is actually different
+                // printf("col id %ld doesn't match!\n", cid);
+                cols_matching_defining_id[cid].insert(cid);
+                new_cols.push_back(std::pair<int_fast64_t, std::vector<int_fast64_t>>(cid, this_col));
+            }
+            for (auto i : new_cols) {
+                // printf("pushing new col %ld\n", i.first);
+                set_defining_cols.push_back(i);
+            }
+        }
+       
+        for (auto col : col_ids) {
+             if (col < Xu.p)
+                 printf("%ld, ", col);
+             else if (col< Xu.p*Xu.p) {
+                 auto pair = val_to_pair(col, Xu.p);
+                 printf("%ld/(%ld,%ld), ", col, std::get<0>(pair), std::get<1>(pair));
+             }
+        }
+        printf("\n");
+    }
+
+    for (auto pair : cols_matching_defining_id) {
+        auto defining_id = pair.first;
+        auto matching_cols = pair.second;
+        
+        printf("matching col %ld: ", defining_id);
+        for (auto mc : matching_cols) {
+            if (mc < Xu.p)
+                printf("%ld, ", mc);
+            else if (mc < Xu.p*Xu.p) {
+                auto mc_pair = val_to_pair(mc, Xu.p);
+                printf("%ld(%ld,%ld), ", mc, std::get<0>(mc_pair), std::get<1>(mc_pair));
+            } else {
+                printf("not implemented for 3-way, something has gone wrong.\n");
+            }
+        }
+        printf("\n");
+    }
+    //printf("first ids: ");
+    //for (auto pair : first_of_their_kind) {
+    //    printf("%ld, ", pair.first);
+    //}
+    //printf("\n");
+    printf("num unique pairwise columns: %ld (%.1f%%)\n", cols_matching_defining_id.size(), double(100.0*cols_matching_defining_id.size()/(double)(get_p_int(Xu.p, Xu.p))));
+
+    IndiCols id;
+    return id;
 }
 
 /**
@@ -230,7 +458,7 @@ void free_host_X(X_uncompressed* Xu)
     free(Xu->host_row_offsets);
 }
 
-struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
+X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
     int_fast64_t* host_X = (int_fast64_t*)calloc(Xc->total_entries, sizeof(int_fast64_t));
     int_fast64_t* host_col_nz = (int_fast64_t*)calloc(Xc->p, sizeof(int_fast64_t));
@@ -271,12 +499,19 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
             }
         }
     }
+    
+    // for (int ri = 0; ri < n; ri++) {
+    //     printf("%d: ", ri);
+    //     for (int ci = 0; ci < p; ci++) {
+    //         printf("%d ", full_X[ri*p+ci]);
+    //     }
+    //     printf("\n");
+    // }
 
     // construct row-major indices.
     offset = 0;
     for (int_fast64_t row = 0; row < n; row++) {
         host_row_offsets[row] = offset;
-        int_fast64_t* col = &host_X[offset];
         int_fast64_t row_nz = 0;
         for (int_fast64_t col = 0; col < p; col++) {
             if (full_X[row*p+col] == 1) {
@@ -286,10 +521,19 @@ struct X_uncompressed construct_host_X(XMatrixSparse* Xc)
             }
         }
         host_row_nz[row] = row_nz;
+        // printf("row %d len: %d\n", row, row_nz);
+        // printf("row %d offset %d\n", row, host_row_offsets[row]);
+        // printf("row %d inds: ", row);
+        // int to = host_row_offsets[row];
+        // for (int i = 0; i < host_row_nz[row]; i++) {
+        //     // printf("%d ", host_X_row[to + i]);
+        //     printf(" %p,", &host_X_row[to + i]);
+        // }
+        // printf("\n");
     }
 
     free(full_X);
-    struct X_uncompressed Xu;
+    X_uncompressed Xu;
     Xu.host_col_nz = host_col_nz;
     Xu.host_col_offsets = host_col_offsets;
     Xu.host_X = host_X;

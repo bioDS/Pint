@@ -580,7 +580,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     // FALSE);
     XMatrixSparse Xc
         = sparsify_X(X, n, p);
-    struct X_uncompressed Xu = construct_host_X(&Xc);
+    X_uncompressed Xu = construct_host_X(&Xc);
 
     for (int_fast64_t i = 0; i < NUM_MAX_ROWSUMS; i++) {
         max_rowsums[i] = 0;

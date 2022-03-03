@@ -1,3 +1,4 @@
+#include <cstdint>
 typedef struct XMatrix {
     int_fast64_t** X;
     int_fast64_t actual_cols;
@@ -39,6 +40,16 @@ typedef struct XMatrixSparse {
     //S8bWord *row_compressed_indices;
 } XMatrixSparse;
 
+typedef struct {
+    int_fast64_t len;
+    int_fast64_t *vals;
+} SingleCol;
+
+typedef struct {
+    int num_first_cols;
+    int *first_col_list;
+} IndiCols;
+
 void free_sparse_matrix(XMatrixSparse X);
 typedef struct XMatrix_sparse_row {
     unsigned short** row_nz_indices;
@@ -51,5 +62,7 @@ XMatrixSparse sparsify_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches);
 void free_row_set(struct row_set rs);
-struct X_uncompressed construct_host_X(XMatrixSparse* Xc);
+X_uncompressed construct_host_X(XMatrixSparse* Xc);
 void free_host_X(X_uncompressed *Xu);
+IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set);
+std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id);

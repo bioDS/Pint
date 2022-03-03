@@ -1,4 +1,5 @@
 #include "../src/liblasso.h"
+#include <cstdint>
 #include <glib-2.0/glib.h>
 #include <locale.h>
 #include <omp.h>
@@ -1175,7 +1176,7 @@ struct to_append {
 //  // target_col_offsets = temp_offset;
 //}
 
-// struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
+// X_uncompressed construct_host_X(XMatrixSparse *Xc) {
 
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
@@ -1369,7 +1370,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
-    struct X_uncompressed Xu = construct_host_X(&Xc);
+    X_uncompressed Xu = construct_host_X(&Xc);
 
     Iter_Vars iter_vars_basic = {
         Xc,
@@ -1733,9 +1734,16 @@ void test_row_list_without_columns()
     free_row_set(rs);
 }
 
-void trivial_3way_test()
-{
+struct simple_matrix {
+    int_fast64_t n;
+    int_fast64_t p;
+    int_fast64_t** xm;
+    XMatrixSparse Xc;
+    X_uncompressed Xu;
+};
+struct simple_matrix setup_simple_matrix() {
     int_fast64_t n = 5, p = 5;
+    // no need to transpose this reading it, xm comes like this.
     const int_fast64_t xm_a[n][p] = {
         { 1, 1, 1, 0, 0 },
         { 1, 0, 1, 1, 0 },
@@ -1751,7 +1759,29 @@ void trivial_3way_test()
         for (int_fast64_t j = 0; j < p; j++) {
             xm[i][j] = xm_a[j][i];
         }
+    XMatrixSparse Xc = sparsify_X(xm, n, p);
+    X_uncompressed Xu = construct_host_X(&Xc);
+    struct simple_matrix sm = {n, p, xm, Xc, Xu};
+    return sm;
+}
+void free_simple_matrix(struct simple_matrix sm)
+{
+    for (int_fast64_t i = 0; i < sm.p; i++) {
+        delete[] sm.xm[i];
+    }
+    delete[] sm.xm;
+    free_host_X(&sm.Xu);
+    free_sparse_matrix(sm.Xc);
+}
 
+void trivial_3way_test()
+{
+    struct simple_matrix sm = setup_simple_matrix();
+    int_fast64_t n = sm.n;
+    int_fast64_t p = sm.p;
+    int_fast64_t** xm = sm.xm;
+    XMatrixSparse Xc  = sm.Xc;
+    X_uncompressed Xu = sm.Xu;
     robin_hood::unordered_map<int_fast64_t, float> correct_beta;
     //robin_hood::unordered_map<std::pair<int_fast64_t,long>, float> correct_beta2;
     //robin_hood::unordered_map<std::tuple<int_fast64_t,int_fast64_t,long>, float> correct_beta3;
@@ -1823,9 +1853,6 @@ void trivial_3way_test()
     X.X = xm;
     X.actual_cols = p;
 
-    XMatrixSparse Xc = sparsify_X(xm, n, p);
-    X_uncompressed Xu = construct_host_X(&Xc);
-
     const int_fast64_t use_adcal = FALSE;
     Lasso_Result lr = simple_coordinate_descent_lasso(X, Y, n, p,
         -1, 0.01, 100,
@@ -1867,12 +1894,7 @@ void trivial_3way_test()
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
 
-    for (int_fast64_t i = 0; i < p; i++) {
-        delete[] xm[i];
-    }
-    delete[] xm;
-    free_host_X(&Xu);
-    free_sparse_matrix(Xc);
+    free_simple_matrix(sm);
 }
 
 void test_tuple_vals()
@@ -2071,6 +2093,49 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     free(beta2.values);
 }
 
+static void test_simple_indistinguishable_cols()
+{
+    struct simple_matrix sm = setup_simple_matrix();
+    int_fast64_t n = sm.n;
+    int_fast64_t p = sm.p;
+    int_fast64_t** xm = sm.xm;
+    XMatrixSparse Xc  = sm.Xc;
+    X_uncompressed Xu = sm.Xu;
+    
+    bool wont_update[sm.Xu.p];
+    for (int i = 0; i < sm.Xu.p; i++)
+        wont_update[i] = false;
+    // wont_update[2] = true;
+    Thread_Cache thread_caches[NumCores];
+    for (int_fast64_t i = 0; i < NumCores; i++) {
+        thread_caches[i].col_i = (int_fast64_t*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
+    }
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    
+    int_fast64_t ida = 0, idb = 2, idc = 3;
+    auto comb_ind = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(ida, idb), Xu.p);
+    std::vector<int_fast64_t> testcol = get_col_by_id(sm.Xu, comb_ind);
+    g_assert_true(testcol.size() == 3);
+    g_assert_true(testcol[0] == 0);
+    g_assert_true(testcol[1] == 1);
+    g_assert_true(testcol[2] == 4);
+
+    comb_ind = triplet_to_val(std::tuple<int_fast64_t, int_fast64_t, int_fast64_t>(ida, idb, idc), Xu.p);
+    testcol = get_col_by_id(sm.Xu, comb_ind);
+    g_assert_true(testcol.size() == 1);
+    g_assert_true(testcol[0] == 1);
+    
+    IndiCols indi = get_indistinguishable_cols(Xu, wont_update, new_row_set);
+    
+    free_row_set(new_row_set);
+    for (int_fast64_t i = 0; i < NumCores; i++) {
+        free(thread_caches[i].col_i);
+        free(thread_caches[i].col_j);
+    }
+    free_simple_matrix(sm);
+}
+
 static struct pruning_test_setup_details accuracy_setup = {
     2000, 1000,
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
@@ -2143,6 +2208,7 @@ int main(int argc, char* argv[])
     g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
     g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
     g_test_add_func("/func/test_save_restore_log", save_restore_log);
+    g_test_add_func("/func/test_simple_indistinguishable_cols", test_simple_indistinguishable_cols);
     g_test_add("/func/test-adcal", UpdateFixture, 0,
         pruning_fixture_set_up, test_adcal,
         pruning_fixture_tear_down);

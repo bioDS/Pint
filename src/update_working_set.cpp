@@ -190,7 +190,7 @@ void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float las
 char update_working_set_cpu(struct XMatrixSparse Xc,
     struct row_set relevant_row_set,
     Thread_Cache* thread_caches, Active_Set* as,
-    struct X_uncompressed Xu, float* rowsum,
+    X_uncompressed Xu, float* rowsum,
     bool* wont_update, int_fast64_t p, int_fast64_t n, float lambda,
     robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
@@ -485,7 +485,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     return increased_set;
 }
 
-char update_working_set(struct X_uncompressed Xu, XMatrixSparse Xc,
+char update_working_set(X_uncompressed Xu, XMatrixSparse Xc,
     float* rowsum, bool* wont_update, int_fast64_t p, int_fast64_t n,
     float lambda,
     robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
