@@ -2129,32 +2129,35 @@ static void test_simple_indistinguishable_cols()
     IndiCols indi = get_empty_indicols();
 
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
+    std::vector<int_fast64_t> new_cols = {0,1,4,5};
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
 
     // we excluded 2 & 3
     g_assert_false(indi.cols_matching_defining_id.contains(2));
     g_assert_false(indi.cols_matching_defining_id.contains(3));
 
     // check 4 & 1 == 4
-    auto key_41 = pair_to_val(std::tuple<int, int>(1, 4), sm.p);
-    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
+    auto key_14 = pair_to_val(std::tuple<int, int>(1, 4), sm.p);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
     g_assert_true(indi.cols_matching_defining_id[4].size() == 2);
 
     wont_update[2] = false;
+    new_cols = {2};
     free_row_set(new_row_set);
     new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
-    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
-    auto key_42 = pair_to_val(std::tuple<int, int>(2, 4), sm.p);
-    g_assert_true(indi.cols_matching_defining_id[4].contains(key_42));
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
+    auto key_24 = pair_to_val(std::tuple<int, int>(2, 4), sm.p);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_24));
     g_assert_true(indi.cols_matching_defining_id[4].size() == 3);
 
     wont_update[3] = false;
+    new_cols = {3};
     free_row_set(new_row_set);
     new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi);
-    g_assert_true(indi.cols_matching_defining_id[4].contains(key_41));
-    g_assert_true(indi.cols_matching_defining_id[4].contains(key_42));
+    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
+    g_assert_true(indi.cols_matching_defining_id[4].contains(key_24));
     auto key_43 = pair_to_val(std::tuple<int, int>(3, 4), sm.p);
     g_assert_true(indi.cols_matching_defining_id[4].contains(key_43));
     g_assert_true(indi.cols_matching_defining_id[4].contains(pair_to_val(std::tuple<int,int>(1,3), sm.p)));
