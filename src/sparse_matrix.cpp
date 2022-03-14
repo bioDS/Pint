@@ -5,8 +5,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
-#include <xxhash64.h>
 #include <omp.h>
+#include <xxhash.h>
 
 using namespace std;
 
@@ -157,28 +157,32 @@ IndiCols get_empty_indicols() {
     return id;
 }
 
-IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols last_result, std::vector<int_fast64_t> new_cols)
+IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols indi, std::vector<int_fast64_t> new_cols)
 {
-    auto cols_matching_defining_id = last_result.cols_matching_defining_id;
+    // auto cols_matching_defining_id = indi.cols_matching_defining_id;
+    int_fast64_t initial_unique_col_count = indi.defining_col_ids.size();
+    int_fast64_t total_cols_checked = 0;
     robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> new_col_ids_for_hashvalue;
     for (auto main : new_cols) {
-        if (wont_update[main])
-            continue;
+        total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
-        uint64_t main_hash = XXHash64::hash(column_entries, main_col_len*sizeof(int_fast64_t));
+        XXH64_hash_t main_hash = XXH64(column_entries, main_col_len*sizeof(int_fast64_t), 0);
+        
+        // uint64_t main_hash = XXHash64::hash(column_entries, main_col_len*sizeof(int_fast64_t));
         // main_hash = 5; //TODO: testing only
-        printf("col %ld hash %ld\n", main, main_hash);
-        new_col_ids_for_hashvalue[main_hash].push_back(main);
+        // printf("col %ld hash %ld\n", main, main_hash);
+        // new_col_ids_for_hashvalue[main_hash].push_back(main);
+        if (!indi.cols_for_hash.contains(main_hash))
+            indi.defining_col_ids.insert(main);
+        indi.cols_for_hash[main_hash].insert(main);
     }
     
     // use rolling hash for interactions
     for (auto main_col : new_cols) {
-        if (wont_update[main_col])
-            continue;
         int_fast64_t main_col_len = Xu.host_col_nz[main_col];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main_col]];
-        robin_hood::unordered_flat_map<int_fast64_t, XXHash64> int_col_hash;
+        robin_hood::unordered_flat_map<int_fast64_t, XXH64_state_t*> int_col_hash;
 
         for (int_fast64_t col_pos_ind = 0; col_pos_ind < main_col_len; col_pos_ind++) {
             int_fast64_t col_pos = column_entries[col_pos_ind];
@@ -194,108 +198,48 @@ IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct
                     while (temp_new_col_ind < new_cols.size()-1 && new_cols[temp_new_col_ind] < int_row)
                         temp_new_col_ind++;
                     int_fast64_t tmp_new_col = new_cols[temp_new_col_ind];
-                    if (int_row != tmp_new_col) //TODO: broken!
-                        int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+                    total_cols_checked++;
+                    if (int_row != tmp_new_col) { //TODO: broken?
+                        if (!int_col_hash.contains(int_row)) {
+                            int_col_hash[int_row] = XXH64_createState();
+                            XXH64_reset(int_col_hash[int_row], 0);
+                        }
+                        // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+                        XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
+                    }
                 } else {
-                    if (int_row != main_col)
-                        int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+                    total_cols_checked++;
+                    if (int_row != main_col) {
+                        if (!int_col_hash.contains(int_row)) {
+                            int_col_hash[int_row] = XXH64_createState();
+                            XXH64_reset(int_col_hash[int_row], 0);
+                        }
+                        // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+                        XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
+                    }
                 }
             }
         }
         for (auto pair : int_col_hash) {
             int_fast64_t inter_col = pair.first;
-            XXHash64 hasher = pair.second;
-            uint64_t hash_result = hasher.hash();
+            XXH64_state_t* hash_state = pair.second;
+            uint64_t hash_result = XXH64_digest(hash_state);
             // hash_result = 5; //TODO: for testing only
 
             uint64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main_col, inter_col), Xu.p);
-            new_col_ids_for_hashvalue[hash_result].push_back(inter_id);
+            if (!indi.cols_for_hash.contains(hash_result))
+                indi.defining_col_ids.insert(inter_id);
+            indi.cols_for_hash[hash_result].insert(inter_id);
+            // new_col_ids_for_hashvalue[hash_result].push_back(inter_id);
             // printf("inter %ld-%ld, hash: %ld\n", main_col, inter_col, hash_result);
         }
     }
 
-    vector<std::pair<int_fast64_t, std::vector<int_fast64_t>>> set_defining_cols;
-    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_col_ids_for_hashvalue;
-    
-    for (auto hv_pair : new_col_ids_for_hashvalue) {
-        uint64_t hash_value = hv_pair.first;
-        printf("hash: %ld: ", hash_value);
-        auto new_col_ids = hv_pair.second;
-        std::vector<int_fast64_t> col_ids;
-        if (last_result.defining_col_ids_for_hashvalue.contains((hash_value))) {
-            auto existing_defining_ids = last_result.defining_col_ids_for_hashvalue[hash_value];
-            for (auto id : existing_defining_ids)
-                col_ids.push_back(id);
-        }
-        for (auto id : new_col_ids)
-            col_ids.push_back(id);
-        int_fast64_t first_col_id = col_ids[0];
+    auto new_col_count = indi.defining_col_ids.size() - initial_unique_col_count;
+    printf("new unique pairwise columns: %ld (%.1f%%)\n", new_col_count, double(100.0*new_col_count/(double)(total_cols_checked)));
 
-        auto first_col = get_col_by_id(Xu, first_col_id);
-        set_defining_cols.push_back(std::pair<int_fast64_t, std::vector<int_fast64_t>>(first_col_id, first_col));
-        cols_matching_defining_id[first_col_id].insert(first_col_id);
-        std::vector<int_fast64_t> to_keep = {first_col_id};
-        for (auto cid : col_ids) { //TODO: skip first
-            // printf("getting col id %ld\n", cid);
-            auto this_col = get_col_by_id(Xu, cid);
-            vector<std::pair<int_fast64_t, std::vector<int_fast64_t>>> new_cols;
-            bool found_match = false;
-            for (auto existing_pair : set_defining_cols) {
-                int_fast64_t existing_set_defining_col_id = existing_pair.first;
-                std::vector<int_fast64_t> existing_set_defining_col = existing_pair.second;
-
-                if (check_cols_match(existing_set_defining_col, this_col)) {
-                    // this is of the same type as first col
-                    // printf("col id %ld matches %ld\n", cid, existing_set_defining_col_id);
-                    cols_matching_defining_id[existing_set_defining_col_id].insert(cid);
-                    found_match = true;
-                }            }
-            if (!found_match) {
-                // hash collision, this is actually different
-                // printf("col id %ld doesn't match!\n", cid);
-                cols_matching_defining_id[cid].insert(cid);
-                new_cols.push_back(std::pair<int_fast64_t, std::vector<int_fast64_t>>(cid, this_col));
-                to_keep.push_back(cid);
-            }
-            for (auto i : new_cols) {
-                // printf("pushing new col %ld\n", i.first);
-                set_defining_cols.push_back(i);
-            }
-        }
-        defining_col_ids_for_hashvalue[hash_value] = to_keep;
-       
-        for (auto col : col_ids) {
-             if (col < Xu.p)
-                 printf("%ld, ", col);
-             else if (col< Xu.p*Xu.p) {
-                 auto pair = val_to_pair(col, Xu.p);
-                 printf("%ld/(%ld,%ld), ", col, std::get<0>(pair), std::get<1>(pair));
-             }
-        }
-        printf("\n");
-    }
-
-    for (auto pair : cols_matching_defining_id) {
-        auto defining_id = pair.first;
-        auto matching_cols = pair.second;
-        
-        printf("matching col %ld: ", defining_id);
-        for (auto mc : matching_cols) {
-            if (mc < Xu.p)
-                printf("%ld, ", mc);
-            else if (mc < Xu.p*Xu.p) {
-                auto mc_pair = val_to_pair(mc, Xu.p);
-                printf("%ld(%ld,%ld), ", mc, std::get<0>(mc_pair), std::get<1>(mc_pair));
-            } else {
-                printf("not implemented for 3-way, something has gone wrong.\n");
-            }
-        }
-        printf("\n");
-    }
-    printf("num unique pairwise columns: %ld (%.1f%%)\n", cols_matching_defining_id.size(), double(100.0*cols_matching_defining_id.size()/(double)(get_p_int(Xu.p, Xu.p))));
-
-    IndiCols id = {cols_matching_defining_id, defining_col_ids_for_hashvalue};
-    return id;
+    // IndiCols id = {cols_matching_defining_id, defining_col_ids_for_hashvalue};
+    return indi;
 }
 
 /**

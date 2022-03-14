@@ -187,6 +187,7 @@ void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float las
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+static IndiCols indicols; //todo: something neater.
 char update_working_set_cpu(struct XMatrixSparse Xc,
     struct row_set relevant_row_set,
     Thread_Cache* thread_caches, Active_Set* as,
@@ -226,10 +227,12 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                                    : total_inter_cols, total, skipped, int2_used, int2_skipped)
     for (int_fast64_t main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
+        int_fast64_t main = updateable_items[main_i];
+        if (!indicols.defining_col_ids.contains(main))
+            continue;
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
         int_fast64_t* col_i_cache = thread_cache.col_i;
         int_fast64_t* col_j_cache = thread_cache.col_j;
-        int_fast64_t main = updateable_items[main_i];
         float max_inter_val = 0;
         int_fast64_t inter_cols = 0;
         robin_hood::unordered_flat_map<int_fast64_t, float> sum_with_col;
@@ -254,6 +257,9 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     ri++;
                 for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
+                    auto inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, inter), p);
+                    if (!indicols.defining_col_ids.contains(inter_id))
+                        continue;
                     // printf("checking pairwise %ld,%ld\n", main, inter); //TOOD:
                     // maintain separate lists so we can solve them in order
                     sum_with_col[inter] += rowsum_diff;
@@ -494,7 +500,9 @@ char update_working_set(X_uncompressed Xu, XMatrixSparse Xc,
     struct OpenCL_Setup* setup, float* last_max,
     int_fast64_t depth)
 {
+    const std::vector<int_fast64_t> new_cols(updateable_items, &updateable_items[count_may_update]);
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    indicols = get_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,
         beta, updateable_items, count_may_update, last_max, depth);

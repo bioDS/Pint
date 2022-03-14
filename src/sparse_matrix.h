@@ -48,8 +48,9 @@ typedef struct {
 } SingleCol;
 
 typedef struct {
-    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_matching_defining_id;
-    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_col_ids_for_hashvalue;
+    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_for_hash;
+    // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
+    robin_hood::unordered_flat_set<int_fast64_t> defining_col_ids;
 } IndiCols;
 
 void free_sparse_matrix(XMatrixSparse X);
