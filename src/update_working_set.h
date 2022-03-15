@@ -9,7 +9,7 @@ char update_working_set(
     float* rowsum, bool* wont_update, int_fast64_t p, int_fast64_t n,
     float lambda, robin_hood::unordered_flat_map<int_fast64_t, float>* beta, int_fast64_t* updateable_items, int_fast64_t count_may_update, Active_Set* as,
     Thread_Cache* thread_caches, struct OpenCL_Setup* setup,
-    float* last_max, int_fast64_t depth);
+    float* last_max, int_fast64_t depth, IndiCols indicols);
 
 void free_inter_cache(int_fast64_t p);
 //struct OpenCL_Setup setup_working_set_kernel(

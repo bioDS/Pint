@@ -157,10 +157,10 @@ IndiCols get_empty_indicols() {
     return id;
 }
 
-IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols indi, std::vector<int_fast64_t> new_cols)
+void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols indi, std::vector<int_fast64_t> new_cols)
 {
     // auto cols_matching_defining_id = indi.cols_matching_defining_id;
-    int_fast64_t initial_unique_col_count = indi.defining_col_ids.size();
+    // int_fast64_t initial_unique_col_count = indi.defining_main_col_ids.size() + indi.defining_pair_ids.size();
     int_fast64_t total_cols_checked = 0;
     robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> new_col_ids_for_hashvalue;
     for (auto main : new_cols) {
@@ -174,72 +174,71 @@ IndiCols get_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct
         // printf("col %ld hash %ld\n", main, main_hash);
         // new_col_ids_for_hashvalue[main_hash].push_back(main);
         if (!indi.cols_for_hash.contains(main_hash))
-            indi.defining_col_ids.insert(main);
+            indi.defining_main_col_ids.insert(main);
         indi.cols_for_hash[main_hash].insert(main);
     }
     
     // use rolling hash for interactions
-    for (auto main_col : new_cols) {
-        int_fast64_t main_col_len = Xu.host_col_nz[main_col];
-        int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main_col]];
-        robin_hood::unordered_flat_map<int_fast64_t, XXH64_state_t*> int_col_hash;
+    //for (auto main_col : new_cols) {
+    //    int_fast64_t main_col_len = Xu.host_col_nz[main_col];
+    //    int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main_col]];
+    //    robin_hood::unordered_flat_map<int_fast64_t, XXH64_state_t*> int_col_hash;
 
-        for (int_fast64_t col_pos_ind = 0; col_pos_ind < main_col_len; col_pos_ind++) {
-            int_fast64_t col_pos = column_entries[col_pos_ind];
+    //    for (int_fast64_t col_pos_ind = 0; col_pos_ind < main_col_len; col_pos_ind++) {
+    //        int_fast64_t col_pos = column_entries[col_pos_ind];
 
-            int_fast64_t col_pos_row_len = relevant_row_set.row_lengths[col_pos];
-            int_fast64_t* row_entries = relevant_row_set.rows[col_pos];
-            int_fast64_t int_row_ind = 0;
-            int_fast64_t temp_new_col_ind = 0;
-            for (; int_row_ind < col_pos_row_len; int_row_ind++) {
-                int_fast64_t int_row = row_entries[int_row_ind];
-                // rule out new cols less than col_pos (to avoid duplicates)
-                if (int_row < main_col) {
-                    while (temp_new_col_ind < new_cols.size()-1 && new_cols[temp_new_col_ind] < int_row)
-                        temp_new_col_ind++;
-                    int_fast64_t tmp_new_col = new_cols[temp_new_col_ind];
-                    total_cols_checked++;
-                    if (int_row != tmp_new_col) { //TODO: broken?
-                        if (!int_col_hash.contains(int_row)) {
-                            int_col_hash[int_row] = XXH64_createState();
-                            XXH64_reset(int_col_hash[int_row], 0);
-                        }
-                        // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
-                        XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
-                    }
-                } else {
-                    total_cols_checked++;
-                    if (int_row != main_col) {
-                        if (!int_col_hash.contains(int_row)) {
-                            int_col_hash[int_row] = XXH64_createState();
-                            XXH64_reset(int_col_hash[int_row], 0);
-                        }
-                        // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
-                        XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
-                    }
-                }
-            }
-        }
-        for (auto pair : int_col_hash) {
-            int_fast64_t inter_col = pair.first;
-            XXH64_state_t* hash_state = pair.second;
-            uint64_t hash_result = XXH64_digest(hash_state);
-            // hash_result = 5; //TODO: for testing only
+    //        int_fast64_t col_pos_row_len = relevant_row_set.row_lengths[col_pos];
+    //        int_fast64_t* row_entries = relevant_row_set.rows[col_pos];
+    //        int_fast64_t int_row_ind = 0;
+    //        int_fast64_t temp_new_col_ind = 0;
+    //        for (; int_row_ind < col_pos_row_len; int_row_ind++) {
+    //            int_fast64_t int_row = row_entries[int_row_ind];
+    //            // rule out new cols less than col_pos (to avoid duplicates)
+    //            if (int_row < main_col) {
+    //                while (temp_new_col_ind < new_cols.size()-1 && new_cols[temp_new_col_ind] < int_row)
+    //                    temp_new_col_ind++;
+    //                int_fast64_t tmp_new_col = new_cols[temp_new_col_ind];
+    //                total_cols_checked++;
+    //                if (int_row != tmp_new_col) { //TODO: broken?
+    //                    if (!int_col_hash.contains(int_row)) {
+    //                        int_col_hash[int_row] = XXH64_createState();
+    //                        XXH64_reset(int_col_hash[int_row], 0);
+    //                    }
+    //                    // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+    //                    XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
+    //                }
+    //            } else {
+    //                total_cols_checked++;
+    //                if (int_row != main_col) {
+    //                    if (!int_col_hash.contains(int_row)) {
+    //                        int_col_hash[int_row] = XXH64_createState();
+    //                        XXH64_reset(int_col_hash[int_row], 0);
+    //                    }
+    //                    // int_col_hash[int_row].add(&col_pos, sizeof(col_pos));
+    //                    XXH64_update(int_col_hash[int_row], &col_pos, sizeof(int_fast64_t));
+    //                }
+    //            }
+    //        }
+    //    }
+    //    for (auto pair : int_col_hash) {
+    //        int_fast64_t inter_col = pair.first;
+    //        XXH64_state_t* hash_state = pair.second;
+    //        uint64_t hash_result = XXH64_digest(hash_state);
+    //        // hash_result = 5; //TODO: for testing only
 
-            uint64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main_col, inter_col), Xu.p);
-            if (!indi.cols_for_hash.contains(hash_result))
-                indi.defining_col_ids.insert(inter_id);
-            indi.cols_for_hash[hash_result].insert(inter_id);
-            // new_col_ids_for_hashvalue[hash_result].push_back(inter_id);
-            // printf("inter %ld-%ld, hash: %ld\n", main_col, inter_col, hash_result);
-        }
-    }
+    //        uint64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main_col, inter_col), Xu.p);
+    //        if (!indi.cols_for_hash.contains(hash_result))
+    //            indi.defining_pair_ids.insert(inter_id);
+    //        indi.cols_for_hash[hash_result].insert(inter_id);
+    //        // new_col_ids_for_hashvalue[hash_result].push_back(inter_id);
+    //        // printf("inter %ld-%ld, hash: %ld\n", main_col, inter_col, hash_result);
+    //    }
+    //}
 
-    auto new_col_count = indi.defining_col_ids.size() - initial_unique_col_count;
-    printf("new unique pairwise columns: %ld (%.1f%%)\n", new_col_count, double(100.0*new_col_count/(double)(total_cols_checked)));
+    // auto new_col_count = indi.defining_main_col_ids.size() + indi.defining_pair_ids.size() - initial_unique_col_count;
+    // printf("new unique pairwise columns: %ld (%.1f%%)\n", new_col_count, double(100.0*new_col_count/(double)(total_cols_checked)));
 
     // IndiCols id = {cols_matching_defining_id, defining_col_ids_for_hashvalue};
-    return indi;
 }
 
 /**

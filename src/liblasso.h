@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <xxhash.h>
 
 #ifdef R_PACKAGE
 extern "C" {
@@ -91,6 +92,13 @@ struct OpenCL_Setup {
  * Fits 6 to a cache line. As int_fast64_t as schedule is static, this should be fine.
  */
 
+typedef struct {
+    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_for_hash;
+    // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
+    robin_hood::unordered_flat_set<int_fast64_t> defining_main_col_ids;
+    robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
+} IndiCols;
+
 #include "s8b.h"
 #include "sparse_matrix.h"
 #include "tuple_val.h"
@@ -130,6 +138,7 @@ typedef struct {
     float final_lambda;
     float regularized_intercept;
     float unbiased_intercept;
+    IndiCols indi;
 } Lasso_Result;
 
 typedef struct {

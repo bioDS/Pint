@@ -1,5 +1,5 @@
 # misc_tests = executable('misc-tests', 'misc-tests.cpp', dependencies: dependency('glib-2.0'), link_with: liblasso)
-func_tests = executable('func-tests', 'func-tests.cpp', dependencies: [dependency('glib-2.0'), dependency('gsl'), dependency('openmp')], link_with: liblasso)
+func_tests = executable('func-tests', 'func-tests.cpp', dependencies: [dependency('glib-2.0'), dependency('gsl'), dependency('openmp'), dependency('libxxhash')], link_with: liblasso)
 
 # test('misc tests', misc_tests, args: ['-p', '/misc'],)
 test('read_y', func_tests, args: ['-p', '/func/test-read-y-csv'],)

@@ -248,7 +248,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
 
 int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept)
+    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols indi)
 {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
@@ -369,7 +369,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             beta, updateable_items, count_may_update, active_set,
-            thread_caches, ocl_setup, last_max, depth);
+            thread_caches, ocl_setup, last_max, depth, indi);
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -551,6 +551,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     VERBOSE = verbose;
     int_pair* precalc_get_num;
     int_fast64_t** X = xmatrix.X;
+    IndiCols indi;
 
     int_fast64_t real_p_int = -1;
     switch (depth) {
@@ -782,7 +783,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         if (VERBOSE)
             printf("nz_beta %ld\n", nz_beta);
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth, use_intercept);
+            old_rowsum, &active_set, &ocl_setup, depth, use_intercept, indi);
 
         {
             int_fast64_t nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
@@ -993,6 +994,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.final_lambda = lambda;
     result.regularized_intercept = intercept;
     result.unbiased_intercept = unbiased_intercept;
+    result.indi = indi;
 #pragma omp barrier
     return result;
 }

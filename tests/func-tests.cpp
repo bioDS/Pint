@@ -9,6 +9,7 @@
 #include <iostream>
 #include <time.h>
 #include <vector>
+#include <xxhash.h>
 
 #include <algorithm>
 
@@ -20,7 +21,7 @@ using namespace std;
 extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
-    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept);
+    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols indi);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
@@ -50,6 +51,7 @@ typedef struct {
     int_fast64_t** column_caches;
     XMatrixSparse Xc;
     XMatrixSparse X2c;
+    X_uncompressed Xu;
 } UpdateFixture;
 
 const static float small_X2_correct_beta[630] = {
@@ -858,6 +860,7 @@ static void pruning_fixture_set_up(UpdateFixture* fixture,
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
     x2_conversion_time = ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
     fixture->Xc = Xc;
+    fixture->Xu = construct_host_X(&Xc);
 }
 
 static void pruning_fixture_tear_down(UpdateFixture* fixture,
@@ -865,6 +868,7 @@ static void pruning_fixture_tear_down(UpdateFixture* fixture,
 {
     free_sparse_matrix(fixture->Xc);
     free_sparse_matrix(fixture->X2c);
+    free_host_X(&fixture->Xu);
 
     test_simple_coordinate_descent_tear_down(fixture, NULL);
 }
@@ -1178,6 +1182,7 @@ struct to_append {
 
 // X_uncompressed construct_host_X(XMatrixSparse *Xc) {
 
+
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
 {
@@ -1188,7 +1193,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        77, log_file, 2, FALSE, FALSE);
+        97, log_file, 2, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     vector<pair<int, int>> true_effects = {
@@ -1227,6 +1232,8 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
             int_fast64_t second = it->second - 1;
             printf("checking %ld,%ld\n", first, second);
             int_fast64_t val = pair_to_val(std::make_tuple(first, second), fixture->p);
+            auto actual_col = get_col_by_id(fixture->Xu, val);
+            int_fast64_t actual_col_hash = XXH64(actual_col.data(), actual_col.size()*sizeof(actual_col[0]), 0);
             printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
             g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
         }
@@ -1502,8 +1509,9 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
+        IndiCols empty_indi;
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, NULL, 2, FALSE);
+            &active_set, NULL, 2, FALSE, empty_indi);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -2130,11 +2138,11 @@ static void test_simple_indistinguishable_cols()
 
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     std::vector<int_fast64_t> new_cols = {0,1,4,5};
-    indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
+    // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
 
     // we excluded 2 & 3
-    g_assert_false(indi.defining_col_ids.contains(2));
-    g_assert_false(indi.defining_col_ids.contains(3));
+    //g_assert_false(indi.defining_col_ids.contains(2));
+    //g_assert_false(indi.defining_col_ids.contains(3));
 
     // // check 4 & 1 == 4
     // auto key_14 = pair_to_val(std::tuple<int, int>(1, 4), sm.p);
