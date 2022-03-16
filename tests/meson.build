@@ -21,3 +21,4 @@ test('pruning accuracy', func_tests, args: ['-p', '/func/test-branch-pruning-acc
 test('tuple vals', func_tests, args: ['-p', '/func/test_tuple_vals'],)
 test('trivial 3way', func_tests, args: ['-p', '/func/trivial-3way'],)
 test('row list without columns', func_tests, args: ['-p', '/func/test_row_list_without_columns'],)
+test('check indistinguishable columns', func_tests, args: ['-p', '/func/test_simple_indistinguishable_cols'],)

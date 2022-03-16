@@ -2166,6 +2166,47 @@ static void test_simple_indistinguishable_cols()
     for (auto main_col : lr.indi.defining_main_col_ids) {
         printf("unique main col id: %ld\n", main_col);
     }
+    g_assert_true(lr.indi.defining_main_col_ids.contains(0));
+    g_assert_true(lr.indi.defining_main_col_ids.contains(1));
+    g_assert_true(lr.indi.defining_main_col_ids.contains(2));
+    g_assert_true(lr.indi.defining_main_col_ids.contains(3));
+    g_assert_true(lr.indi.defining_main_col_ids.contains(4));
+    g_assert_false(lr.indi.defining_main_col_ids.contains(5));
+
+    for (auto hash_colset : lr.indi.cols_for_hash) {
+        int_fast64_t hash = hash_colset.first;
+        auto colset = hash_colset.second;
+        int_fast64_t first_col_id = -1;
+        for (auto tmp : colset) {
+            first_col_id = tmp;
+            break;
+        }
+        auto first_col = get_col_by_id(sm.Xu, first_col_id);
+        for (auto col_id : colset) {
+            printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
+            auto this_col = get_col_by_id(sm.Xu, col_id);
+            g_assert_true(check_cols_match(first_col, this_col));
+        }
+    }
+    for (auto pair_id : lr.indi.skip_pair_ids) {
+        auto pair_cols = val_to_pair(pair_id, sm.p);
+        printf("checking pair %ld,%ld really is a duplicate\n", std::get<0>(pair_cols), std::get<1>(pair_cols));
+        auto this_col = get_col_by_id(sm.Xu, pair_id);
+        int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+        auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
+
+        int_fast64_t first_col_id = -1;
+        for (auto tmp : cols_matching_hash) {
+            if (tmp != pair_id) {
+                first_col_id = tmp;
+                break;
+            }
+        }
+        g_assert_true(first_col_id >= 0);
+        auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
+        printf("checking claim that cols %ld,% ld(%ld,%ld) match\n", first_col_id, pair_id, std::get<0>(pair_cols), std::get<1>(pair_cols));
+        g_assert_true(check_cols_match(this_col, first_hash_col));
+    }
     // lr.indi.
     // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
 

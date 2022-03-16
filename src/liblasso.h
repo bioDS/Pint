@@ -100,6 +100,7 @@ struct OpenCL_Setup {
 typedef struct {
     robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_for_hash;
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
+    robin_hood::unordered_flat_set<int_fast64_t> main_col_hashes;
     robin_hood::unordered_flat_set<int_fast64_t> defining_main_col_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
     // robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
