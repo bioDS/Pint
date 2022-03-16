@@ -7,6 +7,7 @@
 #include <vector>
 #include <omp.h>
 #include <xxhash.h>
+// #include<glib-2.0/glib.h>
 
 using namespace std;
 
@@ -87,15 +88,16 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
         int_fast64_t* cb_entries = &Xu.host_X[Xu.host_col_offsets[idb]];
         int_fast64_t ca_ind = 0, cb_ind = 0;
         while(ca_ind < ca_len && cb_ind < cb_len) {
-            while(ca_ind < ca_len && ca_entries[ca_ind] < cb_entries[cb_ind])
-                ca_ind++;
-            while(cb_ind < cb_len && ca_entries[ca_ind] > cb_entries[cb_ind])
-                cb_ind++;
             if (ca_entries[ca_ind] == cb_entries[cb_ind]) {
                 new_col.push_back(ca_entries[ca_ind]);
                 ca_ind++;
                 cb_ind++;
+                continue;
             }
+            while(ca_ind < ca_len && ca_entries[ca_ind] < cb_entries[cb_ind])
+                ca_ind++;
+            while(cb_ind < cb_len && ca_entries[ca_ind] > cb_entries[cb_ind])
+                cb_ind++;
         }
     } else {
         auto triple = val_to_triplet(id, Xu.p);
@@ -110,6 +112,13 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
         int_fast64_t* cc_entries = &Xu.host_X[Xu.host_col_offsets[idc]];
         int_fast64_t ca_ind = 0, cb_ind = 0, cc_ind = 0;
         while(ca_ind < ca_len && cb_ind < cb_len && cc_ind < cc_len) {
+            if (ca_entries[ca_ind] == cb_entries[cb_ind] && ca_entries[ca_ind] == cc_entries[cc_ind]) {
+                new_col.push_back(ca_entries[ca_ind]);
+                ca_ind++;
+                cb_ind++;
+                cc_ind++;
+                continue;
+            }
             while(ca_ind < ca_len &&
                 ca_entries[ca_ind] < std::max(cb_entries[cb_ind], cc_entries[cc_ind]))
                 ca_ind++;
@@ -119,12 +128,6 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
             while(cc_ind < cc_len &&
                 cc_entries[cc_ind] < std::max(ca_entries[ca_ind], cb_entries[cb_ind]))
                 cc_ind++;
-            if (ca_entries[ca_ind] == cb_entries[cb_ind] && ca_entries[ca_ind] == cc_entries[cc_ind]) {
-                new_col.push_back(ca_entries[ca_ind]);
-                ca_ind++;
-                cb_ind++;
-                cc_ind++;
-            }
         }
 
     }
@@ -157,17 +160,17 @@ IndiCols get_empty_indicols() {
     return id;
 }
 
-void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, std::vector<int_fast64_t> new_cols)
+void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
 {
     // auto cols_matching_defining_id = indi.cols_matching_defining_id;
     // int_fast64_t initial_unique_col_count = indi.defining_main_col_ids.size() + indi.defining_pair_ids.size();
     int_fast64_t total_cols_checked = 0;
     robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> new_col_ids_for_hashvalue;
-    for (auto main : new_cols) {
+    for (auto main : *new_cols) {
         total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
-        XXH64_hash_t main_hash = XXH64(column_entries, main_col_len*sizeof(int_fast64_t), 0);
+        XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len*sizeof(int_fast64_t));
         
         // uint64_t main_hash = XXHash64::hash(column_entries, main_col_len*sizeof(int_fast64_t));
         // main_hash = 5; //TODO: testing only
@@ -176,7 +179,7 @@ void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, st
         if (!indi->cols_for_hash.contains(main_hash))
             indi->defining_main_col_ids.insert(main);
         indi->cols_for_hash[main_hash].insert(main);
-        indi->found_hashes.insert(main_hash);
+        // indi->found_hashes.insert(main_hash);
     }
     
     // use rolling hash for interactions

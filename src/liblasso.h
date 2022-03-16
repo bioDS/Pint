@@ -92,14 +92,18 @@ struct OpenCL_Setup {
 /*
  * Fits 6 to a cache line. As int_fast64_t as schedule is static, this should be fine.
  */
+// typedef struct {
+//     int_fast64_t a : 64;
+//     int_fast64_t b : 64;
+// } int_128;
 
 typedef struct {
-    robin_hood::unordered_flat_map<int_fast64_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_for_hash;
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<int_fast64_t>> cols_for_hash;
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
     robin_hood::unordered_flat_set<int_fast64_t> defining_main_col_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
-    robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
-    int_fast64_t total_found_hash_count;
+    // robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
+    // int_fast64_t total_found_hash_count;
 } IndiCols;
 
 #include "s8b.h"
@@ -141,7 +145,7 @@ typedef struct {
     float final_lambda;
     float regularized_intercept;
     float unbiased_intercept;
-    IndiCols* indi;
+    IndiCols indi;
 } Lasso_Result;
 
 typedef struct {
@@ -153,6 +157,7 @@ typedef struct {
     Beta_Value_Sets* beta_sets;
     float* last_max;
     bool* wont_update;
+    std::vector<bool>* seen_before;
     int_fast64_t p;
     int_fast64_t p_int;
     XMatrixSparse X2c;

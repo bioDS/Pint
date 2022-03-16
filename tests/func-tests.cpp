@@ -1193,8 +1193,10 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        197, log_file, 2, FALSE, FALSE);
+        97, log_file, 2, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
+    int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
+    printf("considered %ld unique cols\n", unique_cols_considered);
 
     vector<pair<int, int>> true_effects = {
         { 79, 432 },
@@ -1233,8 +1235,11 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
             printf("checking %ld,%ld\n", first, second);
             int_fast64_t val = pair_to_val(std::make_tuple(first, second), fixture->p);
             auto actual_col = get_col_by_id(fixture->Xu, val);
-            int_fast64_t actual_col_hash = XXH64(actual_col.data(), actual_col.size()*sizeof(actual_col[0]), 0);
+            int_fast64_t actual_col_hash = XXH3_64bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
             printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
+            for (auto val : lr.indi.cols_for_hash[actual_col_hash]) {
+                printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
+            }
             g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
         }
     };
@@ -1378,6 +1383,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
     X_uncompressed Xu = construct_host_X(&Xc);
+    std::vector<bool> seen_before(p, false);
 
     Iter_Vars iter_vars_basic = {
         Xc,
@@ -1387,6 +1393,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         &beta_sets,
         last_max,
         NULL,
+        &seen_before,
         p,
         p_int,
         X2c,
@@ -1474,6 +1481,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         &pruning_beta_sets,
         last_max,
         wont_update,
+        &seen_before,
         p,
         p_int,
         X2c_fake,
@@ -1748,6 +1756,7 @@ struct simple_matrix {
     int_fast64_t** xm;
     XMatrixSparse Xc;
     X_uncompressed Xu;
+    XMatrix xmat;
 };
 struct simple_matrix setup_simple_matrix() {
     int_fast64_t n = 5, p = 6;
@@ -1769,7 +1778,10 @@ struct simple_matrix setup_simple_matrix() {
         }
     XMatrixSparse Xc = sparsify_X(xm, n, p);
     X_uncompressed Xu = construct_host_X(&Xc);
-    struct simple_matrix sm = {n, p, xm, Xc, Xu};
+    XMatrix xmat;
+    xmat.X = xm;
+    xmat.actual_cols = p;
+    struct simple_matrix sm = {n, p, xm, Xc, Xu, xmat};
     return sm;
 }
 void free_simple_matrix(struct simple_matrix sm)
@@ -2138,6 +2150,23 @@ static void test_simple_indistinguishable_cols()
 
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     std::vector<int_fast64_t> new_cols = {0,1,4,5};
+    float Y[n];
+    for (int i = 0; i < n; i++) {
+        Y[i] = g_random_double()*g_random_int_range(0, 100);
+    }
+    const char* log_file = "test.log";
+    Lasso_Result lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
+        -1, 0.00000001, 100,
+        500, FALSE, -1, 1.01,
+        NONE, NULL, 0, FALSE,
+        100, log_file, 2, FALSE, FALSE);
+    int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
+    printf("considered %ld unique cols\n", unique_cols_considered);
+    
+    for (auto main_col : lr.indi.defining_main_col_ids) {
+        printf("unique main col id: %ld\n", main_col);
+    }
+    // lr.indi.
     // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
 
     // we excluded 2 & 3

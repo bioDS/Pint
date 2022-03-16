@@ -1,7 +1,9 @@
 #include "liblasso.h"
 #include "robin_hood.h"
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <omp.h>
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
@@ -256,10 +258,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
     Thread_Cache* thread_caches = vars->thread_caches;
     int_fast64_t n = vars->n;
     Beta_Value_Sets* beta_sets = vars->beta_sets;
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta1 = &beta_sets->beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta2 = &beta_sets->beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta3 = &beta_sets->beta3;
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta = &beta_sets->beta3; // TODO: dont
     float* last_max = vars->last_max;
     bool* wont_update = vars->wont_update;
     int_fast64_t p = vars->p;
@@ -300,19 +298,31 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         if (VERBOSE)
             printf("branch pruning.\n");
         int_fast64_t active_branches = 0;
-        int_fast64_t new_active_branches = 0;
+        // int_fast64_t new_active_branches = 0;
 
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
+        robin_hood::unordered_flat_set<int_fast64_t> thread_new_cols[NumCores];
+        for (int i = 0; i < NumCores; i++) {
+            thread_new_cols[i].clear();
+        }
 
-#pragma omp parallel for schedule(static) reduction(+ \
-                                                    : new_active_branches)
+#pragma omp parallel for schedule(static)
         for (int_fast64_t j = 0; j < p; j++) {
-            bool old_wont_update = wont_update[j];
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
-            char new_active_branch = old_wont_update && !wont_update[j];
-            if (new_active_branch)
-                new_active_branches++;
+            if (!wont_update[j] && !(*vars->seen_before)[j]) {
+                if (j == 78) {
+                    printf("%ld has become an active branch for the first time\n", j);
+                }
+                thread_new_cols[omp_get_thread_num()].insert(j);
+            }
+        }
+        robin_hood::unordered_flat_set<int_fast64_t> new_cols;
+        for (int i = 0; i < NumCores; i++) {
+            for (auto col : thread_new_cols[i]) {
+                (*vars->seen_before)[col] = true;
+                new_cols.insert(col);
+            }
         }
         // this slows things down on multiple numa nodes. There must be something
         // going on with rowsum/last_rowsum?
@@ -342,9 +352,9 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
-        if (VERBOSE)
-            printf("(%ld active branches, %ld new)\n", active_branches,
-                new_active_branches);
+        // if (VERBOSE)
+        //     printf("(%ld active branches, %ld new)\n", active_branches,
+        //         new_active_branches);
         // if (new_active_branches == 0) {
         //  break;
         //}
@@ -368,8 +378,8 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             printf("\nthere were %ld updateable items\n", count_may_update);
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
-            beta, updateable_items, count_may_update, active_set,
-            thread_caches, ocl_setup, last_max, depth, indi);
+            updateable_items, count_may_update, active_set,
+            thread_caches, ocl_setup, last_max, depth, indi, &new_cols);
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -740,6 +750,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     }
     XMatrixSparse X2c_fake;
     intercept = 0.0;
+    std::vector<bool> seen_before(p, false);
     Iter_Vars iter_vars_pruned = {
         Xc,
         last_rowsum,
@@ -748,6 +759,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         &beta_sets,
         last_max,
         wont_update,
+        &seen_before,
         p,
         p_int,
         X2c_fake,
@@ -932,6 +944,7 @@ Lasso_Result simple_coordinate_descent_lasso(
             &unbiased_beta_sets,
             last_max,
             wont_update,
+            &seen_before,
             p,
             p_int,
             X2c_fake,
@@ -994,7 +1007,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.final_lambda = lambda;
     result.regularized_intercept = intercept;
     result.unbiased_intercept = unbiased_intercept;
-    result.indi = &indi; //TODO: probably needs changing
+    result.indi = indi;
 #pragma omp barrier
     return result;
 }
