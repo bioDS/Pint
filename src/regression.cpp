@@ -311,9 +311,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
-                if (j == 78) {
-                    printf("%ld has become an active branch for the first time\n", j);
-                }
                 thread_new_cols[omp_get_thread_num()].insert(j);
             }
         }
