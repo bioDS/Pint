@@ -157,7 +157,7 @@ IndiCols get_empty_indicols() {
     return id;
 }
 
-void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols indi, std::vector<int_fast64_t> new_cols)
+void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, std::vector<int_fast64_t> new_cols)
 {
     // auto cols_matching_defining_id = indi.cols_matching_defining_id;
     // int_fast64_t initial_unique_col_count = indi.defining_main_col_ids.size() + indi.defining_pair_ids.size();
@@ -173,9 +173,10 @@ void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, st
         // main_hash = 5; //TODO: testing only
         // printf("col %ld hash %ld\n", main, main_hash);
         // new_col_ids_for_hashvalue[main_hash].push_back(main);
-        if (!indi.cols_for_hash.contains(main_hash))
-            indi.defining_main_col_ids.insert(main);
-        indi.cols_for_hash[main_hash].insert(main);
+        if (!indi->cols_for_hash.contains(main_hash))
+            indi->defining_main_col_ids.insert(main);
+        indi->cols_for_hash[main_hash].insert(main);
+        indi->found_hashes.insert(main_hash);
     }
     
     // use rolling hash for interactions

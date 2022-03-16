@@ -3,6 +3,7 @@
 
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
+#include <cstdint>
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
@@ -97,6 +98,8 @@ typedef struct {
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
     robin_hood::unordered_flat_set<int_fast64_t> defining_main_col_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
+    robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
+    int_fast64_t total_found_hash_count;
 } IndiCols;
 
 #include "s8b.h"
@@ -138,7 +141,7 @@ typedef struct {
     float final_lambda;
     float regularized_intercept;
     float unbiased_intercept;
-    IndiCols indi;
+    IndiCols* indi;
 } Lasso_Result;
 
 typedef struct {

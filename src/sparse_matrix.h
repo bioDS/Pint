@@ -61,6 +61,6 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
 void free_row_set(struct row_set rs);
 X_uncompressed construct_host_X(XMatrixSparse* Xc);
 void free_host_X(X_uncompressed *Xu);
-void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols last_result, std::vector<int_fast64_t> new_cols);
+void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols* last_result, std::vector<int_fast64_t> new_cols);
 std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id);
 IndiCols get_empty_indicols();

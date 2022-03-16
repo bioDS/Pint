@@ -21,7 +21,7 @@ using namespace std;
 extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
-    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols indi);
+    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols* indi);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
@@ -1193,7 +1193,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, FALSE, -1, 1.01,
         NONE, NULL, 0, use_adcal,
-        97, log_file, 2, FALSE, FALSE);
+        197, log_file, 2, FALSE, FALSE);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     vector<pair<int, int>> true_effects = {
@@ -1511,7 +1511,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         printf("lambda: %f\n", lambda);
         IndiCols empty_indi;
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, NULL, 2, FALSE, empty_indi);
+            &active_set, NULL, 2, FALSE, &empty_indi);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);

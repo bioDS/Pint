@@ -14,8 +14,11 @@ if (length(args >= 2)) {
   # f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_28462.rds"
   # f <- "../data/simulated_large_data/n10000_p1000_SNR5_nbi500_nbij500_nlethals0_viol0_50884.rds"
   # f <- "../data/simulated_8k/n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159.rds"
+  # f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi0_nbij100_nlethals0_viol0_11754.rds"
+  # f <- "../data/simulated_large_data/n10000_p1000_SNR10_nbi0_nbij1000_nlethals0_viol0_11504.rds"
   ## f <- "../data/simulated_8k/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057.rds"
-  f <- "../infx_lasso_data/3way_data_to_run/n1000_p100_SNR4_nbi10_nbij252_nbijk1666_nlethals0_70443.rds"
+  f <- "../data/simulated_8k/n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_78715.rds"
+  # f <- "../infx_lasso_data/3way_data_to_run/n1000_p100_SNR4_nbi10_nbij252_nbijk1666_nlethals0_70443.rds"
   # f <- "./weirdly_slow_case/n1000_p100_SNR10_nbi0_nbij100_nlethals0_viol0_33859.rds"
   # f <- "./antibio_data.rds"
 }
@@ -39,14 +42,15 @@ Y <- d$Y
 ## result <- interaction_lasso(X, Y, lambda_min = -1, max_interaction_distance = -1, use_adaptive_calibration = FALSE, max_nz_beta = 200, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 2)
-result <- interaction_lasso(X, Y, depth = 3, max_nz_beta=10, estimate_unbiased = TRUE)
+result <- interaction_lasso(X, Y, depth = 2, max_nz_beta=150, estimate_unbiased = TRUE)
 print(result)
 
-q()
+# q()
 
 # result
 
 obs <- d$obs
+# N.B. components of pairwise effects generally are also main effects in the simulated data.
 bi_ind <- d$bi_ind
 bij_ind <- d$bij_ind
 lethal_ind <- d$lethal_ind
@@ -87,6 +91,9 @@ fx_int <- data.frame(
 # fx_int %>% data.frame
 
 print(fx_int %>% filter(TP == TRUE), n = 200)
+print("main effect summary")
+summary(fx_main$TP)
+print("pairwise effect summary")
 summary(fx_int$TP)
 
 count(result$pairwise_effects)

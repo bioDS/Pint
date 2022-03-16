@@ -248,7 +248,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
 
 int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols indi)
+    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols* indi)
 {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
@@ -783,7 +783,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         if (VERBOSE)
             printf("nz_beta %ld\n", nz_beta);
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth, use_intercept, indi);
+            old_rowsum, &active_set, &ocl_setup, depth, use_intercept, &indi);
 
         {
             int_fast64_t nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
@@ -994,7 +994,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.final_lambda = lambda;
     result.regularized_intercept = intercept;
     result.unbiased_intercept = unbiased_intercept;
-    result.indi = indi;
+    result.indi = &indi; //TODO: probably needs changing
 #pragma omp barrier
     return result;
 }
