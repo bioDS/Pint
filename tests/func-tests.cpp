@@ -1182,6 +1182,33 @@ struct to_append {
 
 // X_uncompressed construct_host_X(XMatrixSparse *Xc) {
 
+static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer user_data) {
+    printf("starting interaction distance test\n");
+    int_fast64_t use_adcal = FALSE;
+    const char* log_file = "test.log";
+    int_fast64_t max_interaction_distance = 20;
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        max_interaction_distance, 0.01, 100,
+        200, FALSE, -1, 1.01,
+        NONE, NULL, 0, use_adcal,
+        1000, log_file, 3, FALSE, FALSE);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
+    for (auto beta : beta_sets.beta2) {
+        int_fast64_t val = beta.first;
+        auto pair = val_to_pair(val, fixture->p);
+        g_assert_true(std::abs(std::get<0>(pair) - std::get<1>(pair)) <= max_interaction_distance);
+    }
+    for (auto beta : beta_sets.beta3) {
+        int_fast64_t val = beta.first;
+        auto triple = val_to_triplet(val, fixture->p);
+        auto a = std::get<0>(triple);
+        auto b = std::get<0>(triple);
+        auto c = std::get<0>(triple);
+        g_assert_true(std::abs(a-b) <= max_interaction_distance);
+        g_assert_true(std::abs(a-c) <= max_interaction_distance);
+        g_assert_true(std::abs(b-c) <= max_interaction_distance);
+    }
+}
 
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
@@ -1400,6 +1427,8 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         fixture->Y,
         max_int_delta,
         Xu,
+        0.0,
+        p,
     };
     struct timespec start, end;
     float basic_cpu_time_used, pruned_cpu_time_used;
@@ -1488,6 +1517,8 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         fixture->Y,
         max_int_delta,
         Xu,
+        0.0,
+        p
     };
 
     printf("getting time for pruned version\n");
@@ -1759,7 +1790,7 @@ struct simple_matrix {
     XMatrix xmat;
 };
 struct simple_matrix setup_simple_matrix() {
-    int_fast64_t n = 5, p = 6;
+    const int_fast64_t n = 5, p = 6;
     // no need to transpose this reading it, xm comes like this.
     const int_fast64_t xm_a[n][p] = {
         { 1, 1, 1, 0, 0, 1 },
@@ -1913,6 +1944,7 @@ void trivial_3way_test()
     g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -4.0);
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
+    //TODO: 0==5
 
     free_simple_matrix(sm);
 }
@@ -2322,6 +2354,9 @@ int main(int argc, char* argv[])
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
         pruning_fixture_set_up, check_branch_pruning_accuracy,
+        pruning_fixture_tear_down);
+    g_test_add("/func/test-max_interaction_distance", UpdateFixture, &accuracy_setup,
+        pruning_fixture_set_up, check_max_interaction_distance,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-faster", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning_faster,

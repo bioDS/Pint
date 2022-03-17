@@ -166,6 +166,7 @@ typedef struct {
     float* max_int_delta;
     X_uncompressed Xu;
     float intercept;
+    int_fast64_t max_interaction_distance;
 } Iter_Vars;
 
 #include "csv.h"

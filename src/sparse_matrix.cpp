@@ -48,11 +48,9 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
         int_fast64_t* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
         // check inverted list for interactions aint row_main
-        // int_fast64_t *X_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
         int_fast64_t row_pos = 0;
         for (int_fast64_t i = 0; i < Xu.host_row_nz[row]; i++) {
             int_fast64_t col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
-            // int_fast64_t col = X_row[i];
             if (!remove[col]) {
                 row_cache[row_pos] = col;
                 row_pos++;

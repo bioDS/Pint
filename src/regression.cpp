@@ -265,6 +265,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
     float* Y = vars->Y;
     float* max_int_delta = vars->max_int_delta;
     int_fast64_t new_nz_beta = 0;
+    int_fast64_t max_interaction_distance = vars->max_interaction_distance;
 
     float error = 0.0;
     for (int_fast64_t i = 0; i < n; i++) {
@@ -376,7 +377,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             updateable_items, count_may_update, active_set,
-            thread_caches, ocl_setup, last_max, depth, indi, &new_cols);
+            thread_caches, ocl_setup, last_max, depth, indi, &new_cols, max_interaction_distance);
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -597,7 +598,7 @@ Lasso_Result simple_coordinate_descent_lasso(
 
     int_fast64_t p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance == -1) {
-        max_interaction_distance = p_int / 2 + 1;
+        max_interaction_distance = p;
     }
     if (max_nz_beta < 0)
         max_nz_beta = p_int;
@@ -763,7 +764,8 @@ Lasso_Result simple_coordinate_descent_lasso(
         Y,
         max_int_delta,
         Xu,
-        intercept
+        intercept,
+        max_interaction_distance
     };
     int_fast64_t nz_beta = 0;
     // struct OpenCL_Setup ocl_setup = setup_working_set_kernel(Xu, n, p);

@@ -160,7 +160,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     X_uncompressed Xu, float* rowsum,
     bool* wont_update, int_fast64_t p, int_fast64_t n, float lambda,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
-    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
+    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance)
 {
     int_fast64_t* host_X = Xu.host_X;
     int_fast64_t* host_col_nz = Xu.host_col_nz;
@@ -222,6 +222,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     ri++;
                 for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
+                    if (inter - main > max_interaction_distance)
+                        break;
                     auto inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, inter), p);
                     if (indicols->skip_pair_ids.contains(inter_id)) {
                         skipped_pair_cols++;
@@ -261,6 +263,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                             for (int_fast64_t ri2 = ri + 1;
                                  ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                                 int_fast64_t inter2 = relevant_row_set.rows[row_main][ri2];
+                                    if (inter2 - main > max_interaction_distance)
+                                        break;
                                 int_fast64_t inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
                                 sum_with_col[inter_ind] += rowsum_diff;
                             }
@@ -406,14 +410,15 @@ char update_working_set(X_uncompressed Xu, XMatrixSparse Xc,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
     Active_Set* as, Thread_Cache* thread_caches,
     struct OpenCL_Setup* setup, float* last_max,
-    int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
+    int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
+    int_fast64_t max_interaction_distance)
 {
     // const std::vector<int_fast64_t> new_cols(updateable_items, &updateable_items[count_may_update]);
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,
-        updateable_items, count_may_update, last_max, depth, indicols, new_cols);
+        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance);
 
     free_row_set(new_row_set);
     return increased_set;
