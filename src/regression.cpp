@@ -525,22 +525,17 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         float effect = beta.second;
         auto full_col = get_col_by_id(Xu, val);
         int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
-        bool replaced = false;
         for (auto col : indi->cols_for_hash[col_hash]) {
             if (col < p) {
                 beta_sets->beta1[col] += effect;
                 remove_3.push_back(val);
-                replaced = true;
                 break;
             } else if (col < p*p) {
                 beta_sets->beta2[col] += effect;
                 remove_3.push_back(val);
-                replaced = true;
                 break;
             }
         }
-        if (replaced)
-            break;
     }
     std::vector<int_fast64_t> remove_2;
     for (auto beta : beta_sets->beta2) {
@@ -548,17 +543,13 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         float effect = beta.second;
         auto full_col = get_col_by_id(Xu, val);
         int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
-        bool replaced = false;
         for (auto col : indi->cols_for_hash[col_hash]) {
             if (col < p) {
                 beta_sets->beta1[col] += effect;
                 remove_2.push_back(val);
-                replaced = true;
                 break;
             }
         }
-        if (replaced)
-            break;
     }
     for (auto val2 : remove_2)
         beta_sets->beta2.erase(val2);
