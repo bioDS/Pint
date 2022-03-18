@@ -150,6 +150,7 @@ typedef struct {
     float regularized_intercept;
     float unbiased_intercept;
     IndiCols indi;
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> indist_from_val;
 } Lasso_Result;
 
 typedef struct {

@@ -512,48 +512,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         // (float)total_present/(float)(total_present+total_notpresent));
     }
         
-    // Interactions may be been added out of order, resulting in pairwise effects
-    // that are duplicate of later main columns, or three-way effects that are
-    // duplicates of later pairs.
-    // We clean this up here.
-    // TODO: ideally we wouldn't have to do this, but adding things out of order currently
-    // breaks some stuff.
-    std::vector<int_fast64_t> remove_3;
-    for (auto beta : beta_sets->beta3) {
-        int_fast64_t val = beta.first;
-        float effect = beta.second;
-        auto full_col = get_col_by_id(Xu, val);
-        int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
-        for (auto col : indi->cols_for_hash[col_hash]) {
-            if (col < p) {
-                beta_sets->beta1[col] += effect;
-                remove_3.push_back(val);
-                break;
-            } else if (col < p*p) {
-                beta_sets->beta2[col] += effect;
-                remove_3.push_back(val);
-                break;
-            }
-        }
-    }
-    std::vector<int_fast64_t> remove_2;
-    for (auto beta : beta_sets->beta2) {
-        int_fast64_t val = beta.first;
-        float effect = beta.second;
-        auto full_col = get_col_by_id(Xu, val);
-        int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
-        for (auto col : indi->cols_for_hash[col_hash]) {
-            if (col < p) {
-                beta_sets->beta1[col] += effect;
-                remove_2.push_back(val);
-                break;
-            }
-        }
-    }
-    for (auto val2 : remove_2)
-        beta_sets->beta2.erase(val2);
-    for (auto val3 : remove_3)
-        beta_sets->beta3.erase(val3);
 
     if (VERBOSE)
         printf("new nz beta: %ld\n", new_nz_beta);
@@ -659,10 +617,12 @@ Lasso_Result simple_coordinate_descent_lasso(
     }
     if (max_nz_beta < 0)
         max_nz_beta = p_int;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
-    Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    // Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
+    Beta_Value_Sets beta_sets;
+    beta_sets.p = p;
     // beta = malloc(p_int * sizeof(float)); // probably too big in most cases.
     // memset(beta, 0, p_int * sizeof(float));
 
@@ -911,6 +871,66 @@ Lasso_Result simple_coordinate_descent_lasso(
         }
         lambda_count++;
     }
+    // Interactions may be been added out of order, resulting in pairwise effects
+    // that are duplicate of later main columns, or three-way effects that are
+    // duplicates of later pairs.
+    // We clean this up here.
+    // TODO: ideally we wouldn't have to do this, but adding things out of order currently
+    // breaks some stuff.
+    auto beta_set_remove_dups = [&](auto* sets, robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>>* indist_from_val) {
+        std::vector<int_fast64_t> remove_3;
+        for (auto beta : sets->beta3) {
+            int_fast64_t val = beta.first;
+            float effect = beta.second;
+            auto full_col = get_col_by_id(Xu, val);
+            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+            for (auto col : indi.cols_for_hash[col_hash]) {
+                if (NULL != indist_from_val)
+                    (*indist_from_val)[val].push_back(col);
+                if (col < p) {
+                    sets->beta1[col] += effect;
+                    remove_3.push_back(val);
+                    break;
+                } else if (col < p*p) {
+                    sets->beta2[col] += effect;
+                    remove_3.push_back(val);
+                    break;
+                }
+            }
+        }
+        std::vector<int_fast64_t> remove_2;
+        for (auto beta : sets->beta2) {
+            int_fast64_t val = beta.first;
+            float effect = beta.second;
+            auto full_col = get_col_by_id(Xu, val);
+            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+            for (auto col : indi.cols_for_hash[col_hash]) {
+                if (NULL != indist_from_val)
+                    (*indist_from_val)[val].push_back(col);
+                if (col < p) {
+                    sets->beta1[col] += effect;
+                    remove_2.push_back(val);
+                    break;
+                }
+            }
+        }
+        if (indist_from_val != NULL) {
+            for (auto beta : sets->beta1) {
+                int_fast64_t val = beta.first;
+                auto full_col = get_col_by_id(Xu, val);
+                int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+                for (auto col : indi.cols_for_hash[col_hash]) {
+                    (*indist_from_val)[val].push_back(col);
+                }
+            }
+        }
+        for (auto val2 : remove_2)
+            sets->beta2.erase(val2);
+        for (auto val3 : remove_3)
+            sets->beta3.erase(val3);
+    };
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> indist_from_val;
+    beta_set_remove_dups(&beta_sets, &indist_from_val);
     intercept = iter_vars_pruned.intercept;
     iter_count = iter;
     if (log_level != NONE && log_file != NULL)
@@ -922,48 +942,6 @@ Lasso_Result simple_coordinate_descent_lasso(
     cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 
     Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
-
-    // TODO: this really should be 0. Fix things until it is.
-    // Rprintf("checking how much rowsums have diverged:\n");
-    // float *temp_rowsum = calloc(n, sizeof *temp_rowsum);
-    // for (int_fast64_t col_i = 0; col_i < p; col_i++) {
-    //  int_fast64_t *col_i_entries = &Xu.host_X[Xu.host_col_offsets[col_i]];
-    //  for (int_fast64_t i = 0; i < Xu.host_col_nz[col_i]; i++) {
-    //    int_fast64_t row = col_i_entries[i];
-    //    int_fast64_t *inter_row = &Xu.host_X_row[Xu.host_row_offsets[row]];
-    //    int_fast64_t row_nz = Xu.host_row_nz[row];
-    //    for (int_fast64_t col_j_ind = 0; col_j_ind < row_nz; col_j_ind++) {
-    //      int_fast64_t col_j = inter_row[col_j_ind];
-    //      int_fast64_t k = (2 * (p - 1) + 2 * (p - 1) * (col_i - 1) - (col_i - 1) *
-    //      (col_i - 1) - (col_i - 1)) / 2 + col_j; temp_rowsum[row] += beta[k];
-    //    }
-    //  }
-    //}
-    // for (int_fast64_t col = 0; col < p_int; col++) {
-    //  int_fast64_t entry = -1;
-    //  for (int_fast64_t i = 0; i < X2.cols[col].nwords; i++) {
-    //    S8bWord word = X2.cols[col].compressed_indices[i];
-    //    int_fast64_t values = word.values;
-    //    for (int_fast64_t j = 0; j <= group_size[word.selector]; j++) {
-    //      int_fast64_t diff = values & masks[word.selector];
-    //      if (diff != 0) {
-    //        entry += diff;
-    //        temp_rowsum[entry] += beta[col];
-    //      }
-    //      values >>= item_width[word.selector];
-    //    }
-    //  }
-    //}
-    // float total_rowsum_diff = 0;
-    // float frac_rowsum_diff = 0;
-    // for (int_fast64_t i = 0; i < n; i++) {
-    //  total_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i]));
-    //  if (fabs(rowsum[i]) > 1)
-    //    frac_rowsum_diff += fabs((temp_rowsum[i] - rowsum[i]) / rowsum[i]);
-    //}
-    // Rprintf("mean diff: %.2f (%.2f%%)\n", total_rowsum_diff / n,
-    //        (frac_rowsum_diff * 100));
-    // free(temp_rowsum);
 
     if (use_adaptive_calibration) {
         for (int_fast64_t i = 0; i < beta_sequence.count; i++) {
@@ -979,11 +957,9 @@ Lasso_Result simple_coordinate_descent_lasso(
      * Optionally attempt to provide an un-regularised estimate of the
      * beta values for the current working set.
     */
-    robin_hood::unordered_flat_map<int_fast64_t, float> unbiased_beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> unbiased_beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> unbiased_beta3;
     float unbiased_intercept = intercept;
-    Beta_Value_Sets unbiased_beta_sets = { unbiased_beta1, unbiased_beta2, unbiased_beta3, p };
+    Beta_Value_Sets unbiased_beta_sets;
+    unbiased_beta_sets.p = p;
     if (estimate_unbiased) {
         printf("original_error: %f\n", calculate_error(Y, rowsum, n));
         for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end(); it++)
@@ -1015,6 +991,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         printf("un-regularized error: %f\n", calculate_error(Y, rowsum, n));
         unbiased_intercept = iter_vars_pruned.intercept;
     }
+    beta_set_remove_dups(&unbiased_beta_sets, NULL);
 
     // free beta sets
     free_sparse_matrix(Xc);
@@ -1064,6 +1041,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.regularized_intercept = intercept;
     result.unbiased_intercept = unbiased_intercept;
     result.indi = indi;
+    result.indist_from_val = indist_from_val;
 #pragma omp barrier
     return result;
 }

@@ -13,20 +13,23 @@ process_result <- function(result) {
     #strength <- sapply(result[[1]], `[`, 2)
     i <- result[[1]]
     strength <- result[[2]]
-    df_main <- data.frame(i,strength)
+    equivalent <- result[[3]]
+    df_main <- list(i=i,strength=strength,equivalent=equivalent)
 
-    i <- result[[3]]
-    j <- result[[4]]
-    strength <- result[[5]]
-    df_int <- data.frame(i,j,strength)
+    i <- result[[4]]
+    j <- result[[5]]
+    strength <- result[[6]]
+    equivalent <- result[[7]]
+    df_int <- list(i=i,j=j,strength=strength,equivalent=equivalent)
 
-    i <- result[[6]]
-    j <- result[[7]]
-    k <- result[[8]]
-    strength <- result[[9]]
-    df_trip <- data.frame(i,j,k,strength)
+    i <- result[[8]]
+    j <- result[[9]]
+    k <- result[[10]]
+    strength <- result[[11]]
+    equivalent <- result[[12]]
+    df_trip <- list(i=i,j=j,k=k,strength=strength,equivalent=equivalent)
 
-    intercept <- result[[10]]
+    intercept <- result[[13]]
 
     rm(result)
 

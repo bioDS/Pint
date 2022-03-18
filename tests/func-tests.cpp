@@ -1343,14 +1343,18 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("starting interaction test\n");
     printf("creating X2\n");
     int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
-    Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta3;
-    Beta_Value_Sets pruning_beta_sets = { pruning_beta1, pruning_beta2, pruning_beta3, p };
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    // Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
+    Beta_Value_Sets beta_sets;
+    beta_sets.p = p;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta1;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta2;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta3;
+    // Beta_Value_Sets pruning_beta_sets = { pruning_beta1, pruning_beta2, pruning_beta3, p };
+    Beta_Value_Sets pruning_beta_sets;
+    pruning_beta_sets.p = p;
 
     for (int_fast64_t i = 0; i < p_int; i++) {
         beta_sets.beta2[i] = 0.0;
