@@ -178,7 +178,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     int_fast64_t log_level_enum = asInteger(log_level_);
     int_fast64_t use_cores = asInteger(use_cores_);
 
-    initialise_static_resources(use_cores_);
+    initialise_static_resources(use_cores);
 
     enum LOG_LEVEL log_level = NONE;
     switch (log_level_enum) {
@@ -253,7 +253,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     return results;
 }
 
-static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 7 },
+static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 17 },
     { "read_log_", (DL_FUNC)&read_log_, 1 },
     { NULL, NULL, 0 } };
 

@@ -10,7 +10,6 @@
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
-#include <glib-2.0/glib.h>
 
 #define TRUE 1
 #define FALSE 0

@@ -7,7 +7,6 @@
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
-#include <glib-2.0/glib.h>
 #include <time.h>
 #include <unistd.h>
 

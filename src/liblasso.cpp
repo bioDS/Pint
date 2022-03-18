@@ -42,10 +42,13 @@ int_pair* cached_nums = NULL;
 // TODO: the compiler should really do this
 void initialise_static_resources(int_fast64_t use_cores)
 {
-    if (use_cores < 1)
+    if (use_cores < 1) {
         NumCores = omp_get_num_procs();
-    else
+    }
+    else {
         NumCores = use_cores;
+        omp_set_num_threads(NumCores);
+    }
     printf("using %ld cores\n", NumCores);
 }
 
