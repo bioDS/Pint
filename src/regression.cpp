@@ -7,6 +7,7 @@
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
+#include <glib-2.0/glib.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -309,9 +310,11 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
 
 #pragma omp parallel for schedule(static)
         for (int_fast64_t j = 0; j < p; j++) {
+            bool prev_wont_update = wont_update[j];
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
+            // if (!wont_update[j] && prev_wont_update) {
                 thread_new_cols[omp_get_thread_num()].insert(j);
             }
         }
@@ -375,9 +378,21 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         if (VERBOSE)
             printf("\nthere were %ld updateable items\n", count_may_update);
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
-        char increased_set = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
+        auto working_set_results = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             updateable_items, count_may_update, active_set,
             thread_caches, ocl_setup, last_max, depth, indi, &new_cols, max_interaction_distance);
+        bool increased_set = working_set_results.first;
+        auto vals_to_remove = working_set_results.second;
+        for (auto val : vals_to_remove) {
+            printf("removing val %ld\n", val);
+            active_set_remove(active_set, val);
+            if (val < p)
+                beta_sets->beta1[val] = 0;
+            else if (val < p*p)
+                beta_sets->beta2[val] = 0;
+            else
+                beta_sets->beta3[val] = 0;
+        }
         free(updateable_items);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         working_set_update_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -497,6 +512,58 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         // printf("%.1f%% of active set was blank\n",
         // (float)total_present/(float)(total_present+total_notpresent));
     }
+        
+    // Interactions may be been added out of order, resulting in pairwise effects
+    // that are duplicate of later main columns, or three-way effects that are
+    // duplicates of later pairs.
+    // We clean this up here.
+    // TODO: ideally we wouldn't have to do this, but adding things out of order currently
+    // breaks some stuff.
+    std::vector<int_fast64_t> remove_3;
+    for (auto beta : beta_sets->beta3) {
+        int_fast64_t val = beta.first;
+        float effect = beta.second;
+        auto full_col = get_col_by_id(Xu, val);
+        int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+        bool replaced = false;
+        for (auto col : indi->cols_for_hash[col_hash]) {
+            if (col < p) {
+                beta_sets->beta1[col] += effect;
+                remove_3.push_back(val);
+                replaced = true;
+                break;
+            } else if (col < p*p) {
+                beta_sets->beta2[col] += effect;
+                remove_3.push_back(val);
+                replaced = true;
+                break;
+            }
+        }
+        if (replaced)
+            break;
+    }
+    std::vector<int_fast64_t> remove_2;
+    for (auto beta : beta_sets->beta2) {
+        int_fast64_t val = beta.first;
+        float effect = beta.second;
+        auto full_col = get_col_by_id(Xu, val);
+        int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+        bool replaced = false;
+        for (auto col : indi->cols_for_hash[col_hash]) {
+            if (col < p) {
+                beta_sets->beta1[col] += effect;
+                remove_2.push_back(val);
+                replaced = true;
+                break;
+            }
+        }
+        if (replaced)
+            break;
+    }
+    for (auto val2 : remove_2)
+        beta_sets->beta2.erase(val2);
+    for (auto val3 : remove_3)
+        beta_sets->beta3.erase(val3);
 
     if (VERBOSE)
         printf("new nz beta: %ld\n", new_nz_beta);

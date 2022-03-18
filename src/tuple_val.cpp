@@ -34,5 +34,11 @@ int_fast64_t triplet_to_val(std::tuple<int_fast64_t, int_fast64_t, long> tp, int
     int_fast64_t a = std::get<0>(tp);
     int_fast64_t b = std::get<1>(tp);
     int_fast64_t c = std::get<2>(tp);
+    if (a > b)
+        std::swap(a,b);
+    if (a > c)
+        std::swap(a,c);
+    if (b > c)
+        std::swap(b,c);
     return (a + 1) * range * range + b * range + c;
 }

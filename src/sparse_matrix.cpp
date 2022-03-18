@@ -158,21 +158,39 @@ IndiCols get_empty_indicols() {
     return id;
 }
 
-void update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
+std::vector<int_fast64_t> update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
 {
     int_fast64_t total_cols_checked = 0;
     robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> new_col_ids_for_hashvalue;
+    std::vector<int_fast64_t> vals_to_remove;
     for (auto main : *new_cols) {
         total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
         XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len*sizeof(int_fast64_t));
         
-        if (!indi->main_col_hashes.contains(main_hash))
-            indi->defining_main_col_ids.insert(main);
+        if (indi->main_col_hashes.contains(main_hash))
+            indi->skip_main_col_ids.insert(main);
+        else
+            indi->main_col_hashes.insert(main_hash);
+        // it might be that we already found an equivalen pair/triple. If so we need to remove it.
+        for (auto val : indi->cols_for_hash[main_hash]) {
+            printf("existing val %ld is a duplicate of main %ld\n", val, main);
+            if (val < Xu.p)
+                continue;
+            else if (val < Xu.p*Xu.p) {
+                // remove the pair
+                indi->skip_pair_ids.insert(val);
+                vals_to_remove.push_back(val);
+            }
+            else {
+                // remove the triplet
+                vals_to_remove.push_back(val);
+            }
+        }
         indi->cols_for_hash[main_hash].insert(main);
-        indi->main_col_hashes.insert(main_hash);
     }
+    return vals_to_remove;
 }
 
 /**

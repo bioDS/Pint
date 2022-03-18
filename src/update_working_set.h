@@ -6,7 +6,7 @@ void active_set_free(Active_Set as);
 void active_set_remove(Active_Set* as, int_fast64_t value);
 bool active_set_present(Active_Set* as, int_fast64_t value);
 
-char update_working_set(
+std::pair<bool, std::vector<int_fast64_t>> update_working_set(
     X_uncompressed Xu, XMatrixSparse Xc,
     float* rowsum, bool* wont_update, int_fast64_t p, int_fast64_t n,
     float lambda, int_fast64_t* updateable_items, int_fast64_t count_may_update, Active_Set* as,

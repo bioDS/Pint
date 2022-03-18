@@ -1825,6 +1825,22 @@ void free_simple_matrix(struct simple_matrix sm)
     free_sparse_matrix(sm.Xc);
 }
 
+    
+void print_beta_set(robin_hood::unordered_flat_map<int_fast64_t, float>* beta_set, int_fast64_t p) {
+    for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
+        int_fast64_t val = it->first;
+        if (val < p) {
+            printf("%ld: %f\n", val, it->second);
+        } else if (val < p * p) {
+            auto pair = val_to_pair(val, p);
+            printf("%ld,%ld: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
+        } else {
+            g_assert_true(val < p * p * p);
+            auto triple = val_to_triplet(val, p);
+            printf("%ld,%ld,%ld: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
+        }
+    }
+}
 void trivial_3way_test()
 {
     struct simple_matrix sm = setup_simple_matrix();
@@ -1914,37 +1930,33 @@ void trivial_3way_test()
     // auto beta = beta_sets.beta3;
 
     int_fast64_t total_effects = 0;
-    auto print_beta_set = [&](auto beta_set) {
-        for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
-            int_fast64_t val = it->first;
-            if (val < p) {
-                printf("%ld: %f\n", val, it->second);
-            } else if (val < p * p) {
-                auto pair = val_to_pair(val, p);
-                printf("%ld,%ld: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
-            } else {
-                g_assert_true(val < p * p * p);
-                auto triple = val_to_triplet(val, p);
-                printf("%ld,%ld,%ld: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
-            }
-        }
-    };
     printf("Beta values found:\n");
     printf("beta 1:\n");
-    print_beta_set(&beta_sets.beta1);
+    print_beta_set(&beta_sets.beta1, p);
     printf("beta 2:\n");
-    print_beta_set(&beta_sets.beta2);
+    print_beta_set(&beta_sets.beta2, p);
     printf("beta 3:\n");
-    print_beta_set(&beta_sets.beta3);
+    print_beta_set(&beta_sets.beta3, p);
+    
+    for (auto main_id : lr.indi.skip_main_col_ids) {
+        printf("skipped main col: %ld as a duplicate\n", main_id);
+    }
+    for (auto pair_id : lr.indi.skip_pair_ids) {
+        auto pair = val_to_pair(pair_id, p);
+        printf("skipped pair col: %ld(%ld,%ld) as a duplicate\n", pair_id, std::get<0>(pair), std::get<1>(pair));
+    }
+    for (auto triple_id : lr.indi.skip_triple_ids) {
+        auto triple = val_to_triplet(triple_id, p);
+        printf("skipped triple col: %ld(%ld,%ld,%ld) as a duplicate\n", triple_id, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
+    }
 
     g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.08);
     int_fast64_t tmpval = pair_to_val(std::make_tuple(0, 3), p);
-    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 1.5);
+    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 0.4);
     tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
     g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -4.0);
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
-    //TODO: 0==5
 
     free_simple_matrix(sm);
 }
@@ -1953,8 +1965,8 @@ void test_tuple_vals()
 {
     int_fast64_t p = 100;
     for (int_fast64_t a = 0; a < p; a++) {
-        for (int_fast64_t b = 0; b < p; b++) {
-            for (int_fast64_t c = 0; c < p; c++) {
+        for (int_fast64_t b = a+1; b < p; b++) {
+            for (int_fast64_t c = b+1; c < p; c++) {
                 int_fast64_t val = triplet_to_val(std::make_tuple(a, b, c), p);
                 auto tp = val_to_triplet(val, p);
                 int_fast64_t x = std::get<0>(tp);
@@ -2191,103 +2203,174 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, FALSE, -1, 1.01,
         NONE, NULL, 0, FALSE,
-        100, log_file, 2, FALSE, FALSE);
+        100, log_file, 3, FALSE, FALSE);
     int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
     printf("considered %ld unique cols\n", unique_cols_considered);
     
-    for (auto main_col : lr.indi.defining_main_col_ids) {
-        printf("unique main col id: %ld\n", main_col);
-    }
-    g_assert_true(lr.indi.defining_main_col_ids.contains(0));
-    g_assert_true(lr.indi.defining_main_col_ids.contains(1));
-    g_assert_true(lr.indi.defining_main_col_ids.contains(2));
-    g_assert_true(lr.indi.defining_main_col_ids.contains(3));
-    g_assert_true(lr.indi.defining_main_col_ids.contains(4));
-    g_assert_false(lr.indi.defining_main_col_ids.contains(5));
-
-    for (auto hash_colset : lr.indi.cols_for_hash) {
-        int_fast64_t hash = hash_colset.first;
-        auto colset = hash_colset.second;
-        int_fast64_t first_col_id = -1;
-        for (auto tmp : colset) {
-            first_col_id = tmp;
-            break;
-        }
-        auto first_col = get_col_by_id(sm.Xu, first_col_id);
-        for (auto col_id : colset) {
-            printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
-            auto this_col = get_col_by_id(sm.Xu, col_id);
-            g_assert_true(check_cols_match(first_col, this_col));
-        }
+    for (auto main_id : lr.indi.skip_main_col_ids) {
+        printf("skipped main col: %ld as a duplicate\n", main_id);
     }
     for (auto pair_id : lr.indi.skip_pair_ids) {
-        auto pair_cols = val_to_pair(pair_id, sm.p);
-        printf("checking pair %ld,%ld really is a duplicate\n", std::get<0>(pair_cols), std::get<1>(pair_cols));
-        auto this_col = get_col_by_id(sm.Xu, pair_id);
-        int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
-        auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
-
-        int_fast64_t first_col_id = -1;
-        for (auto tmp : cols_matching_hash) {
-            if (tmp != pair_id) {
+        auto pair = val_to_pair(pair_id, p);
+        printf("skipped pair col: %ld(%ld,%ld) as a duplicate\n", pair_id, std::get<0>(pair), std::get<1>(pair));
+    }
+    for (auto triple_id : lr.indi.skip_triple_ids) {
+        auto triple = val_to_triplet(triple_id, p);
+        printf("skipped triple col: %ld(%ld,%ld,%ld) as a duplicate\n", triple_id, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
+    }
+    g_assert_false(lr.indi.skip_main_col_ids.contains(0));
+    g_assert_false(lr.indi.skip_main_col_ids.contains(1));
+    g_assert_false(lr.indi.skip_main_col_ids.contains(2));
+    g_assert_false(lr.indi.skip_main_col_ids.contains(3));
+    g_assert_false(lr.indi.skip_main_col_ids.contains(4));
+    g_assert_true(lr.indi.skip_main_col_ids.contains(5));
+    
+    auto sanity_check = [&]() {
+        for (auto hash_colset : lr.indi.cols_for_hash) {
+            int_fast64_t hash = hash_colset.first;
+            auto colset = hash_colset.second;
+            int_fast64_t first_col_id = -1;
+            for (auto tmp : colset) {
                 first_col_id = tmp;
                 break;
             }
+            auto first_col = get_col_by_id(sm.Xu, first_col_id);
+            for (auto col_id : colset) {
+                printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
+                auto this_col = get_col_by_id(sm.Xu, col_id);
+                g_assert_true(check_cols_match(first_col, this_col));
+            }
         }
-        g_assert_true(first_col_id >= 0);
-        auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
-        printf("checking claim that cols %ld,% ld(%ld,%ld) match\n", first_col_id, pair_id, std::get<0>(pair_cols), std::get<1>(pair_cols));
-        g_assert_true(check_cols_match(this_col, first_hash_col));
-    }
-    // lr.indi.
-    // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
+        for (auto pair_id : lr.indi.skip_pair_ids) {
+            auto pair_cols = val_to_pair(pair_id, sm.p);
+            printf("checking pair %ld,%ld really is a duplicate\n", std::get<0>(pair_cols), std::get<1>(pair_cols));
+            auto this_col = get_col_by_id(sm.Xu, pair_id);
+            int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
 
-    // we excluded 2 & 3
-    //g_assert_false(indi.defining_col_ids.contains(2));
-    //g_assert_false(indi.defining_col_ids.contains(3));
+            int_fast64_t first_col_id = -1;
+            for (auto tmp : cols_matching_hash) {
+                if (tmp != pair_id) {
+                    first_col_id = tmp;
+                    break;
+                }
+            }
+            g_assert_true(first_col_id >= 0);
+            auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
+            printf("checking claim that cols %ld,% ld(%ld,%ld) match\n", first_col_id, pair_id, std::get<0>(pair_cols), std::get<1>(pair_cols));
+            g_assert_true(check_cols_match(this_col, first_hash_col));
+        }
+        for (auto triple_id : lr.indi.skip_triple_ids) {
+            auto triple_cols = val_to_triplet(triple_id, sm.p);
+            printf("checking triple %ld(%ld,%ld,%ld) really is a duplicate\n", triple_id, std::get<0>(triple_cols), std::get<1>(triple_cols), std::get<2>(triple_cols));
+            auto this_col = get_col_by_id(sm.Xu, triple_id);
+            int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
 
-    // // check 4 & 1 == 4
-    // auto key_14 = pair_to_val(std::tuple<int, int>(1, 4), sm.p);
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
-    // g_assert_true(indi.cols_matching_defining_id[4].size() == 2);
-
-    // wont_update[2] = false;
-    // new_cols = {2};
-    // free_row_set(new_row_set);
-    // new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
-    // auto key_24 = pair_to_val(std::tuple<int, int>(2, 4), sm.p);
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_24));
-    // g_assert_true(indi.cols_matching_defining_id[4].size() == 3);
-
-    // wont_update[3] = false;
-    // new_cols = {3};
-    // free_row_set(new_row_set);
-    // new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
-    // indi = get_indistinguishable_cols(Xu, wont_update, new_row_set, indi, new_cols);
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_14));
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_24));
-    // auto key_43 = pair_to_val(std::tuple<int, int>(3, 4), sm.p);
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(key_43));
-    // g_assert_true(indi.cols_matching_defining_id[4].contains(pair_to_val(std::tuple<int,int>(1,3), sm.p)));
-    // g_assert_true(indi.cols_matching_defining_id[4].size() == 5);
-
-    // // 0,3 == 3,5
-    // auto ind_03 = pair_to_val(std::tuple<int,int>(0,3), sm.p);
-    // auto ind_35 = pair_to_val(std::tuple<int,int>(3,5), sm.p);
-    // g_assert_true(indi.cols_matching_defining_id.contains(ind_03) ||
-    //               indi.cols_matching_defining_id.contains(ind_35));
-    // if (indi.cols_matching_defining_id.contains(ind_03)) {
-    //     g_assert_true(indi.cols_matching_defining_id[ind_03].size() == 2);
-    //     g_assert_true(indi.cols_matching_defining_id[ind_03].contains(ind_35));
-    // } else {
-    //     g_assert_true(indi.cols_matching_defining_id[ind_35].size() == 2);
-    //     g_assert_true(indi.cols_matching_defining_id[ind_35].contains(ind_03));
-    // }
-
-    // g_assert_true(indi.cols_matching_defining_id.size() == 9);
+            int_fast64_t first_col_id = -1;
+            for (auto tmp : cols_matching_hash) {
+                if (tmp != triple_id) {
+                    first_col_id = tmp;
+                    break;
+                }
+            }
+            g_assert_true(first_col_id >= 0);
+            auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
+            printf("checking claim that cols %ld,% ld(%ld,%ld,%ld) match\n", first_col_id, triple_id, std::get<0>(triple_cols), std::get<1>(triple_cols), std::get<2>(triple_cols));
+            g_assert_true(check_cols_match(this_col, first_hash_col));
+        }
+        robin_hood::unordered_flat_map<int_fast64_t, int_fast64_t> seen_hashes;
+        for (auto beta : lr.regularized_result.beta1) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            printf("checking assigned-val col %ld is not a duplicate = %.2f\n", val, beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+        for (auto beta : lr.regularized_result.beta2) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            auto pair = val_to_pair(val, sm.p);
+            printf("checking assigned-val col %ld(%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(pair), std::get<1>(pair), beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+        for (auto beta : lr.regularized_result.beta3) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            auto triple = val_to_triplet(val, sm.p);
+            printf("checking assigned-val col %ld(%ld,%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+    };
     
+    sanity_check();
+    
+    // re-run with 'trivial-3way' test Y.
+    robin_hood::unordered_map<int_fast64_t, float> correct_beta;
+    correct_beta[0] = 2.3;
+    correct_beta[pair_to_val(std::make_tuple(0, 3), p)] = 5;
+    correct_beta[triplet_to_val(std::make_tuple(0, 1, 2), p)] = -14.6;
+    // val_to_triplet()
+
+    for (int_fast64_t i = 0; i < n; i++) {
+        Y[i] = 0.0;
+    }
+    for (int_fast64_t i = 0; i < n; i++) {
+        for (int_fast64_t j = 0; j < p; j++) {
+            if (xm[j][i] != 0) {
+                for (int_fast64_t j2 = j; j2 < p; j2++) {
+                    if (xm[j2][i] != 0) {
+                        for (int_fast64_t j3 = j2; j3 < p; j3++) {
+                            if (xm[j3][i] != 0) {
+                                float cb = correct_beta[triplet_to_val(std::make_tuple(j, j2, j3), p)];
+                                if (cb != 0.0) {
+                                    printf("Y[%ld] +=  %f (%ld,%ld,%ld)\n", i, cb, j, j2, j3);
+                                    Y[i] += cb;
+                                }
+                            }
+                        }
+                        Y[i] += correct_beta[pair_to_val(std::make_tuple(j, j2), p)];
+                    }
+                }
+                Y[i] += correct_beta[j];
+            }
+        }
+    }
+    
+    lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
+        -1, 0.00000001, 100,
+        500, FALSE, -1, 1.01,
+        NONE, NULL, 0, FALSE,
+        100, log_file, 3, FALSE, FALSE);
+    printf("Beta values found:\n");
+    printf("beta 1:\n");
+    print_beta_set(&lr.regularized_result.beta1, p);
+    printf("beta 2:\n");
+    print_beta_set(&lr.regularized_result.beta2, p);
+    printf("beta 3:\n");
+    print_beta_set(&lr.regularized_result.beta3, p);
+    sanity_check();
+
     free_row_set(new_row_set);
     for (int_fast64_t i = 0; i < NumCores; i++) {
         free(thread_caches[i].col_i);
