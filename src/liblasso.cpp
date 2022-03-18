@@ -40,9 +40,12 @@ int_fast64_t min(int_fast64_t a, int_fast64_t b)
 int_pair* cached_nums = NULL;
 
 // TODO: the compiler should really do this
-void initialise_static_resources()
+void initialise_static_resources(int_fast64_t use_cores)
 {
-    NumCores = omp_get_num_procs();
+    if (use_cores < 1)
+        NumCores = omp_get_num_procs();
+    else
+        NumCores = use_cores;
     printf("using %ld cores\n", NumCores);
 }
 

@@ -2406,7 +2406,7 @@ static struct pruning_test_setup_details bigger_setup = {
 
 int main(int argc, char* argv[])
 {
-    initialise_static_resources();
+    initialise_static_resources(-1);
     setlocale(LC_ALL, "");
     g_test_init(&argc, &argv, NULL);
 

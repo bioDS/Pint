@@ -69,7 +69,7 @@ int main(int argc, const char** argv)
         printf("using 'log_level = NONE', no valid argument given");
     }
 
-    initialise_static_resources();
+    initialise_static_resources(-1);
 
     // testing: wip
     XMatrix xmatrix = read_x_csv(argv[1], N, P);

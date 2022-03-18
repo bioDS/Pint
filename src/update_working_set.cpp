@@ -308,7 +308,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
         total_inter_cols += inter_cols;
         for (auto inter_hash: hash_with_col) {
             int_fast64_t val = inter_hash.first;
-            printf("%ld,%ld\n", main,val);
+            // printf("%ld,%ld\n", main,val);
             XXH3_state_t* hash_state = inter_hash.second;
             if (val < p) {
                 // printf("considering inter %ld,%ld\n", main,val);

@@ -182,7 +182,7 @@ typedef struct {
 int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 int_pair get_num(int_fast64_t num, int_fast64_t p);
 void free_static_resources();
-void initialise_static_resources();
+void initialise_static_resources(int_fast64_t num_cores);
 int_fast64_t get_p_int(int_fast64_t p, int_fast64_t max_interaction_distance);
 int_pair* get_all_nums(int_fast64_t p, int_fast64_t max_interaction_distance);
 

@@ -160,7 +160,7 @@ SEXP read_log_(SEXP log_filename_)
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
     SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_, SEXP use_intercept_)
+    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -176,8 +176,9 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     const char* log_filename = CHAR(STRING_ELT(log_filename_, 0));
     int_fast64_t depth = asInteger(depth_);
     int_fast64_t log_level_enum = asInteger(log_level_);
+    int_fast64_t use_cores = asInteger(use_cores_);
 
-    initialise_static_resources();
+    initialise_static_resources(use_cores_);
 
     enum LOG_LEVEL log_level = NONE;
     switch (log_level_enum) {
