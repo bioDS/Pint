@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
-#include <vector>
 #include <omp.h>
+#include <vector>
 #include <xxhash.h>
 // #include<glib-2.0/glib.h>
 
@@ -34,7 +34,9 @@ void free_row_set(struct row_set rs)
     free(rs.rows);
 }
 
-struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches)
+struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
+    bool* remove,
+    Thread_Cache* thread_caches)
 {
     int_fast64_t p = Xc.p;
     int_fast64_t n = Xc.n;
@@ -68,7 +70,8 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, boo
     return rs;
 }
 
-std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
+std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id)
+{
     std::vector<int_fast64_t> new_col;
     if (id < Xu.p) {
         int_fast64_t col_len = Xu.host_col_nz[id];
@@ -76,7 +79,7 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
         for (int i = 0; i < col_len; i++) {
             new_col.push_back(entries[i]);
         }
-    } else if (id < Xu.p*Xu.p) {
+    } else if (id < Xu.p * Xu.p) {
         auto pair = val_to_pair(id, Xu.p);
         auto ida = std::get<0>(pair);
         auto idb = std::get<1>(pair);
@@ -85,16 +88,16 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
         int_fast64_t cb_len = Xu.host_col_nz[idb];
         int_fast64_t* cb_entries = &Xu.host_X[Xu.host_col_offsets[idb]];
         int_fast64_t ca_ind = 0, cb_ind = 0;
-        while(ca_ind < ca_len && cb_ind < cb_len) {
+        while (ca_ind < ca_len && cb_ind < cb_len) {
             if (ca_entries[ca_ind] == cb_entries[cb_ind]) {
                 new_col.push_back(ca_entries[ca_ind]);
                 ca_ind++;
                 cb_ind++;
                 continue;
             }
-            while(ca_ind < ca_len && ca_entries[ca_ind] < cb_entries[cb_ind])
+            while (ca_ind < ca_len && ca_entries[ca_ind] < cb_entries[cb_ind])
                 ca_ind++;
-            while(cb_ind < cb_len && ca_entries[ca_ind] > cb_entries[cb_ind])
+            while (cb_ind < cb_len && ca_entries[ca_ind] > cb_entries[cb_ind])
                 cb_ind++;
         }
     } else {
@@ -109,7 +112,7 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
         int_fast64_t cc_len = Xu.host_col_nz[idc];
         int_fast64_t* cc_entries = &Xu.host_X[Xu.host_col_offsets[idc]];
         int_fast64_t ca_ind = 0, cb_ind = 0, cc_ind = 0;
-        while(ca_ind < ca_len && cb_ind < cb_len && cc_ind < cc_len) {
+        while (ca_ind < ca_len && cb_ind < cb_len && cc_ind < cc_len) {
             if (ca_entries[ca_ind] == cb_entries[cb_ind] && ca_entries[ca_ind] == cc_entries[cc_ind]) {
                 new_col.push_back(ca_entries[ca_ind]);
                 ca_ind++;
@@ -117,33 +120,34 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id) {
                 cc_ind++;
                 continue;
             }
-            while(ca_ind < ca_len &&
-                ca_entries[ca_ind] < std::max(cb_entries[cb_ind], cc_entries[cc_ind]))
+            while (ca_ind < ca_len && ca_entries[ca_ind] < std::max(cb_entries[cb_ind], cc_entries[cc_ind]))
                 ca_ind++;
-            while(cb_ind < cb_len &&
-                cb_entries[cb_ind] < std::max(ca_entries[ca_ind], cc_entries[cc_ind]))
+            while (cb_ind < cb_len && cb_entries[cb_ind] < std::max(ca_entries[ca_ind], cc_entries[cc_ind]))
                 cb_ind++;
-            while(cc_ind < cc_len &&
-                cc_entries[cc_ind] < std::max(ca_entries[ca_ind], cb_entries[cb_ind]))
+            while (cc_ind < cc_len && cc_entries[cc_ind] < std::max(ca_entries[ca_ind], cb_entries[cb_ind]))
                 cc_ind++;
         }
-
     }
     return new_col;
 }
 
-SingleCol get_inter_col(X_uncompressed Xu, int_fast64_t cola, int_fast64_t colb) {
-        int_fast64_t cola_len = Xu.host_col_nz[cola];
-        int_fast64_t* cola_vals = &Xu.host_X[Xu.host_col_offsets[cola]];
-        int_fast64_t colb_len = Xu.host_col_nz[colb];
-        int_fast64_t* colb_vals = &Xu.host_X[Xu.host_col_offsets[colb]];
+SingleCol get_inter_col(X_uncompressed Xu, int_fast64_t cola,
+    int_fast64_t colb)
+{
+    int_fast64_t cola_len = Xu.host_col_nz[cola];
+    int_fast64_t* cola_vals = &Xu.host_X[Xu.host_col_offsets[cola]];
+    int_fast64_t colb_len = Xu.host_col_nz[colb];
+    int_fast64_t* colb_vals = &Xu.host_X[Xu.host_col_offsets[colb]];
 }
 
-// bool check_cols_match(X_uncompressed Xu, int_fast64_t cola, int_fast64_t colb) {
-    
+// bool check_cols_match(X_uncompressed Xu, int_fast64_t cola, int_fast64_t
+// colb) {
+
 // }
 
-bool check_cols_match(std::vector<int_fast64_t> cola, std::vector<int_fast64_t> colb) {
+bool check_cols_match(std::vector<int_fast64_t> cola,
+    std::vector<int_fast64_t> colb)
+{
     if (cola.size() != colb.size())
         return false;
     for (int i = 0; i < cola.size(); i++) {
@@ -153,37 +157,40 @@ bool check_cols_match(std::vector<int_fast64_t> cola, std::vector<int_fast64_t> 
     return true;
 }
 
-IndiCols get_empty_indicols() {
+IndiCols get_empty_indicols()
+{
     IndiCols id; // empty hash map is valid, this should be fine.
     return id;
 }
 
-std::vector<int_fast64_t> update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols *indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
+std::vector<int_fast64_t> update_main_indistinguishable_cols(
+    X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set,
+    IndiCols* indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
 {
     int_fast64_t total_cols_checked = 0;
-    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> new_col_ids_for_hashvalue;
+    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>>
+        new_col_ids_for_hashvalue;
     std::vector<int_fast64_t> vals_to_remove;
     for (auto main : *new_cols) {
         total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
-        XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len*sizeof(int_fast64_t));
-        
+        XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len * sizeof(int_fast64_t));
+
         if (indi->main_col_hashes.contains(main_hash))
             indi->skip_main_col_ids.insert(main);
         else
             indi->main_col_hashes.insert(main_hash);
-        // it might be that we already found an equivalen pair/triple. If so we need to remove it.
+        // it might be that we already found an equivalen pair/triple. If so we need
+        // to remove it.
         for (auto val : indi->cols_for_hash[main_hash]) {
-            printf("existing val %ld is a duplicate of main %ld\n", val, main);
             if (val < Xu.p)
                 continue;
-            else if (val < Xu.p*Xu.p) {
+            else if (val < Xu.p * Xu.p) {
                 // remove the pair
                 indi->skip_pair_ids.insert(val);
                 vals_to_remove.push_back(val);
-            }
-            else {
+            } else {
                 // remove the triplet
                 vals_to_remove.push_back(val);
             }
@@ -198,7 +205,8 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(X_uncompressed Xu, 
  * distance from each other. set to 1 for no interactions.
  */
 XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
-    int_fast64_t max_interaction_distance, int_fast64_t shuffle)
+    int_fast64_t max_interaction_distance,
+    int_fast64_t shuffle)
 {
     XMatrixSparse X2;
     int_fast64_t colno, length;
@@ -227,7 +235,8 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
 #pragma omp parallel for shared(X2, X, iter_done) private(length, colno) num_threads(NumCores) reduction(+ \
                                                                                                          : total_count, total_sum) schedule(static)
     for (int_fast64_t i = 0; i < p; i++) {
-        for (int_fast64_t j = i; j < min(i + max_interaction_distance, (int_fast64_t)p); j++) {
+        for (int_fast64_t j = i;
+             j < min(i + max_interaction_distance, (int_fast64_t)p); j++) {
             int_fast64_t val;
             // GQueue *current_col = g_queue_new();
             // GQueue *current_col_actual = g_queue_new();
@@ -235,7 +244,9 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
             // worked out by hand as being equivalent to the offset we would have
             // reached.
             int_fast64_t a = min(i, p - d); // number of iters limited by d.
-            int_fast64_t b = max(i - (p - d), (int_fast64_t)0); // number of iters of i limited by p rather than d.
+            int_fast64_t b = max(
+                i - (p - d),
+                (int_fast64_t)0); // number of iters of i limited by p rather than d.
             // int_fast64_t tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
             int_fast64_t suma = a * (d - 1);
             int_fast64_t k = max(p - d + b, (int_fast64_t)0);
@@ -340,7 +351,8 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     permutation_splits = NumCores;
     permutation_split_size = p_int / permutation_splits;
     final_split_size = p_int % permutation_splits;
-    printf("%ld splits of size %ld\n", permutation_splits, permutation_split_size);
+    printf("%ld splits of size %ld\n", permutation_splits,
+        permutation_split_size);
     printf("final split size: %ld\n", final_split_size);
 
     X2.n = n;
@@ -370,7 +382,7 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
     int_fast64_t p = Xc->p;
     int_fast64_t n = Xc->n;
 
-    char *full_X = (char*)calloc(n * p, sizeof(char));
+    char* full_X = (char*)calloc(n * p, sizeof(char));
 
     // read through compressed matrix and construct continuous
     // uncompressed matrix
@@ -393,14 +405,14 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
                         col[col_entry_pos] = entry;
                         col_entry_pos++;
                         offset++;
-                        full_X[entry*p+k] = 1;
+                        full_X[entry * p + k] = 1;
                     }
                     values >>= item_width[word.selector];
                 }
             }
         }
     }
-    
+
     // for (int ri = 0; ri < n; ri++) {
     //     printf("%d: ", ri);
     //     for (int ci = 0; ci < p; ci++) {
@@ -415,7 +427,7 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
         host_row_offsets[row] = offset;
         int_fast64_t row_nz = 0;
         for (int_fast64_t col = 0; col < p; col++) {
-            if (full_X[row*p+col] == 1) {
+            if (full_X[row * p + col] == 1) {
                 host_X_row[offset] = col;
                 row_nz++;
                 offset++;
