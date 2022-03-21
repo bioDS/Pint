@@ -24,7 +24,9 @@ struct C_Beta_Sets {
     float* trip_strength;
 };
 
-struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets, robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>>* indist_from_val)
+struct C_Beta_Sets cpp_bs_to_c(
+    Beta_Value_Sets* beta_sets,
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>>* indist_from_val)
 {
     int_fast64_t main_len = beta_sets->beta1.size();
     int_fast64_t int_len = beta_sets->beta2.size();
@@ -49,7 +51,8 @@ struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets, robin_hood::unordered
 
     int_fast64_t main_offset = 0;
     for (auto it : beta_sets->beta1) {
-    // for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end(); it++) {
+        // for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end();
+        // it++) {
         std::vector<int_fast64_t> indist_vec;
         if (NULL != indist_from_val)
             indist_vec = (*indist_from_val)[it.first];
@@ -110,9 +113,24 @@ struct C_Beta_Sets cpp_bs_to_c(Beta_Value_Sets* beta_sets, robin_hood::unordered
         trip_offset++;
     }
 
-    return C_Beta_Sets{ main_len, main_effects, num_indist_from_main, indist_from_main, main_strength,
-        int_len, int_i, int_j, num_indist_from_int, indist_from_int, int_strength,
-        trip_len, trip_a, trip_b, trip_c, num_indist_from_trip, indist_from_trip, trip_strength };
+    return C_Beta_Sets { main_len,
+        main_effects,
+        num_indist_from_main,
+        indist_from_main,
+        main_strength,
+        int_len,
+        int_i,
+        int_j,
+        num_indist_from_int,
+        indist_from_int,
+        int_strength,
+        trip_len,
+        trip_a,
+        trip_b,
+        trip_c,
+        num_indist_from_trip,
+        indist_from_trip,
+        trip_strength };
 }
 
 extern "C" {
@@ -124,7 +142,9 @@ struct effect {
     float strength;
 };
 
-SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept, robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>>* indist_from_val)
+SEXP process_beta(
+    Beta_Value_Sets* beta_sets, float f_intercept,
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>>* indist_from_val)
 {
     struct C_Beta_Sets cbs = cpp_bs_to_c(beta_sets, indist_from_val);
     int_fast64_t main_count = 0, int_count = 0;
@@ -150,18 +170,21 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept, robin_hood::uno
     for (int_fast64_t i = 0; i < cbs.main_len; i++) {
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_main[i]));
         for (int j = 0; j < cbs.num_indist_from_main[i]; j++) {
-            INTEGER(indist)[j] = cbs.indist_from_main[i][j];
+            INTEGER(indist)
+            [j] = cbs.indist_from_main[i][j] + 1;
         }
         SET_VECTOR_ELT(main_indist, i, indist);
         INTEGER(main_i)
         [i] = cbs.main_effects[i];
         REAL(main_strength)
         [i] = cbs.main_strength[i];
+        UNPROTECT(1);
     }
     for (int_fast64_t i = 0; i < cbs.int_len; i++) {
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_int[i]));
         for (int j = 0; j < cbs.num_indist_from_int[i]; j++) {
-            INTEGER(indist)[j] = cbs.indist_from_int[i][j];
+            INTEGER(indist)
+            [j] = cbs.indist_from_int[i][j] + 1;
         }
         SET_VECTOR_ELT(int_indist, i, indist);
         INTEGER(int_i)
@@ -170,11 +193,13 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept, robin_hood::uno
         [i] = cbs.int_j[i];
         REAL(int_strength)
         [i] = cbs.int_strength[i];
+        UNPROTECT(1);
     }
     for (int_fast64_t i = 0; i < cbs.trip_len; i++) {
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_trip[i]));
         for (int j = 0; j < cbs.num_indist_from_trip[i]; j++) {
-            INTEGER(indist)[j] = cbs.indist_from_trip[i][j];
+            INTEGER(indist)
+            [j] = cbs.indist_from_trip[i][j] + 1;
         }
         SET_VECTOR_ELT(trip_indist, i, indist);
         INTEGER(trip_a)
@@ -185,6 +210,7 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept, robin_hood::uno
         [i] = cbs.trip_c[i];
         REAL(trip_strength)
         [i] = cbs.trip_strength[i];
+        UNPROTECT(1);
     }
 
     for (int i = 0; i < cbs.main_len; i++)
@@ -205,8 +231,8 @@ SEXP process_beta(Beta_Value_Sets* beta_sets, float f_intercept, robin_hood::uno
     free(cbs.trip_b);
     free(cbs.trip_c);
 
-
-    REAL(intercept)[0] = f_intercept;
+    REAL(intercept)
+    [0] = f_intercept;
     SET_VECTOR_ELT(all_effects, 0, main_i);
     SET_VECTOR_ELT(all_effects, 1, main_strength);
     SET_VECTOR_ELT(all_effects, 2, main_indist);
@@ -234,7 +260,9 @@ SEXP read_log_(SEXP log_filename_)
     float restored_lambda_value = -1.0;
     Beta_Value_Sets restored_beta_sets;
 
-    restore_from_log(log_filename, false, 0, 0, 0, 0, &restored_iter, &restored_lambda_count, &restored_lambda_value, &restored_beta_sets);
+    restore_from_log(log_filename, false, 0, 0, 0, 0, &restored_iter,
+        &restored_lambda_count, &restored_lambda_value,
+        &restored_beta_sets);
 
     // intercept isn't in log at the moment
     SEXP all_effects = process_beta(&restored_beta_sets, 0.0, NULL);
@@ -245,7 +273,9 @@ SEXP read_log_(SEXP log_filename_)
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
     SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_, SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_)
+    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_,
+    SEXP log_filename_, SEXP depth_, SEXP log_level_,
+    SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -316,12 +346,16 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     float regularized_intercept = lasso_result.regularized_intercept;
     float unbiased_intercept = lasso_result.unbiased_intercept;
 
-    SEXP regularized_effects = PROTECT(process_beta(&lasso_result.regularized_result, regularized_intercept, &lasso_result.indist_from_val));
-    SEXP unbiased_effects = PROTECT(process_beta(&lasso_result.unbiased_result, unbiased_intercept, &lasso_result.indist_from_val));
+    SEXP regularized_effects = PROTECT(
+        process_beta(&lasso_result.regularized_result, regularized_intercept,
+            &lasso_result.indist_from_val));
+    SEXP unbiased_effects = PROTECT(process_beta(&lasso_result.unbiased_result, unbiased_intercept,
+        &lasso_result.indist_from_val));
 
     SEXP results = PROTECT(allocVector(VECSXP, 3));
     SEXP final_lambda_sexp = PROTECT(allocVector(REALSXP, 1));
-    REAL(final_lambda_sexp)[0] = final_lambda;
+    REAL(final_lambda_sexp)
+    [0] = final_lambda;
 
     SET_VECTOR_ELT(results, 0, regularized_effects);
     SET_VECTOR_ELT(results, 1, unbiased_effects);
@@ -338,9 +372,11 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     return results;
 }
 
-static const R_CallMethodDef CallEntries[] = { { "lasso_", (DL_FUNC)&lasso_, 17 },
+static const R_CallMethodDef CallEntries[] = {
+    { "lasso_", (DL_FUNC)&lasso_, 17 },
     { "read_log_", (DL_FUNC)&read_log_, 1 },
-    { NULL, NULL, 0 } };
+    { NULL, NULL, 0 }
+};
 
 void R_init_Pint(DllInfo* info)
 {
