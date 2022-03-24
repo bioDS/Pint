@@ -45,14 +45,15 @@ void check_beta_order(robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
     }
 }
 
-float update_intercept(float *rowsum, float *Y, int n, float lambda, float intercept) {
+float update_intercept(float* rowsum, float* Y, int n, float lambda, float intercept)
+{
     float sumn = 0.0;
     for (int i = 0; i < n; i++) {
         sumn -= rowsum[i];
     }
     float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / n; // square root lasso
     float diff = new_value - intercept;
-    
+
     for (int i = 0; i < n; i++) {
         rowsum[i] += diff;
     }
@@ -160,7 +161,8 @@ static auto rng = std::default_random_engine();
 
 void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept) {
+    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept)
+{
     float** last_rowsum = vars->last_rowsum;
     Thread_Cache* thread_caches = vars->thread_caches;
     int_fast64_t n = vars->n;
@@ -217,7 +219,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
         if (VERBOSE)
             printf("iter %ld\n", iter);
         float prev_error = error;
-        
+
         if (use_intercept) {
             vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
         }
@@ -277,13 +279,13 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
     // run several iterations of will_update to make sure we catch any new
     // columns
     /*TODO: in principle we should allow more than one, but it seems to
-   * only slow things down. maybe this is because any effects not chosen
-   * for the first iter will be small, and therefore not really worht
-   * it? (i.e. slow and unreliable).
-   * TODO: suffers quite badly when numa updates are allowed
-   *        - check if this is only true for small p (openmp tests seem to only
-   * improve with p >= 5k)
-   */
+     * only slow things down. maybe this is because any effects not chosen
+     * for the first iter will be small, and therefore not really worht
+     * it? (i.e. slow and unreliable).
+     * TODO: suffers quite badly when numa updates are allowed
+     *        - check if this is only true for small p (openmp tests seem to only
+     * improve with p >= 5k)
+     */
     // TODO: with multiple iters, many branches are added on the second iter. This
     // doesn't seem right.
     for (int_fast64_t retests = 0; retests < 1; retests++) {
@@ -313,7 +315,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
-            // if (!wont_update[j] && prev_wont_update) {
+                // if (!wont_update[j] && prev_wont_update) {
                 thread_new_cols[omp_get_thread_num()].insert(j);
             }
         }
@@ -345,10 +347,10 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
                 }
             }
             //// we'll also update last_rowums for the active set
-            //for (auto it = active_set->entries2.begin(); it != active_set->entries2.end(); it++) {
-            //    AS_Entry *entry = &it->second;
-            //    memcpy(entry->last_rowsum, rowsum, sizeof *rowsum * n);
-            //}
+            // for (auto it = active_set->entries2.begin(); it != active_set->entries2.end(); it++) {
+            //     AS_Entry *entry = &it->second;
+            //     memcpy(entry->last_rowsum, rowsum, sizeof *rowsum * n);
+            // }
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -383,11 +385,10 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         bool increased_set = working_set_results.first;
         auto vals_to_remove = working_set_results.second;
         for (auto val : vals_to_remove) {
-            printf("removing val %ld\n", val);
             active_set_remove(active_set, val);
             if (val < p)
                 beta_sets->beta1[val] = 0;
-            else if (val < p*p)
+            else if (val < p * p)
                 beta_sets->beta2[val] = 0;
             else
                 beta_sets->beta3[val] = 0;
@@ -470,14 +471,14 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             // total_notpresent, new_nz_beta, total_beta_updates,
             // total_beta_nz_updates)
 
-            //auto print_entries = [&](robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries,
-            //                         robin_hood::unordered_flat_map<int_fast64_t, float>* current_beta_set) {
-            //    printf("set contains: { ");
-            //    for (auto it = entries->begin(); it != entries->end(); it++) {
-            //        printf("%ld, ", it->first);
-            //    }
-            //    printf("}\n");
-            //};
+            // auto print_entries = [&](robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries,
+            //                          robin_hood::unordered_flat_map<int_fast64_t, float>* current_beta_set) {
+            //     printf("set contains: { ");
+            //     for (auto it = entries->begin(); it != entries->end(); it++) {
+            //         printf("%ld, ", it->first);
+            //     }
+            //     printf("}\n");
+            // };
 
             if (use_intercept) {
                 vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
@@ -511,7 +512,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         // printf("%.1f%% of active set was blank\n",
         // (float)total_present/(float)(total_present+total_notpresent));
     }
-        
 
     if (VERBOSE)
         printf("new nz beta: %ld\n", new_nz_beta);
@@ -591,7 +591,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         double tmp = 396.952547477011765511e-3;
         printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
         printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
-        final_lambda = 1.1 * std::sqrt(1.0/(double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
+        final_lambda = 1.1 * std::sqrt(1.0 / (double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
         // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.
     }
     printf("using final lambda: %f\n", final_lambda);
@@ -815,27 +815,27 @@ Lasso_Result simple_coordinate_descent_lasso(
 
         {
             int_fast64_t nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
-            //if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
-            //    printf("nonzero %ld == nz_beta %ld ?\n", nonzero, nz_beta);
-            //    printf("beta 1 contains: { ");
-            //    for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end();
-            //         it++) {
-            //        printf("%ld[%.2f], ", it->first, beta_sets.beta1.at(it->first));
-            //    }
-            //    printf("}\n");
-            //    printf("beta 2 contains: { ");
-            //    for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end();
-            //         it++) {
-            //        printf("%ld[%.2f], ", it->first, beta_sets.beta2.at(it->first));
-            //    }
-            //    printf("}\n");
-            //    printf("beta 3 contains: { ");
-            //    for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end();
-            //         it++) {
-            //        printf("%ld[%.2f], ", it->first, beta_sets.beta3.at(it->first));
-            //    }
-            //    printf("}\n");
-            //}
+            // if (nonzero != nz_beta) { // TODO: debugging only, disable for release.
+            //     printf("nonzero %ld == nz_beta %ld ?\n", nonzero, nz_beta);
+            //     printf("beta 1 contains: { ");
+            //     for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end();
+            //          it++) {
+            //         printf("%ld[%.2f], ", it->first, beta_sets.beta1.at(it->first));
+            //     }
+            //     printf("}\n");
+            //     printf("beta 2 contains: { ");
+            //     for (auto it = beta_sets.beta2.begin(); it != beta_sets.beta2.end();
+            //          it++) {
+            //         printf("%ld[%.2f], ", it->first, beta_sets.beta2.at(it->first));
+            //     }
+            //     printf("}\n");
+            //     printf("beta 3 contains: { ");
+            //     for (auto it = beta_sets.beta3.begin(); it != beta_sets.beta3.end();
+            //          it++) {
+            //         printf("%ld[%.2f], ", it->first, beta_sets.beta3.at(it->first));
+            //     }
+            //     printf("}\n");
+            // }
 #ifdef NOT_R
             g_assert_true(nonzero == nz_beta);
 #endif
@@ -883,7 +883,7 @@ Lasso_Result simple_coordinate_descent_lasso(
             int_fast64_t val = beta.first;
             float effect = beta.second;
             auto full_col = get_col_by_id(Xu, val);
-            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
             for (auto col : indi.cols_for_hash[col_hash]) {
                 if (NULL != indist_from_val)
                     (*indist_from_val)[val].push_back(col);
@@ -891,7 +891,7 @@ Lasso_Result simple_coordinate_descent_lasso(
                     sets->beta1[col] += effect;
                     remove_3.push_back(val);
                     break;
-                } else if (col < p*p) {
+                } else if (col < p * p) {
                     sets->beta2[col] += effect;
                     remove_3.push_back(val);
                     break;
@@ -903,7 +903,7 @@ Lasso_Result simple_coordinate_descent_lasso(
             int_fast64_t val = beta.first;
             float effect = beta.second;
             auto full_col = get_col_by_id(Xu, val);
-            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
             for (auto col : indi.cols_for_hash[col_hash]) {
                 if (NULL != indist_from_val)
                     (*indist_from_val)[val].push_back(col);
@@ -918,7 +918,7 @@ Lasso_Result simple_coordinate_descent_lasso(
             for (auto beta : sets->beta1) {
                 int_fast64_t val = beta.first;
                 auto full_col = get_col_by_id(Xu, val);
-                int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size()*sizeof(int_fast64_t));
+                int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
                 for (auto col : indi.cols_for_hash[col_hash]) {
                     (*indist_from_val)[val].push_back(col);
                 }
@@ -952,11 +952,11 @@ Lasso_Result simple_coordinate_descent_lasso(
         free(beta_sequence.betas);
         free(beta_sequence.lambdas);
     }
-    
+
     /*
      * Optionally attempt to provide an un-regularised estimate of the
      * beta values for the current working set.
-    */
+     */
     float unbiased_intercept = intercept;
     Beta_Value_Sets unbiased_beta_sets;
     unbiased_beta_sets.p = p;
@@ -1080,11 +1080,11 @@ Changes update_beta_cyclic_old(
         }
     }
 
-    //if (k == interesting_col) {
-    //    printf("lambda: %f\n", lambda);
-    //    printf("sumn: %f\n", sumn);
-    //    printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
-    //}
+    // if (k == interesting_col) {
+    //     printf("lambda: %f\n", lambda);
+    //     printf("sumn: %f\n", sumn);
+    //     printf("soft: %f\n", soft_threshold(sumn, lambda) / sumk);
+    // }
 
     // TODO: This is probably slower than necessary.
     float Bk_diff = beta->at(k);
