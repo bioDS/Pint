@@ -47,7 +47,7 @@ void check_beta_order(robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
 
 float update_intercept(float* rowsum, float* Y, int n, float lambda, float intercept)
 {
-    float sumn = 0.0;
+    float sumn = intercept*n;
     for (int i = 0; i < n; i++) {
         sumn -= rowsum[i];
     }
