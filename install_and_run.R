@@ -42,7 +42,7 @@ Y <- d$Y
 ## result <- interaction_lasso(X, Y, lambda_min = -1, max_interaction_distance = -1, use_adaptive_calibration = FALSE, max_nz_beta = 200, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 2)
-result <- interaction_lasso(X, Y, depth = 2, max_nz_beta=150, estimate_unbiased = TRUE, num_threads=4)
+result <- interaction_lasso(X, Y, depth = 2, max_nz_beta = 150, estimate_unbiased = TRUE, num_threads = 4)
 # print(result)
 
 # q()
@@ -104,5 +104,9 @@ summary(fx_int$TP)
 # print("triples")
 # print(result$triple_effects$equivalent)
 
-count(result$pairwise_effects)
-count(result$main_effects)
+length(result$main_effects$strength)
+length(result$pairwise_effects$strength)
+
+sprintf("test")
+sprintf("first main effect (%d) was indistinguishable from:", result$main_effects$i[1])
+print(result$main_effects$equivalent[1])
