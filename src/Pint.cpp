@@ -293,6 +293,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     int_fast64_t log_level_enum = asInteger(log_level_);
     int_fast64_t use_cores = asInteger(use_cores_);
 
+    VERBOSE = verbose;
+
     initialise_static_resources(use_cores);
 
     enum LOG_LEVEL log_level = NONE;

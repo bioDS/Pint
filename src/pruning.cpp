@@ -68,15 +68,10 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
         alpha = fabs(estimate_squared / real_squared);
     else
         alpha = 0.0;
-    //if (verbose && k == interesting_col)
-    //    printf("alpha: %f = %f/%f\n", alpha, estimate_squared, real_squared);
 
     float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, col, X.host_col_nz[k]);
 
     float total_estimate = fabs(last_max * alpha) + remainder;
-    //if (verbose && k == interesting_col)
-    //    printf("effect %ld total estimate: %f = %f*%f + %f\n", k, total_estimate,
-    //        fabs(last_max), alpha, remainder);
     return total_estimate;
 }
 
@@ -96,20 +91,6 @@ bool wont_update_effect(X_uncompressed X, float lambda, int_fast64_t k, float la
 {
     // int_fast64_t* cache = malloc(X.n * sizeof *column_cache);
     float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum);
-    //if (verbose && k == interesting_col) {
-    //    // printf("beta[%ld] = %f\n", k, beta[k]);
-    //    printf("%ld: upper bound: %f < lambda: %f?\n", k, upper_bound,
-    //        lambda);
-    //    if (upper_bound <= lambda) {
-    //        printf("may update %ld\n", k);
-    //    }
-    //}
-    //if (k == interesting_col1)
-    //    printf(" col1 [%ld] %f <= %f? : %ld\n", k, upper_bound, lambda, upper_bound <= lambda);
-    //if (k == interesting_col2)
-    //    printf(" col2 [%ld] %f <= %f? : %ld\n", k, upper_bound, lambda, upper_bound <= lambda);
-    // free(cache);
-    // return upper_bound <= lambda*X.n;
     return upper_bound <= lambda * total_sqrt_error;
 }
 
@@ -117,7 +98,6 @@ bool wont_update_effect(X_uncompressed X, float lambda, int_fast64_t k, float la
 float as_pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
     int_fast64_t* col, int_fast64_t col_nz)
 {
-    // int_fast64_t *col = &X.host_X[X.host_col_offsets[k]];
     float pos_max = 0.0, neg_max = 0.0;
     for (int_fast64_t ind = 0; ind < col_nz; ind++) {
         int_fast64_t i = col[ind];
@@ -145,7 +125,6 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
     int_fast64_t col_entry_pos = 0;
 
     int_fast64_t entry = -1;
-    // printf("col.nz: %ld\n", col.nz);
     for (int_fast64_t i = 0; i < col.nwords; i++) { //TODO: broken
         S8bWord word = col.compressed_indices[i];
         int_fast64_t values = word.values;
@@ -174,7 +153,6 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
     float total_estimate = fabs(last_max * alpha) + remainder;
     return total_estimate;
 }
-// bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, robin_hood::unordered_flat_map<int_fast64_t, float>* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* column_cache) {
 bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* column_cache)
 {
     float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache);

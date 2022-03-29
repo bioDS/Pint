@@ -222,7 +222,8 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     p_int = get_p_int(p, max_interaction_distance);
     if (max_interaction_distance < 0)
         max_interaction_distance = p;
-    printf("p_int: %ld\n", p_int);
+    if (VERBOSE)
+        printf("p_int: %ld\n", p_int);
 
     X2.cols = (S8bCol*)malloc(sizeof *X2.cols * p_int);
 
@@ -328,8 +329,6 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
         }
         iter_done++;
         if (p >= 100 && iter_done % (p / 100) == 0) {
-            if (VERBOSE)
-                printf("create interaction matrix, %ld%%\n", done_percent);
             done_percent++;
         }
     }
@@ -339,9 +338,11 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
         total_words += X2.cols[i].nwords;
         total_entries += X2.cols[i].nz;
     }
-    printf("mean nz entries: %f\n", (float)total_entries / (float)p_int);
-    printf("mean words: %f\n", (float)total_count / (float)total_words);
-    printf("mean size: %f\n", (float)total_sum / (float)total_entries);
+    if (VERBOSE) {
+        printf("mean nz entries: %f\n", (float)total_entries / (float)p_int);
+        printf("mean words: %f\n", (float)total_count / (float)total_words);
+        printf("mean size: %f\n", (float)total_sum / (float)total_entries);
+    }
     X2.total_words = total_words;
     X2.total_entries = total_entries;
 
@@ -353,9 +354,11 @@ XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     permutation_splits = NumCores;
     permutation_split_size = p_int / permutation_splits;
     final_split_size = p_int % permutation_splits;
-    printf("%ld splits of size %ld\n", permutation_splits,
-        permutation_split_size);
-    printf("final split size: %ld\n", final_split_size);
+    if (VERBOSE) {
+        printf("%ld splits of size %ld\n", permutation_splits,
+            permutation_split_size);
+        printf("final split size: %ld\n", final_split_size);
+    }
 
     X2.n = n;
     X2.p = p_int;
@@ -415,14 +418,6 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
         }
     }
 
-    // for (int ri = 0; ri < n; ri++) {
-    //     printf("%d: ", ri);
-    //     for (int ci = 0; ci < p; ci++) {
-    //         printf("%d ", full_X[ri*p+ci]);
-    //     }
-    //     printf("\n");
-    // }
-
     // construct row-major indices.
     offset = 0;
     for (int_fast64_t row = 0; row < n; row++) {
@@ -436,15 +431,6 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
             }
         }
         host_row_nz[row] = row_nz;
-        // printf("row %d len: %d\n", row, row_nz);
-        // printf("row %d offset %d\n", row, host_row_offsets[row]);
-        // printf("row %d inds: ", row);
-        // int to = host_row_offsets[row];
-        // for (int i = 0; i < host_row_nz[row]; i++) {
-        //     // printf("%d ", host_X_row[to + i]);
-        //     printf(" %p,", &host_X_row[to + i]);
-        // }
-        // printf("\n");
     }
 
     free(full_X);

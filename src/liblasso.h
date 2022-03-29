@@ -228,7 +228,7 @@ extern float halt_error_diff;
 extern float max_rowsums[NUM_MAX_ROWSUMS];
 extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 extern int_pair* cached_nums;
-extern int_fast64_t VERBOSE;
+extern bool VERBOSE;
 extern float total_sqrt_error;
 
 #endif
