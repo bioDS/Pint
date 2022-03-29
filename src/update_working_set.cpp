@@ -225,9 +225,26 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             sum_with_col[main] += rowsum_diff;
             if (depth > 1) {
                 int_fast64_t ri = 0;
-                while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
+                // while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
+                //     ri++; //PERF: this takes a decent chunk of time and doesn't seem entirely necessary.
+                //TODO: why not store an index of each entry's offset (in a hash table) as well as a list of entries?
+                int_fast64_t jump_dist = relevant_row_set.row_lengths[row_main]/2;
+                const int_fast64_t* row = relevant_row_set.rows[row_main];
+                int_fast64_t tmp = row[ri];
+                while (tmp != main) {
+                    if (tmp < main)
+                        ri += jump_dist;
+                    else if (tmp > main)
+                        ri -= jump_dist;
+                    else if (tmp == main)
+                        break;
+                    jump_dist = std::max((int_fast64_t)1,jump_dist/2);
+                    tmp = row[ri];
+                }
                     ri++;
-                for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+
+                const int_fast64_t row_length = relevant_row_set.row_lengths[row_main];
+                for (; ri < row_length; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
                     // const bool inter_is_new = new_cols->contains(inter);
                     if (indicols->skip_main_col_ids.contains(inter))
