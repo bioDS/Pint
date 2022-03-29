@@ -198,7 +198,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_pair_ids[NumCores];
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_triple_ids[NumCores];
     std::vector<int_fast64_t> thread_seen_together[NumCores];
-#pragma omp parallel for reduction(+ \
+#pragma omp parallel for schedule(static, 1) reduction(+ \
                                    : total_inter_cols, total, skipped, int2_used, int2_skipped, main_cols_used, skipped_pair_cols, used_pair_cols)
     for (int_fast64_t main_i = 0; main_i < count_may_update; main_i++) {
         // use Xc to read main effect
