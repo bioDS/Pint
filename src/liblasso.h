@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 
 // #include <CL/opencl.h>
 #include <math.h>
@@ -102,7 +103,8 @@ typedef struct {
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
     robin_hood::unordered_flat_set<int_fast64_t> main_col_hashes;
     robin_hood::unordered_flat_set<int_fast64_t> pair_col_hashes;
-    robin_hood::unordered_flat_set<int_fast64_t> skip_main_col_ids;
+    // robin_hood::unordered_flat_set<int_fast64_t> skip_main_col_ids;
+    std::vector<bool> skip_main_col_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_triple_ids;
     robin_hood::unordered_flat_set<int_fast64_t> seen_together;

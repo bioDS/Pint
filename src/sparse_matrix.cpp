@@ -157,9 +157,10 @@ bool check_cols_match(std::vector<int_fast64_t> cola,
     return true;
 }
 
-IndiCols get_empty_indicols()
+IndiCols get_empty_indicols(int_fast64_t p)
 {
     IndiCols id; // empty hash map is valid, this should be fine.
+    id.skip_main_col_ids.assign(p, false);
     return id;
 }
 
@@ -178,7 +179,8 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
         XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len * sizeof(int_fast64_t));
 
         if (indi->main_col_hashes.contains(main_hash))
-            indi->skip_main_col_ids.insert(main);
+            // indi->skip_main_col_ids.insert(main);
+            indi->skip_main_col_ids[main] = true;
         else
             indi->main_col_hashes.insert(main_hash);
         // it might be that we already found an equivalen pair/triple. If so we need

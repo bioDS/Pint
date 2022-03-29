@@ -574,7 +574,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     VERBOSE = verbose;
     int_pair* precalc_get_num;
     int_fast64_t** X = xmatrix.X;
-    IndiCols indi;
+    IndiCols indi = get_empty_indicols(p);
 
     int_fast64_t real_p_int = -1;
     switch (depth) {
@@ -588,8 +588,8 @@ Lasso_Result simple_coordinate_descent_lasso(
     }
     double final_lambda = lambda_min;
     if (lambda_min <= 0) {
-        double tmp = 396.952547477011765511e-3;
-        printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
+        // double tmp = 396.952547477011765511e-3;
+        // printf("ϕ⁻¹(~396.95e-3) = %f\n", phi_inv(tmp));
         printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
         final_lambda = 1.1 * std::sqrt(1.0 / (double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
         // final_lambda /= std::sqrt(n); // not very well justified, but seems like it might be helping.

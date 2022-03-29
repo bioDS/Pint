@@ -1552,7 +1552,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
-        IndiCols empty_indi;
+        IndiCols empty_indi = get_empty_indicols(p);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
             &active_set, NULL, 2, FALSE, &empty_indi);
     }
@@ -2194,7 +2194,7 @@ static void test_simple_indistinguishable_cols()
     g_assert_true(testcol.size() == 1);
     g_assert_true(testcol[0] == 1);
 
-    IndiCols indi = get_empty_indicols();
+    IndiCols indi = get_empty_indicols(p);
 
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     std::vector<int_fast64_t> new_cols = {0,1,4,5};
@@ -2222,12 +2222,12 @@ static void test_simple_indistinguishable_cols()
         auto triple = val_to_triplet(triple_id, p);
         printf("skipped triple col: %ld(%ld,%ld,%ld) as a duplicate\n", triple_id, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
     }
-    g_assert_false(lr.indi.skip_main_col_ids.contains(0));
-    g_assert_false(lr.indi.skip_main_col_ids.contains(1));
-    g_assert_false(lr.indi.skip_main_col_ids.contains(2));
-    g_assert_false(lr.indi.skip_main_col_ids.contains(3));
-    g_assert_false(lr.indi.skip_main_col_ids.contains(4));
-    g_assert_true(lr.indi.skip_main_col_ids.contains(5));
+    g_assert_false(lr.indi.skip_main_col_ids[0]);
+    g_assert_false(lr.indi.skip_main_col_ids[1]);
+    g_assert_false(lr.indi.skip_main_col_ids[2]);
+    g_assert_false(lr.indi.skip_main_col_ids[3]);
+    g_assert_false(lr.indi.skip_main_col_ids[4]);
+    g_assert_true(lr.indi.skip_main_col_ids[5]);
     
     auto sanity_check = [&]() {
         for (auto hash_colset : lr.indi.cols_for_hash) {

@@ -204,7 +204,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
         // use Xc to read main effect
         int_fast64_t main = updateable_items[main_i];
         // const bool main_is_new = new_cols->contains(main);
-        if (indicols->skip_main_col_ids.contains(main)) {
+        // if (indicols->skip_main_col_ids.contains(main)) {
+        if (indicols->skip_main_col_ids[main]) {
             continue;
         }
         main_cols_used++;
@@ -241,33 +242,34 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     jump_dist = std::max((int_fast64_t)1,jump_dist/2);
                     tmp = row[ri];
                 }
-                    ri++;
+                ri++;
 
                 const int_fast64_t row_length = relevant_row_set.row_lengths[row_main];
                 for (; ri < row_length; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
                     // const bool inter_is_new = new_cols->contains(inter);
-                    if (indicols->skip_main_col_ids.contains(inter))
+                    if (indicols->skip_main_col_ids[inter])
                         continue;
                     if (inter - main > max_interaction_distance)
                         break;
                     auto inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, inter), p);
-                    if (indicols->skip_pair_ids.contains(inter_id)) {
-                        skipped_pair_cols++;
-                        continue;
-                    } else {
-                        used_pair_cols++;
-                    }
                     sum_with_col[inter] += rowsum_diff;
                     // if (main_is_new || inter_is_new) { //TODO: might be a problem if they were previously introduced separately
                     if (!indicols->seen_together.contains(inter_id)) {
-                        if (!hash_with_col.contains(inter)) {
-                            hash_with_col[inter] = XXH3_createState();
-                            XXH3_64bits_reset(hash_with_col[inter]);
-                        }
-                        XXH3_64bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
+                       if (!hash_with_col.contains(inter)) {
+                           hash_with_col[inter] = XXH3_createState();
+                           XXH3_64bits_reset(hash_with_col[inter]);
+                       }
+                       XXH3_64bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
                     }
                     if (depth > 2) {
+                        // It's apparently faster to always update the pairwise hash without checking this, so we put the check here.
+                        if (indicols->skip_pair_ids.contains(inter_id)) {
+                           skipped_pair_cols++;
+                           continue;
+                        } else {
+                           used_pair_cols++;
+                        }
                         int_fast64_t k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
                         auto check_inter_cache = [&](int_fast64_t k) -> bool {
                             if (!inter_cache[k].present)
@@ -293,7 +295,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                                 int_fast64_t inter2 = relevant_row_set.rows[row_main][ri2];
                                 if (inter2 - main > max_interaction_distance)
                                     break;
-                                if (indicols->skip_main_col_ids.contains(inter2))
+                                // if (indicols->skip_main_col_ids.contains(inter2))
+                                if (indicols->skip_main_col_ids[inter2])
                                     continue;
                                 int_fast64_t inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
                                 sum_with_col[inter_ind] += rowsum_diff;
@@ -324,31 +327,15 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
         total_inter_cols += inter_cols;
         for (auto inter_hash: hash_with_col) {
             int_fast64_t val = inter_hash.first;
-            // printf("%ld,%ld\n", main,val);
             XXH3_state_t* hash_state = inter_hash.second;
             if (val < p) {
-                // printf("considering inter %ld,%ld\n", main,val);
-                // we're looking at a has with a single other column
-                // if (!main_is_new && !new_cols->contains(val)) {
-                //     XXH3_freeState(hash_state);
-                //     continue;
-                // }
                 XXH64_hash_t hash_value = XXH3_64bits_digest(hash_state);
                 XXH3_freeState(hash_state);
                 auto pair_id = pair_to_val(std::make_tuple(main, val), p);
                 thread_seen_together[omp_get_thread_num()].push_back(pair_id);
-                // printf("considering pair %ld\n", pair_id);
-                // if (indicols->cols_for_hash.contains(hash_value) || thread_new_cols_for_hash[omp_get_thread_num()].contains(hash_value)) {
-                //if (indicols->pair_col_hashes.contains(hash_value))
-                //    printf("pair_col_hashes matches\n");
-                //if (indicols->main_col_hashes.contains(hash_value))
-                //    printf("main matches\n");
-                //if (thread_new_pair_hashes[omp_get_thread_num()].contains(hash_value))
-                //    printf("thread pair matches\n");
                 if (indicols->pair_col_hashes.contains(hash_value) 
                     || indicols->main_col_hashes.contains(hash_value) 
                     || thread_new_pair_hashes[omp_get_thread_num()].contains(hash_value)) {
-                    // printf("inserting skip pair id %ld\n", pair_id);
                     thread_new_skip_pair_ids[omp_get_thread_num()].insert(pair_id);
                 } else {
                     thread_new_cols_for_hash[omp_get_thread_num()][hash_value].push_back(pair_id);
@@ -357,10 +344,6 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             } else {
                 // we're looking at a hash with a pair of other columns
                 auto inter_pair = val_to_pair(val, p);
-                // if (!main_is_new && !new_cols->contains(val)) {
-                //     XXH3_freeState(hash_state);
-                //     continue;
-                // }
                 XXH64_hash_t hash_value = XXH3_64bits_digest(hash_state);
                 XXH3_freeState(hash_state);
                 auto triple_id = triplet_to_val(std::make_tuple(main, std::get<0>(inter_pair), std::get<1>(inter_pair)), p);
@@ -391,7 +374,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     c = main;
                     // k = pair_to_val(std::make_tuple(a, b), p);
                     k = main;
-                    if (indicols->skip_main_col_ids.contains(k))
+                    if (indicols->skip_main_col_ids[k])
                         continue;
                 } else if (tuple_val < p) {
                     a = main;
@@ -476,8 +459,10 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 indicols->cols_for_hash[hash].insert(col);
             }
         }
-        for (auto val: thread_new_skip_pair_ids[thread_id]) {
-            indicols->skip_pair_ids.insert(val);
+        // if (depth > 2) {
+            for (auto val: thread_new_skip_pair_ids[thread_id]) {
+                indicols->skip_pair_ids.insert(val);
+            // }
         }
         for (auto val: thread_new_skip_triple_ids[thread_id]) {
             indicols->skip_triple_ids.insert(val);
@@ -501,7 +486,6 @@ std::pair<bool, std::vector<int_fast64_t>> update_working_set(X_uncompressed Xu,
     int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
     int_fast64_t max_interaction_distance)
 {
-    // const std::vector<int_fast64_t> new_cols(updateable_items, &updateable_items[count_may_update]);
     struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
     std::vector<int_fast64_t> vals_to_remove = update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols);
     char increased_set = update_working_set_cpu(
