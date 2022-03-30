@@ -14,10 +14,10 @@ if (length(args >= 2)) {
   # f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_28462.rds"
   # f <- "../data/simulated_large_data/n10000_p1000_SNR5_nbi500_nbij500_nlethals0_viol0_50884.rds"
   # f <- "../data/simulated_8k/n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_91159.rds"
-  f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi0_nbij100_nlethals0_viol0_11754.rds"
+  # f <- "../data/simulated_small_data/n1000_p100_SNR5_nbi0_nbij100_nlethals0_viol0_11754.rds"
   # f <- "../data/simulated_large_data/n10000_p1000_SNR10_nbi0_nbij1000_nlethals0_viol0_11504.rds"
-  ## f <- "../data/simulated_8k/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057.rds"
-  # f <- "../data/simulated_8k/n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_78715.rds"
+  # f <- "../data/simulated_8k/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057.rds"
+  f <- "../data/simulated_8k/n8000_p4000_SNR5_nbi40_nbij800_nlethals200_viol0_78715.rds"
   # f <- "../infx_lasso_data/3way_data_to_run/n1000_p100_SNR4_nbi10_nbij252_nbijk1666_nlethals0_70443.rds"
   # f <- "./weirdly_slow_case/n1000_p100_SNR10_nbi0_nbij100_nlethals0_viol0_33859.rds"
   # f <- "./antibio_data.rds"
@@ -42,18 +42,23 @@ Y <- d$Y
 ## result <- interaction_lasso(X, Y, lambda_min = -1, max_interaction_distance = -1, use_adaptive_calibration = FALSE, max_nz_beta = 200, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 2)
-result <- interaction_lasso(X, Y, depth = 2, max_nz_beta = 150, estimate_unbiased = TRUE, num_threads = 4)
+result <- interaction_lasso(X, Y, depth = 2, max_nz_beta = 150, estimate_unbiased = TRUE, num_threads = 4, verbose=TRUE, strong_hierarchy = TRUE)
 # print(result)
 
 # q()
 
 # result
 
-obs <- d$obs
+obs <- d$obs %>% mutate(gene_i = as.character(gene_i), gene_j = as.character(gene_j))
 # N.B. components of pairwise effects generally are also main effects in the simulated data.
 bi_ind <- d$bi_ind
+bi_ind$gene_i <- as.character(bi_ind$gene_i)
 bij_ind <- d$bij_ind
+bij_ind$gene_i <- as.character(bij_ind$gene_i)
+bij_ind$gene_j <- as.character(bij_ind$gene_j)
 lethal_ind <- d$lethal_ind
+lethal_ind$gene_i <- as.character(lethal_ind$gene_i)
+lethal_ind$gene_j <- as.character(lethal_ind$gene_j)
 lethal_coef <- -1000
 large_coef <- 2
 
@@ -71,7 +76,7 @@ fx_int <- data.frame(
   effect = result$pairwise_effects$strength %>% unlist()
 ) %>%
   # filter(abs(effect) > 0.1) %>%
-  arrange(gene_i) %>%
+  arrange(as.numeric(gene_i)) %>%
   left_join(., obs, by = c("gene_i", "gene_j")) %>%
   mutate(type = "interaction") %>%
   rowwise() %>%
@@ -92,9 +97,9 @@ fx_int <- data.frame(
 
 print(fx_int %>% filter(TP == TRUE), n = 200)
 print("main effect summary")
-summary(fx_main$TP)
+print(summary(fx_main$TP))
 print("pairwise effect summary")
-summary(fx_int$TP)
+print(summary(fx_int$TP))
 
 # print("equivalent effect summary")
 # print("main")
@@ -107,6 +112,5 @@ summary(fx_int$TP)
 length(result$main_effects$strength)
 length(result$pairwise_effects$strength)
 
-sprintf("test")
-sprintf("first main effect (%d) was indistinguishable from:", result$main_effects$i[1])
+print(sprintf("first main effect (%s) was indistinguishable from:", result$main_effects$i[1]))
 print(result$main_effects$equivalent[1])

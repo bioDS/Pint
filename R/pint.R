@@ -8,26 +8,54 @@
 #' interaction_lasso(X, Y, depth=2)
 #' @useDynLib Pint
 
-process_result <- function(result) {
-    #i <- sapply(result[[1]], `[`, 1)
-    #strength <- sapply(result[[1]], `[`, 2)
-    i <- result[[1]]
+# converts interactions to tuple representation and adjusts for 0/1 start.
+val_to_list_name <- function(val, X) {
+    range <- ncol(X)
+    names <- colnames(X)
+    if (val < range) {
+        return(names[val + 1])
+    } else if (val < range * range) {
+        a <- val %/% range; # no +1 here
+        b <- val %% range + 1;
+        return(c(names[a], names[b]))
+    } else {
+        a <- val %/% (range * range); # no +1 here
+        b <- (val - (a * range * range)) %/% (range) + 1;
+        c <- val %% range + 1;
+        return(c(names[a], names[b], names[c]))
+    }
+}
+
+process_result <- function(X, result) {
+    i <- colnames(X)[result[[1]]]
     strength <- result[[2]]
-    equivalent <- result[[3]]
-    df_main <- list(i=i,strength=strength,equivalent=equivalent)
+    equiv_list = c()
+    if (length(result[[3]]) > 0) {
+        equiv_list <- lapply(result[[3]], val_to_list_name, X)
+        names(equiv_list) <- i
+    }
+    df_main <- list(i=i,strength=strength,equivalent=equiv_list)
 
-    i <- result[[4]]
-    j <- result[[5]]
+    i <- colnames(X)[result[[4]]]
+    j <- colnames(X)[result[[5]]]
     strength <- result[[6]]
-    equivalent <- result[[7]]
-    df_int <- list(i=i,j=j,strength=strength,equivalent=equivalent)
+    equiv_list = c()
+    if (length(result[[7]]) > 0) {
+        equiv_list <- lapply(result[[7]], val_to_list_name, X)
+        names(equiv_list) <- paste0(i, ",", j)
+    }
+    df_int <- list(i=i,j=j,strength=strength,equivalent=equiv_list)
 
-    i <- result[[8]]
-    j <- result[[9]]
-    k <- result[[10]]
+    i <- colnames(X)[result[[8]]]
+    j <- colnames(X)[result[[9]]]
+    k <- colnames(X)[result[[10]]]
+    equiv_list = c()
+    if (length(result[[12]]) > 0) {
+        equiv_list <- lapply(result[[12]], val_to_list_name, X)
+        names(equiv_list) <- paste0(i, ",", j, ",", k)
+    }
     strength <- result[[11]]
-    equivalent <- result[[12]]
-    df_trip <- list(i=i,j=j,k=k,strength=strength,equivalent=equivalent)
+    df_trip <- list(i=i,j=j,k=k,strength=strength,equivalent=equiv_list)
 
     intercept <- result[[13]]
 
@@ -41,7 +69,7 @@ read_log <- function(log_filename="regression.log") {
     return(process_result(result))
 }
 
-interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1) {
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, strong_hierarchy=FALSE) {
     Ym = as.matrix(Y)
     if (!dim(Ym)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
@@ -50,6 +78,10 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     log_level_enum = 0;
     if (log_level == "lambda") {
         log_level_enum = 1;
+    }
+
+    if (length(colnames(X)) == 0) {
+        colnames(X) <- seq(ncol(X))
     }
 
     p <- ncol(X)
@@ -67,13 +99,25 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     }
     rm(tmp)
 
-    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, use_adaptive_calibration, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads)
+    if (strong_hierarchy) {
+        if (verbose) {
+            print("Finding main effects")
+        }
+        main_only = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, max_nz_beta*2, max_lambdas, verbose, log_filename, 1, log_level_enum, estimate_unbiased, use_intercept, num_threads)
+        main_only_result <- process_result(X, main_only[[1]])
+        # we'll use these to allow the second run to report all identical columns again.
+        all_equiv <- unique(unlist(main_only_result$main_effects$equivalent))
+
+        X <- X[,all_equiv]
+    }
+
+    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads)
 
     rm(Ym)
 
-    result_regularized <- process_result(result[[1]])
+    result_regularized <- process_result(X, result[[1]])
     if (estimate_unbiased) {
-        result_unbiased <- process_result(result[[2]])
+        result_unbiased <- process_result(X, result[[2]])
     }
     final_lambda <- result[[3]]
 

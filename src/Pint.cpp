@@ -97,10 +97,11 @@ struct C_Beta_Sets cpp_bs_to_c(
             indist_vec = (*indist_from_val)[it->first];
         int_fast64_t num_indist = indist_vec.size();
         int_fast64_t* indist_arr = new int_fast64_t[num_indist];
-        if (NULL != indist_from_val)
+        if (NULL != indist_from_val) {
             for (int i = 0; i < num_indist; i++) {
                 indist_arr[i] = indist_vec[i];
             }
+        }
         num_indist_from_trip[trip_offset] = num_indist;
         indist_from_trip[trip_offset] = indist_arr;
 
@@ -171,7 +172,7 @@ SEXP process_beta(
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_main[i]));
         for (int j = 0; j < cbs.num_indist_from_main[i]; j++) {
             INTEGER(indist)
-            [j] = cbs.indist_from_main[i][j] + 1;
+            [j] = cbs.indist_from_main[i][j];
         }
         SET_VECTOR_ELT(main_indist, i, indist);
         INTEGER(main_i)
@@ -184,7 +185,7 @@ SEXP process_beta(
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_int[i]));
         for (int j = 0; j < cbs.num_indist_from_int[i]; j++) {
             INTEGER(indist)
-            [j] = cbs.indist_from_int[i][j] + 1;
+            [j] = cbs.indist_from_int[i][j];
         }
         SET_VECTOR_ELT(int_indist, i, indist);
         INTEGER(int_i)
@@ -199,7 +200,7 @@ SEXP process_beta(
         SEXP indist = PROTECT(allocVector(INTSXP, cbs.num_indist_from_trip[i]));
         for (int j = 0; j < cbs.num_indist_from_trip[i]; j++) {
             INTEGER(indist)
-            [j] = cbs.indist_from_trip[i][j] + 1;
+            [j] = cbs.indist_from_trip[i][j];
         }
         SET_VECTOR_ELT(trip_indist, i, indist);
         INTEGER(trip_a)
@@ -272,9 +273,8 @@ SEXP read_log_(SEXP log_filename_)
 
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
-    SEXP max_interaction_distance_, SEXP use_adaptive_calibration_,
-    SEXP max_nz_beta_, SEXP max_lambdas_, SEXP verbose_,
-    SEXP log_filename_, SEXP depth_, SEXP log_level_,
+    SEXP max_interaction_distance_, SEXP max_nz_beta_, SEXP max_lambdas_,
+    SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_,
     SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_)
 {
     double* x = REAL(X_);
@@ -315,7 +315,6 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         printf("updating once per iteration\n");
     }
 
-    int_fast64_t use_adaptive_calibration = asLogical(use_adaptive_calibration_);
     char estimate_unbiased = asLogical(estimate_unbiased_);
     char use_intercept = asLogical(use_intercept_);
 
@@ -339,6 +338,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     xmatrix.actual_cols = n;
     xmatrix.X = X;
 
+    bool use_adaptive_calibration = false; // option has been removed.
     Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,
