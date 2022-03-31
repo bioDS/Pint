@@ -64,4 +64,5 @@ void free_host_X(X_uncompressed *Xu);
 std::vector<int_fast64_t> update_main_indistinguishable_cols(X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set, IndiCols* last_result, robin_hood::unordered_flat_set<int_fast64_t>* new_cols);
 std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id);
 IndiCols get_empty_indicols(int_fast64_t p);
+void free_indicols(IndiCols *indi);
 bool check_cols_match(std::vector<int_fast64_t> cola, std::vector<int_fast64_t> colb);

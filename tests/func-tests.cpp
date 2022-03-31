@@ -21,7 +21,8 @@ using namespace std;
 extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
-    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols* indi);
+    float* old_rowsum, Active_Set* active_set,
+    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
@@ -516,7 +517,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
 
     Lasso_Result lr = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2, FALSE, FALSE);
+        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     beta = beta_sets.beta3; //TODO: don't
 
@@ -1189,9 +1190,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
     int_fast64_t max_interaction_distance = 20;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         max_interaction_distance, 0.01, 100,
-        200, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        1000, log_file, 3, FALSE, FALSE);
+        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     for (auto beta : beta_sets.beta2) {
         int_fast64_t val = beta.first;
@@ -1216,11 +1215,12 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     printf("starting accuracy test\n");
     int_fast64_t use_adcal = FALSE;
     const char* log_file = "test.log";
+    bool check_duplicates = true;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 100,
-        200, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        97, log_file, 2, FALSE, FALSE);
+        200, true, 1.01,
+        NONE, NULL, 0,
+        97, log_file, 2, false, false, check_duplicates, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
     printf("considered %ld unique cols\n", unique_cols_considered);
@@ -1321,9 +1321,9 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
 
     lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 47504180,
-        200, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        500, "test.log", 2, FALSE, FALSE);
+        200, true, 1.01,
+        NONE, NULL, 0,
+        500, "test.log", 2, false, false, check_duplicates, false);
     beta_sets = lr.regularized_result;
 
     check_results();
@@ -1554,7 +1554,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         printf("lambda: %f\n", lambda);
         IndiCols empty_indi = get_empty_indicols(p);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, NULL, 2, FALSE, &empty_indi);
+            &active_set, 2, false, &empty_indi, false);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1927,9 +1927,9 @@ void trivial_3way_test()
     const int_fast64_t use_adcal = FALSE;
     Lasso_Result lr = simple_coordinate_descent_lasso(X, Y, n, p,
         -1, 0.01, 100,
-        100, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        7, "test.log", 3, FALSE, FALSE);
+        100, true, 1.01,
+        NONE, NULL, 0,
+        7, "test.log", 3, false, false, true, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
@@ -2118,7 +2118,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     float lambda_min = 0.01;
     float lambda_max = 10000;
     int_fast64_t max_iter = 200;
-    int_fast64_t VERBOSE = FALSE;
+    bool VERBOSE = true;
     float frac_overlap_allowed = -1;
     float halt_beta_diff = 1.01;
     LOG_LEVEL log_level = LOG_LEVEL::LAMBDA;
@@ -2143,7 +2143,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int_fast64_t result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth, FALSE, FALSE);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     int_fast64_t final_iter, final_lambda_count;
@@ -2205,9 +2205,9 @@ static void test_simple_indistinguishable_cols()
     const char* log_file = "test.log";
     Lasso_Result lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
         -1, 0.00000001, 100,
-        500, FALSE, -1, 1.01,
-        NONE, NULL, 0, FALSE,
-        100, log_file, 3, FALSE, FALSE);
+        500, true, 1.01,
+        NONE, NULL, 0,
+        100, log_file, 3, false, false, true, false);
     int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
     printf("considered %ld unique cols\n", unique_cols_considered);
     
@@ -2228,6 +2228,12 @@ static void test_simple_indistinguishable_cols()
     g_assert_false(lr.indi.skip_main_col_ids[3]);
     g_assert_false(lr.indi.skip_main_col_ids[4]);
     g_assert_true(lr.indi.skip_main_col_ids[5]);
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(0));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(1));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(2));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(3));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(4));
+    // g_assert_true(lr.indi.skip_main_col_ids.contains(5));
     
     auto sanity_check = [&]() {
         for (auto hash_colset : lr.indi.cols_for_hash) {
@@ -2363,9 +2369,9 @@ static void test_simple_indistinguishable_cols()
     
     lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
         -1, 0.00000001, 100,
-        500, FALSE, -1, 1.01,
-        NONE, NULL, 0, FALSE,
-        100, log_file, 3, FALSE, FALSE);
+        500, true, 1.01,
+        NONE, NULL, 0,
+        100, log_file, 3, false, false, true, false);
     printf("Beta values found:\n");
     printf("beta 1:\n");
     print_beta_set(&lr.regularized_result.beta1, p);

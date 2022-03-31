@@ -272,17 +272,16 @@ SEXP read_log_(SEXP log_filename_)
 }
 
 SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
-    SEXP frac_overlap_allowed_, SEXP halt_error_diff_,
-    SEXP max_interaction_distance_, SEXP max_nz_beta_, SEXP max_lambdas_,
-    SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_,
-    SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_)
+    SEXP halt_error_diff_, SEXP max_interaction_distance_, SEXP max_nz_beta_,
+    SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_,
+    SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_,
+    SEXP check_duplicates_, SEXP continuous_X_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
     SEXP dim = getAttrib(X_, R_DimSymbol);
     int_fast64_t n = INTEGER(dim)[0];
     int_fast64_t p = INTEGER(dim)[1];
-    float frac_overlap_allowed = asReal(frac_overlap_allowed_);
     int_fast64_t max_interaction_distance = asInteger(max_interaction_distance_);
     int_fast64_t p_int = get_p_int(p, max_interaction_distance);
     int_fast64_t max_nz_beta = asInteger(max_nz_beta_);
@@ -292,6 +291,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     int_fast64_t depth = asInteger(depth_);
     int_fast64_t log_level_enum = asInteger(log_level_);
     int_fast64_t use_cores = asInteger(use_cores_);
+    bool check_duplicates = asLogical(check_duplicates_);
+    bool continuous_X = asLogical(continuous_X_);
 
     VERBOSE = verbose;
 
@@ -315,8 +316,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         printf("updating once per iteration\n");
     }
 
-    char estimate_unbiased = asLogical(estimate_unbiased_);
-    char use_intercept = asLogical(use_intercept_);
+    bool estimate_unbiased = asLogical(estimate_unbiased_);
+    bool use_intercept = asLogical(use_intercept_);
 
     float halt_error_diff = asReal(halt_error_diff_);
 
@@ -341,9 +342,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     bool use_adaptive_calibration = false; // option has been removed.
     Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
-        asReal(lambda_max_), max_lambdas, verbose, frac_overlap_allowed,
-        halt_error_diff, log_level, NULL, 0, use_adaptive_calibration,
-        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept);
+        asReal(lambda_max_), max_lambdas, verbose, halt_error_diff, log_level, NULL, 0,
+        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept, check_duplicates, continuous_X);
     float final_lambda = lasso_result.final_lambda;
     float regularized_intercept = lasso_result.regularized_intercept;
     float unbiased_intercept = lasso_result.unbiased_intercept;
@@ -371,6 +371,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     free(Y);
 
     UNPROTECT(4);
+    free_indicols(*lasso_result.indi);
     return results;
 }
 

@@ -92,8 +92,8 @@ int main(int argc, const char** argv)
 
     printf("begginning coordinate descent\n");
     const char* log_file = "exe.log";
-    auto lasso_result = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1,
-        -1, lambda, 300, VERBOSE, -1, 1.0001, log_level, argv, argc, FALSE, max_nz, log_file, depth, FALSE, TRUE);
+    auto lasso_result = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1, lambda, 1000, 300, VERBOSE,
+    1.0001, log_level, argv, argc, max_nz, log_file, depth, false, true, true, false);
     auto beta_sets = lasso_result.regularized_result;
     int nbeta_int = nbeta;
     auto beta = beta_sets.beta3;

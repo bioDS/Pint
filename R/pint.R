@@ -69,7 +69,7 @@ read_log <- function(log_filename="regression.log") {
     return(process_result(result))
 }
 
-interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, strong_hierarchy=FALSE) {
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, strong_hierarchy=FALSE, check_duplicates=FALSE, continuous_X=FALSE) {
     Ym = as.matrix(Y)
     if (!dim(Ym)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
@@ -99,11 +99,11 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     }
     rm(tmp)
 
-    if (strong_hierarchy) {
+    if (strong_hierarchy && depth > 1) {
         if (verbose) {
             print("Finding main effects")
         }
-        main_only = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, max_nz_beta*2, max_lambdas, verbose, log_filename, 1, log_level_enum, estimate_unbiased, use_intercept, num_threads)
+        main_only = .Call(lasso_, X, Ym, lambda_min, lambda_max, halt_error_diff, max_interaction_distance, max_nz_beta*2, max_lambdas, verbose, log_filename, 1, log_level_enum, estimate_unbiased, use_intercept, num_threads, check_duplicates, continuous_X)
         main_only_result <- process_result(X, main_only[[1]])
         # we'll use these to allow the second run to report all identical columns again.
         all_equiv <- unique(unlist(main_only_result$main_effects$equivalent))
@@ -111,7 +111,7 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
         X <- X[,all_equiv]
     }
 
-    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, frac_overlap_allowed, halt_error_diff, max_interaction_distance, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads)
+    result = .Call(lasso_, X, Ym, lambda_min, lambda_max, halt_error_diff, max_interaction_distance, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads, check_duplicates, continuous_X)
 
     rm(Ym)
 

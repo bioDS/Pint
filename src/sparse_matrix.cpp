@@ -131,20 +131,6 @@ std::vector<int_fast64_t> get_col_by_id(X_uncompressed Xu, int_fast64_t id)
     return new_col;
 }
 
-SingleCol get_inter_col(X_uncompressed Xu, int_fast64_t cola,
-    int_fast64_t colb)
-{
-    int_fast64_t cola_len = Xu.host_col_nz[cola];
-    int_fast64_t* cola_vals = &Xu.host_X[Xu.host_col_offsets[cola]];
-    int_fast64_t colb_len = Xu.host_col_nz[colb];
-    int_fast64_t* colb_vals = &Xu.host_X[Xu.host_col_offsets[colb]];
-}
-
-// bool check_cols_match(X_uncompressed Xu, int_fast64_t cola, int_fast64_t
-// colb) {
-
-// }
-
 bool check_cols_match(std::vector<int_fast64_t> cola,
     std::vector<int_fast64_t> colb)
 {
@@ -161,7 +147,14 @@ IndiCols get_empty_indicols(int_fast64_t p)
 {
     IndiCols id; // empty hash map is valid, this should be fine.
     id.skip_main_col_ids.assign(p, false);
+    id.seen_with_main = new robin_hood::unordered_flat_set<uint_fast32_t>[p];
+    id.seen_pair_with_main = new robin_hood::unordered_flat_set<uint_fast64_t>[p];
     return id;
+}
+
+void free_indicols(IndiCols *indi) {
+    delete indi->seen_with_main;
+    delete indi->seen_pair_with_main;
 }
 
 std::vector<int_fast64_t> update_main_indistinguishable_cols(

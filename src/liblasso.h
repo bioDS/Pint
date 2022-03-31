@@ -37,6 +37,7 @@ typedef struct {
     int_fast64_t* col_i;
     int_fast64_t* col_j;
     robin_hood::unordered_flat_map<int_fast64_t, float> lf_map;
+    robin_hood::unordered_flat_map<int_fast64_t, XXH3_state_t*> hash_with_col;
 } Thread_Cache;
 typedef struct {
     int_fast64_t val;
@@ -103,11 +104,13 @@ typedef struct {
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
     robin_hood::unordered_flat_set<int_fast64_t> main_col_hashes;
     robin_hood::unordered_flat_set<int_fast64_t> pair_col_hashes;
-    // robin_hood::unordered_flat_set<int_fast64_t> skip_main_col_ids;
+    // robin_hood::unordered_flat_set<int_fast32_t> skip_main_col_ids;
     std::vector<bool> skip_main_col_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
     robin_hood::unordered_flat_set<int_fast64_t> skip_triple_ids;
     robin_hood::unordered_flat_set<int_fast64_t> seen_together;
+    robin_hood::unordered_flat_set<uint_fast32_t>* seen_with_main;
+    robin_hood::unordered_flat_set<uint_fast64_t>* seen_pair_with_main;
     // robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
     // int_fast64_t total_found_hash_count;
 } IndiCols;

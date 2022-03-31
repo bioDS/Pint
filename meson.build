@@ -10,8 +10,8 @@ add_project_arguments([
   '-ffast-math',
   '-fno-stack-protector',
   '-fpermissive',
- '-Ofast',
-  '-g',
+ #'-Ofast',
+ # '-g',
   # '-Os',
   # '-fno-inline',
 ], language: 'cpp')

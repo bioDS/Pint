@@ -47,7 +47,7 @@ void check_beta_order(robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
 
 float update_intercept(float* rowsum, float* Y, int n, float lambda, float intercept)
 {
-    float sumn = intercept*n;
+    float sumn = intercept * n;
     for (int i = 0; i < n; i++) {
         sumn -= rowsum[i];
     }
@@ -158,7 +158,7 @@ static auto rng = std::default_random_engine();
 
 void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept)
+    int_fast64_t depth, char use_intercept)
 {
     float** last_rowsum = vars->last_rowsum;
     Thread_Cache* thread_caches = vars->thread_caches;
@@ -243,7 +243,7 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
 
 int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept, IndiCols* indi)
+    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates)
 {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
@@ -299,6 +299,8 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
+            // if (!wont_update[j] && !prev_wont_update) {
+            // if (true) {
                 thread_new_cols[omp_get_thread_num()].insert(j);
             }
         }
@@ -350,7 +352,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         auto working_set_results = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             updateable_items, count_may_update, active_set,
-            thread_caches, ocl_setup, last_max, depth, indi, &new_cols, max_interaction_distance);
+            thread_caches, last_max, depth, indi, &new_cols, max_interaction_distance, check_duplicates);
         bool increased_set = working_set_results.first;
         auto vals_to_remove = working_set_results.second;
         for (auto val : vals_to_remove) {
@@ -488,17 +490,17 @@ double phi_inv(double x)
 float total_sqrt_error = 0.0;
 Lasso_Result simple_coordinate_descent_lasso(
     XMatrix xmatrix, float* Y, int_fast64_t n, int_fast64_t p, int_fast64_t max_interaction_distance,
-    float lambda_min, float lambda_max, int_fast64_t max_iter, int_fast64_t verbose,
-    float frac_overlap_allowed, float hed, enum LOG_LEVEL log_level,
-    const char** job_args, int_fast64_t job_args_num, int_fast64_t use_adaptive_calibration,
+    float lambda_min, float lambda_max, int_fast64_t max_iter, const bool verbose,
+    float hed, enum LOG_LEVEL log_level,
+    const char** job_args, int_fast64_t job_args_num,
     int_fast64_t mnz_beta, const char* log_filename, int_fast64_t depth,
-    char estimate_unbiased, char use_intercept)
+    const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, const bool continuous_X)
 {
     int_fast64_t max_nz_beta = mnz_beta;
-    if (VERBOSE)
+    if (verbose)
         printf("n: %ld, p: %ld\n", n, p);
     halt_error_diff = hed;
-    if (VERBOSE) {
+    if (verbose) {
         printf("using halt_error_diff of %f\n", halt_error_diff);
         printf("using depth: %ld\n", depth);
     }
@@ -522,11 +524,11 @@ Lasso_Result simple_coordinate_descent_lasso(
     }
     double final_lambda = lambda_min;
     if (lambda_min <= 0) {
-        if (VERBOSE)
+        if (verbose)
             printf("p = %ld, phi_inv(0.95/(2.0 * p)) = %f\n", real_p_int, phi_inv(0.95 / (2.0 * (double)real_p_int)));
         final_lambda = 1.1 * std::sqrt(1.0 / (double)n) * phi_inv(0.95 / (2.0 * (double)real_p_int));
     }
-    if (VERBOSE)
+    if (verbose)
         printf("using final lambda: %f\n", final_lambda);
 
     // work out min lambda for sqrt lasso
@@ -591,7 +593,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     FILE* log_file = NULL;
     int_fast64_t iter = 0;
     if (log_level != NONE && check_can_restore_from_log(log_filename, n, p, p_int, job_args, job_args_num)) {
-        if (VERBOSE)
+        if (verbose)
             Rprintf("We can restore from a partial log!\n");
         restore_from_log(log_filename, true, n, p, job_args, job_args_num, &iter,
             &lambda_count, &lambda, &beta_sets);
@@ -640,7 +642,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         update_beta_set(&beta_sets.beta2);
         update_beta_set(&beta_sets.beta3);
     } else {
-        if (VERBOSE)
+        if (verbose)
             Rprintf("no partial log for current job found\n");
     }
     if (log_level != NONE)
@@ -700,21 +702,20 @@ Lasso_Result simple_coordinate_descent_lasso(
         max_interaction_distance
     };
     int_fast64_t nz_beta = 0;
-    struct OpenCL_Setup ocl_setup;
     Active_Set active_set = active_set_new(p_int, p);
     float* old_rowsum = (float*)malloc(sizeof *old_rowsum * n);
-    if (VERBOSE)
+    if (verbose)
         printf("final_lambda: %f\n", final_lambda);
     error = calculate_error(Y, rowsum, n);
     total_sqrt_error = std::sqrt(error);
-    if (VERBOSE)
+    if (verbose)
         printf("initial error: %f\n", error);
     while (lambda > final_lambda && iter < max_lambda_count) {
         if (log_level == LAMBDA) {
             save_log(0, lambda, lambda_count, &beta_sets, log_file);
         }
         if (nz_beta >= max_nz_beta) {
-            if (VERBOSE)
+            if (verbose)
                 printf("reached max_nz_beta of %ld\n", max_nz_beta);
             break;
         }
@@ -723,7 +724,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         int_fast64_t last_iter_count = 0;
 
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth, use_intercept, &indi);
+            old_rowsum, &active_set, depth, use_intercept, &indi, check_duplicates);
 
         {
             int_fast64_t nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();
@@ -734,22 +735,9 @@ Lasso_Result simple_coordinate_descent_lasso(
         double prev_error = error;
         error = calculate_error(Y, rowsum, n);
         total_sqrt_error = std::sqrt(error);
-        if (VERBOSE)
+        if (verbose)
             printf("lambda %ld = %f, error %.4e, nz_beta %ld,%ld,%ld\n", lambda_count, lambda, error,
                 beta_sets.beta1.size(), beta_sets.beta2.size(), beta_sets.beta3.size());
-        if (use_adaptive_calibration && nz_beta > 0) {
-            Sparse_Betas* sparse_betas = &beta_sequence.betas[beta_sequence.count];
-            // TODO: it should be possible to do something more like memcpy here
-            copy_beta_sets(&beta_sets, sparse_betas);
-
-            if (beta_sequence.count >= max_lambda_count) {
-                fprintf(stderr,
-                    "allocated too many beta sequences for adaptive calibration, "
-                    "things will now break. ***************************************\n");
-            }
-            beta_sequence.lambdas[beta_sequence.count] = lambda;
-            beta_sequence.count++;
-        }
         lambda *= 0.95;
         if (nz_beta > 0) {
             iter++;
@@ -815,12 +803,14 @@ Lasso_Result simple_coordinate_descent_lasso(
             sets->beta3.erase(val3);
     };
     robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> indist_from_val;
-    beta_set_remove_dups(&beta_sets, &indist_from_val);
+    if (check_duplicates) {
+        beta_set_remove_dups(&beta_sets, &indist_from_val);
+    }
     intercept = iter_vars_pruned.intercept;
     iter_count = iter;
     if (log_level != NONE && log_file != NULL)
         close_log(log_file);
-    if (VERBOSE) {
+    if (verbose) {
         Rprintf("\nfinished at lambda = %f\n", lambda);
         Rprintf("after %ld total iters\n", iter_count);
     }
@@ -828,7 +818,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     cpu_time_used = ((float)(end.tv_nsec - start.tv_nsec)) / 1e9 + (end.tv_sec - start.tv_sec);
 
-    if (VERBOSE)
+    if (verbose)
         Rprintf("lasso done in %.4f seconds\n", cpu_time_used);
 
     /*
@@ -839,7 +829,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     Beta_Value_Sets unbiased_beta_sets;
     unbiased_beta_sets.p = p;
     if (estimate_unbiased) {
-        if (VERBOSE)
+        if (verbose)
             printf("original_error: %f\n", calculate_error(Y, rowsum, n));
         for (auto it = beta_sets.beta1.begin(); it != beta_sets.beta1.end(); it++)
             unbiased_beta_sets.beta1[it->first] = it->second;
@@ -866,8 +856,8 @@ Lasso_Result simple_coordinate_descent_lasso(
         };
         // run_lambda_iters_pruned(&iter_vars_pruned, 0.0, rowsum,
         subproblem_only(&iter_vars_pruned, 0.0, rowsum,
-            old_rowsum, &active_set, &ocl_setup, depth, use_intercept);
-        if (VERBOSE)
+            old_rowsum, &active_set, depth, use_intercept);
+        if (verbose)
             printf("un-regularized error: %f\n", calculate_error(Y, rowsum, n));
         unbiased_intercept = iter_vars_pruned.intercept;
     }
@@ -938,7 +928,6 @@ Changes update_beta_cyclic_old(
             values >>= item_width[word.selector];
         }
     }
-
 
     // TODO: This is probably slower than necessary.
     float Bk_diff = beta->at(k);
