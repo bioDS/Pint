@@ -69,11 +69,13 @@ read_log <- function(log_filename="regression.log") {
     return(process_result(result))
 }
 
-interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, strong_hierarchy=FALSE, check_duplicates=FALSE, continuous_X=FALSE) {
+interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, strong_hierarchy=FALSE, check_duplicates=FALSE) {
     Ym = as.matrix(Y)
     if (!dim(Ym)[1] == n) {
         stop("Y does not have the same number of rows as X, or the format is wrong")
     }
+
+    continuous_X <- FALSE # not implemented yet.
 
     log_level_enum = 0;
     if (log_level == "lambda") {
