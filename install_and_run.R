@@ -42,7 +42,7 @@ Y <- d$Y
 ## result <- interaction_lasso(X, Y, lambda_min = -1, max_interaction_distance = -1, use_adaptive_calibration = FALSE, max_nz_beta = 200, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 3)
 # result <- interaction_lasso(X, Y, depth = 2)
-result <- interaction_lasso(X, Y, depth = 2, max_nz_beta = 150, estimate_unbiased = TRUE, num_threads = 4, verbose=TRUE, strong_hierarchy = TRUE)
+result <- interaction_lasso(X, Y, depth = 2, max_nz_beta = 150, estimate_unbiased = TRUE, num_threads = 4, verbose=TRUE, strong_hierarchy = TRUE, check_duplicates = TRUE)
 # print(result)
 
 # q()

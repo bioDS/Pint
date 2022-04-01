@@ -472,12 +472,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             for (auto val_key : thread_new_cols_for_hash[thread_id]) {
                 XXH64_hash_t hash_high64 = val_key.first;
                 robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>> low_hash_new_cols = val_key.second;
-                if (hash_high64 == -8159609205832722572)
-                    printf("inserting high %ld\n", hash_high64);
                 for (auto hc_pair : low_hash_new_cols) {
                     XXH64_hash_t hash_low64 = hc_pair.first;
-                    if (hash_low64 == 5476872011942898047)
-                        printf("inserting low %ld\n", hash_low64);
                     auto new_cols = hc_pair.second;
                     for (auto col : new_cols) {
                         indicols->cols_for_hash[hash_high64][hash_low64].insert(col);

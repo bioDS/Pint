@@ -371,7 +371,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     free(Y);
 
     UNPROTECT(4);
-    free_lasso_result(&lasso_result);
+    free_lasso_result(lasso_result);
     return results;
 }
 
