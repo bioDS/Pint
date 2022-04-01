@@ -900,6 +900,10 @@ Lasso_Result simple_coordinate_descent_lasso(
     return result;
 }
 
+void free_lasso_result(Lasso_Result lr) {
+    free_indicols(lr.indi);
+}
+
 static int_fast64_t firstchanged = FALSE;
 
 // Exclusively for testing

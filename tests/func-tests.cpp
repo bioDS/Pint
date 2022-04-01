@@ -1207,6 +1207,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
         g_assert_true(std::abs(a-c) <= max_interaction_distance);
         g_assert_true(std::abs(b-c) <= max_interaction_distance);
     }
+    free_lasso_result(lr);
 }
 
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
@@ -1270,6 +1271,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     };
 
     check_results();
+    free_lasso_result(lr);
 
     // these are the values that the previous version reliably finds
     true_effects = {
@@ -1325,8 +1327,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     beta_sets = lr.regularized_result;
 
     check_results();
-    // beta_sets.beta2;
-    // g_assert_true(beta_sets.beta2[])
+    free_lasso_result(lr);
 }
 
 static void check_branch_pruning_faster(UpdateFixture* fixture,
@@ -1553,6 +1554,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         IndiCols empty_indi = get_empty_indicols(p);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
             &active_set, 2, false, &empty_indi, false);
+        free_indicols(empty_indi);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1960,6 +1962,7 @@ void trivial_3way_test()
 
     g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
 
+    free_lasso_result(lr);
     free_simple_matrix(sm);
 }
 
@@ -2157,6 +2160,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     free(beta1.values);
     free(beta2.indices);
     free(beta2.values);
+    free_lasso_result(lr);
 }
 
 static void test_simple_indistinguishable_cols()
@@ -2236,12 +2240,16 @@ static void test_simple_indistinguishable_cols()
             XXH64_hash_t hash_high64 = hash_hash_colset.first;
             for (auto hash_colset : hash_hash_colset.second) {
                 XXH64_hash_t hash_low64 = hash_colset.first;
-                auto colset = hash_colset.second;
+                robin_hood::unordered_flat_set<int_fast64_t> colset = hash_colset.second;
                 int_fast64_t first_col_id = -1;
                 for (auto tmp : colset) {
                     first_col_id = tmp;
                     break;
                 }
+                // printf("hash: %ld, %ld\n", hash_high64, hash_low64);
+                if (first_col_id == -1)
+                    continue;
+                g_assert_true(first_col_id >= 0);
                 auto first_col = get_col_by_id(sm.Xu, first_col_id);
                 for (auto col_id : colset) {
                     printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
@@ -2294,7 +2302,7 @@ static void test_simple_indistinguishable_cols()
                 continue;
             int_fast64_t val = beta.first;
             auto col = get_col_by_id(sm.Xu, val);
-            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
             printf("checking assigned-val col %ld is not a duplicate = %.2f\n", val, beta.second);
             if (seen_hashes.contains(hash)) {
                 printf("already seen this hash for col %ld\n", seen_hashes[hash]);
@@ -2307,7 +2315,7 @@ static void test_simple_indistinguishable_cols()
                 continue;
             int_fast64_t val = beta.first;
             auto col = get_col_by_id(sm.Xu, val);
-            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
             auto pair = val_to_pair(val, sm.p);
             printf("checking assigned-val col %ld(%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(pair), std::get<1>(pair), beta.second);
             if (seen_hashes.contains(hash)) {
@@ -2321,7 +2329,7 @@ static void test_simple_indistinguishable_cols()
                 continue;
             int_fast64_t val = beta.first;
             auto col = get_col_by_id(sm.Xu, val);
-            int_fast64_t hash = XXH3_64bits(&col[0], col.size()*sizeof(int_fast64_t));
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
             auto triple = val_to_triplet(val, sm.p);
             printf("checking assigned-val col %ld(%ld,%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), beta.second);
             if (seen_hashes.contains(hash)) {
@@ -2333,6 +2341,7 @@ static void test_simple_indistinguishable_cols()
     };
     
     sanity_check();
+    free_lasso_result(lr);
     
     // re-run with 'trivial-3way' test Y.
     robin_hood::unordered_map<int_fast64_t, float> correct_beta;
@@ -2386,6 +2395,8 @@ static void test_simple_indistinguishable_cols()
         free(thread_caches[i].col_j);
     }
     free_simple_matrix(sm);
+    free_indicols(indi);
+    free_lasso_result(lr);
 }
 
 static struct pruning_test_setup_details accuracy_setup = {

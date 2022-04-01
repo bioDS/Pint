@@ -158,6 +158,8 @@ typedef struct {
     robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> indist_from_val;
 } Lasso_Result;
 
+void free_lasso_result(Lasso_Result lr);
+
 typedef struct {
     XMatrixSparse Xc;
     float** last_rowsum;

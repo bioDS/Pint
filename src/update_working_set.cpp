@@ -200,8 +200,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     int_fast64_t correct_k = 0;
     int_fast64_t main_cols_used = 0;
     int_fast64_t skipped_pair_cols = 0, used_pair_cols = 0;
-    robin_hood::unordered_node_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>>> thread_new_cols_for_hash[NumCores];
-    robin_hood::unordered_node_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> thread_new_pair_hashes[NumCores];
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>>> thread_new_cols_for_hash[NumCores];
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> thread_new_pair_hashes[NumCores];
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_pair_ids[NumCores];
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_triple_ids[NumCores];
     std::vector<int_fast64_t> thread_seen_together[NumCores];
@@ -273,6 +273,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                         int_fast64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, inter), p);
                         // if (main_is_new || inter_is_new) { //TODO: doesn't work quite right.
                         // if (!indicols->seen_together.contains(inter_id)) { //TODO: slow
+                        //TODO: if xxh runs at memory-read speed, just always calculate it (since we read anyway). [avoids reading the hash tables]
                         if (!indicols->seen_with_main[main].contains(inter)) { //TODO: slow
                            if (!hash_with_col.contains(inter)) {
                                hash_with_col[inter] = XXH3_createState();
@@ -355,15 +356,33 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             for (auto inter_hash: hash_with_col) {
                 int_fast64_t val = inter_hash.first;
                 XXH3_state_t* hash_state = inter_hash.second;
+
+                // auto check_set = [&](robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>>* set, XXH128_hash_t value) {
+                // auto check_set = [&](auto* set, XXH128_hash_t value) {
+                //     if (set->size() == 0)
+                //         return false;
+                //     if (set->contains(value.high64)) {
+                //         return ((*set)[value.high64].contains(value.low64));
+                //     }
+                // };
+                auto check_set = [&](auto* set, XXH128_hash_t value) {
+                    return set->contains(value.high64) && (*set)[value.high64].contains(value.low64);
+                };
+
+
+                XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
+                XXH3_freeState(hash_state);
                 if (val < p) {
-                    XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
-                    XXH3_freeState(hash_state);
                     auto pair_id = pair_to_val(std::make_tuple(main, val), p);
                     if (!indicols->seen_pair_with_main[main].contains(val)) {
                         thread_seen_with_main[thread_num][main].push_back(val);
-                        if (indicols->pair_col_hashes[hash_value.high64].contains(hash_value.low64) 
-                            || indicols->main_col_hashes[hash_value.high64].contains(hash_value.high64) 
-                            || thread_new_pair_hashes[thread_num][hash_value.high64].contains(hash_value.low64)) {
+                        // if (check_set(&(indicols->pair_col_hashes), hash_value)
+                        // if (indicols->pair_col_hashes.contains(hash_value.high64) && indicols->pair_col_hashes[hash_value.high64].contains(hash_value.low64) 
+                            // || indicols->main_col_hashes[hash_value.high64].contains(hash_value.low64) 
+                            // || thread_new_pair_hashes[thread_num][hash_value.high64].contains(hash_value.low64)) {
+                        if (check_set(&indicols->pair_col_hashes, hash_value)
+                            || check_set(&indicols->main_col_hashes, hash_value) 
+                            || check_set(&thread_new_pair_hashes[thread_num], hash_value)) {
                             thread_new_skip_pair_ids[thread_num].insert(pair_id);
                         } else {
                             thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(pair_id);
@@ -373,13 +392,13 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 } else {
                     // we're looking at a hash with a pair of other columns
                     auto inter_pair = val_to_pair(val, p);
-                    XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
-                    XXH3_freeState(hash_state);
                     auto triple_id = triplet_to_val(std::make_tuple(main, std::get<0>(inter_pair), std::get<1>(inter_pair)), p);
                     thread_seen_pair_with_main[thread_num][main].push_back(val);
                     // thread_seen_together[thread_num].push_back(triple_id);
-                    if (indicols->cols_for_hash[hash_value.high64].contains(hash_value.low64)
-                        || thread_new_cols_for_hash[thread_num][hash_value.high64].contains(hash_value.low64)) {
+                    if (check_set(&indicols->cols_for_hash, hash_value)
+                        || check_set(&thread_new_cols_for_hash[thread_num], hash_value)) {
+                    // if (indicols->cols_for_hash[hash_value.high64].contains(hash_value.low64)
+                    //     || thread_new_cols_for_hash[thread_num][hash_value.high64].contains(hash_value.low64)) {
                         thread_new_skip_triple_ids[thread_num].insert(triple_id);
                     } else {
                         thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(triple_id);
@@ -506,8 +525,12 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 // indicols.cols_for_hash
                 XXH64_hash_t hash_high64 = val_key.first;
                 robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>> low_hash_new_cols = val_key.second;
+                if (hash_high64 == -8159609205832722572)
+                    printf("inserting high %ld\n", hash_high64);
                 for (auto hc_pair : low_hash_new_cols) {
                     XXH64_hash_t hash_low64 = hc_pair.first;
+                    if (hash_low64 == 5476872011942898047)
+                        printf("inserting low %ld\n", hash_low64);
                     auto new_cols = hc_pair.second;
                     for (auto col : new_cols) {
                         indicols->cols_for_hash[hash_high64][hash_low64].insert(col);

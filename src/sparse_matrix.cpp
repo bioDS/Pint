@@ -7,7 +7,7 @@
 #include <omp.h>
 #include <vector>
 #include <xxhash.h>
-// #include<glib-2.0/glib.h>
+#include<glib-2.0/glib.h>
 
 using namespace std;
 
@@ -152,9 +152,11 @@ IndiCols get_empty_indicols(int_fast64_t p)
     return id;
 }
 
-void free_indicols(IndiCols *indi) {
-    delete indi->seen_with_main;
-    delete indi->seen_pair_with_main;
+void free_indicols(IndiCols indi) {
+    if (indi.seen_with_main != NULL)
+        delete[] indi.seen_with_main;
+    if (indi.seen_pair_with_main != NULL)
+        delete[] indi.seen_pair_with_main;
 }
 
 std::vector<int_fast64_t> update_main_indistinguishable_cols(
@@ -190,7 +192,10 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
                 vals_to_remove.push_back(val);
             }
         }
+        // if (main_hash.high64 == -8159609205832722572 && main_hash.low64 == 5476872011942898047)
+        //     printf("inserting main hash: %ld, %ld\n", main_hash.high64, main_hash.low64);
         indi->cols_for_hash[main_hash.high64][main_hash.low64].insert(main);
+        // g_assert_false(indi->cols_for_hash.contains(-8159609205832722572));
     }
     return vals_to_remove;
 }
