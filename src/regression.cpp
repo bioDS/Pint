@@ -756,8 +756,8 @@ Lasso_Result simple_coordinate_descent_lasso(
             int_fast64_t val = beta.first;
             float effect = beta.second;
             auto full_col = get_col_by_id(Xu, val);
-            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
-            for (auto col : indi.cols_for_hash[col_hash]) {
+            XXH128_hash_t col_hash = XXH3_128bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
+            for (auto col : indi.cols_for_hash[col_hash.high64][col_hash.low64]) {
                 if (NULL != indist_from_val)
                     (*indist_from_val)[val].push_back(col);
                 if (col < p) {
@@ -776,8 +776,8 @@ Lasso_Result simple_coordinate_descent_lasso(
             int_fast64_t val = beta.first;
             float effect = beta.second;
             auto full_col = get_col_by_id(Xu, val);
-            int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
-            for (auto col : indi.cols_for_hash[col_hash]) {
+            XXH128_hash_t col_hash = XXH3_128bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
+            for (auto col : indi.cols_for_hash[col_hash.high64][col_hash.low64]) {
                 if (NULL != indist_from_val)
                     (*indist_from_val)[val].push_back(col);
                 if (col < p) {
@@ -791,8 +791,8 @@ Lasso_Result simple_coordinate_descent_lasso(
             for (auto beta : sets->beta1) {
                 int_fast64_t val = beta.first;
                 auto full_col = get_col_by_id(Xu, val);
-                int_fast64_t col_hash = XXH3_64bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
-                for (auto col : indi.cols_for_hash[col_hash]) {
+                XXH128_hash_t col_hash = XXH3_128bits(&full_col[0], full_col.size() * sizeof(int_fast64_t));
+                for (auto col : indi.cols_for_hash[col_hash.high64][col_hash.low64]) {
                     (*indist_from_val)[val].push_back(col);
                 }
             }

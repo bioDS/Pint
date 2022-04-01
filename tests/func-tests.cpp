@@ -1222,8 +1222,6 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         NONE, NULL, 0,
         97, log_file, 2, false, false, check_duplicates, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
-    int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
-    printf("considered %ld unique cols\n", unique_cols_considered);
 
     vector<pair<int, int>> true_effects = {
         { 79, 432 },
@@ -1262,9 +1260,9 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
             printf("checking %ld,%ld\n", first, second);
             int_fast64_t val = pair_to_val(std::make_tuple(first, second), fixture->p);
             auto actual_col = get_col_by_id(fixture->Xu, val);
-            int_fast64_t actual_col_hash = XXH3_64bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
+            XXH128_hash_t actual_col_hash = XXH3_128bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
             printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
-            for (auto val : lr.indi.cols_for_hash[actual_col_hash]) {
+            for (auto val : lr.indi.cols_for_hash[actual_col_hash.high64][actual_col_hash.low64]) {
                 printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
             }
             g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
@@ -2208,8 +2206,6 @@ static void test_simple_indistinguishable_cols()
         500, true, 1.01,
         NONE, NULL, 0,
         100, log_file, 3, false, false, true, false);
-    int_fast64_t unique_cols_considered = lr.indi.cols_for_hash.size();
-    printf("considered %ld unique cols\n", unique_cols_considered);
     
     for (auto main_id : lr.indi.skip_main_col_ids) {
         printf("skipped main col: %ld as a duplicate\n", main_id);
@@ -2236,27 +2232,30 @@ static void test_simple_indistinguishable_cols()
     // g_assert_true(lr.indi.skip_main_col_ids.contains(5));
     
     auto sanity_check = [&]() {
-        for (auto hash_colset : lr.indi.cols_for_hash) {
-            int_fast64_t hash = hash_colset.first;
-            auto colset = hash_colset.second;
-            int_fast64_t first_col_id = -1;
-            for (auto tmp : colset) {
-                first_col_id = tmp;
-                break;
-            }
-            auto first_col = get_col_by_id(sm.Xu, first_col_id);
-            for (auto col_id : colset) {
-                printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
-                auto this_col = get_col_by_id(sm.Xu, col_id);
-                g_assert_true(check_cols_match(first_col, this_col));
+        for (auto hash_hash_colset : lr.indi.cols_for_hash) {
+            XXH64_hash_t hash_high64 = hash_hash_colset.first;
+            for (auto hash_colset : hash_hash_colset.second) {
+                XXH64_hash_t hash_low64 = hash_colset.first;
+                auto colset = hash_colset.second;
+                int_fast64_t first_col_id = -1;
+                for (auto tmp : colset) {
+                    first_col_id = tmp;
+                    break;
+                }
+                auto first_col = get_col_by_id(sm.Xu, first_col_id);
+                for (auto col_id : colset) {
+                    printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
+                    auto this_col = get_col_by_id(sm.Xu, col_id);
+                    g_assert_true(check_cols_match(first_col, this_col));
+                }
             }
         }
         for (auto pair_id : lr.indi.skip_pair_ids) {
             auto pair_cols = val_to_pair(pair_id, sm.p);
             printf("checking pair %ld,%ld really is a duplicate\n", std::get<0>(pair_cols), std::get<1>(pair_cols));
             auto this_col = get_col_by_id(sm.Xu, pair_id);
-            int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
-            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
+            XXH128_hash_t this_col_hash = XXH3_128bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash.high64][this_col_hash.low64];
 
             int_fast64_t first_col_id = -1;
             for (auto tmp : cols_matching_hash) {
@@ -2274,8 +2273,8 @@ static void test_simple_indistinguishable_cols()
             auto triple_cols = val_to_triplet(triple_id, sm.p);
             printf("checking triple %ld(%ld,%ld,%ld) really is a duplicate\n", triple_id, std::get<0>(triple_cols), std::get<1>(triple_cols), std::get<2>(triple_cols));
             auto this_col = get_col_by_id(sm.Xu, triple_id);
-            int_fast64_t this_col_hash = XXH3_64bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
-            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash];
+            XXH128_hash_t this_col_hash = XXH3_128bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash.high64][this_col_hash.low64];
 
             int_fast64_t first_col_id = -1;
             for (auto tmp : cols_matching_hash) {

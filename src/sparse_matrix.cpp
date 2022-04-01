@@ -162,23 +162,23 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
     IndiCols* indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
 {
     int_fast64_t total_cols_checked = 0;
-    robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>>
-        new_col_ids_for_hashvalue;
+    // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>>
+        // new_col_ids_for_hashvalue;
     std::vector<int_fast64_t> vals_to_remove;
     for (auto main : *new_cols) {
         total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
-        XXH64_hash_t main_hash = XXH3_64bits(column_entries, main_col_len * sizeof(int_fast64_t));
+        XXH128_hash_t main_hash = XXH3_128bits(column_entries, main_col_len * sizeof(int_fast64_t));
 
-        if (indi->main_col_hashes.contains(main_hash))
+        if (indi->main_col_hashes[main_hash.high64].contains(main_hash.low64))
             // indi->skip_main_col_ids.insert(main);
             indi->skip_main_col_ids[main] = true;
         else
-            indi->main_col_hashes.insert(main_hash);
+            indi->main_col_hashes[main_hash.high64].insert(main_hash.low64);
         // it might be that we already found an equivalen pair/triple. If so we need
         // to remove it.
-        for (auto val : indi->cols_for_hash[main_hash]) {
+        for (auto val : indi->cols_for_hash[main_hash.high64][main_hash.low64]) {
             if (val < Xu.p)
                 continue;
             else if (val < Xu.p * Xu.p) {
@@ -190,7 +190,7 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
                 vals_to_remove.push_back(val);
             }
         }
-        indi->cols_for_hash[main_hash].insert(main);
+        indi->cols_for_hash[main_hash.high64][main_hash.low64].insert(main);
     }
     return vals_to_remove;
 }

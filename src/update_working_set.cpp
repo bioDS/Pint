@@ -10,7 +10,6 @@
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
-#include <glib-2.0/glib.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -201,8 +200,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     int_fast64_t correct_k = 0;
     int_fast64_t main_cols_used = 0;
     int_fast64_t skipped_pair_cols = 0, used_pair_cols = 0;
-    robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>> thread_new_cols_for_hash[NumCores];
-    robin_hood::unordered_flat_set<XXH64_hash_t> thread_new_pair_hashes[NumCores];
+    robin_hood::unordered_node_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>>> thread_new_cols_for_hash[NumCores];
+    robin_hood::unordered_node_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> thread_new_pair_hashes[NumCores];
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_pair_ids[NumCores];
     robin_hood::unordered_flat_set<int64_t> thread_new_skip_triple_ids[NumCores];
     std::vector<int_fast64_t> thread_seen_together[NumCores];
@@ -277,9 +276,11 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                         if (!indicols->seen_with_main[main].contains(inter)) { //TODO: slow
                            if (!hash_with_col.contains(inter)) {
                                hash_with_col[inter] = XXH3_createState();
-                               XXH3_64bits_reset(hash_with_col[inter]);
+                            //    XXH3_64bits_reset(hash_with_col[inter]);
+                               XXH3_128bits_reset(hash_with_col[inter]);
                            }
-                           XXH3_64bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
+                        //    XXH3_64bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
+                           XXH3_128bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
                         }
                     }
                     if (depth > 2) {
@@ -328,9 +329,11 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                                     if (!indicols->seen_pair_with_main[main].contains(inter_ind)) {
                                         if (!hash_with_col.contains(inter_ind)) {
                                             hash_with_col[inter_ind] = XXH3_createState();
-                                            XXH3_64bits_reset(hash_with_col[inter_ind]);
+                                            // XXH3_64bits_reset(hash_with_col[inter_ind]);
+                                            XXH3_128bits_reset(hash_with_col[inter_ind]);
                                         }
-                                        XXH3_64bits_update(hash_with_col[inter_ind], &row_main, sizeof(int_fast64_t));
+                                        // XXH3_64bits_update(hash_with_col[inter_ind], &row_main, sizeof(int_fast64_t));
+                                        XXH3_128bits_update(hash_with_col[inter_ind], &row_main, sizeof(int_fast64_t));
                                     }
                                 }
                             }
@@ -353,35 +356,33 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 int_fast64_t val = inter_hash.first;
                 XXH3_state_t* hash_state = inter_hash.second;
                 if (val < p) {
-                    XXH64_hash_t hash_value = XXH3_64bits_digest(hash_state);
+                    XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
                     XXH3_freeState(hash_state);
                     auto pair_id = pair_to_val(std::make_tuple(main, val), p);
-                    // if (!indicols->seen_together.contains(pair_id)) {
                     if (!indicols->seen_pair_with_main[main].contains(val)) {
-                        // thread_seen_together[thread_num].push_back(pair_id);
                         thread_seen_with_main[thread_num][main].push_back(val);
-                        if (indicols->pair_col_hashes.contains(hash_value) 
-                            || indicols->main_col_hashes.contains(hash_value) 
-                            || thread_new_pair_hashes[thread_num].contains(hash_value)) {
+                        if (indicols->pair_col_hashes[hash_value.high64].contains(hash_value.low64) 
+                            || indicols->main_col_hashes[hash_value.high64].contains(hash_value.high64) 
+                            || thread_new_pair_hashes[thread_num][hash_value.high64].contains(hash_value.low64)) {
                             thread_new_skip_pair_ids[thread_num].insert(pair_id);
                         } else {
-                            thread_new_cols_for_hash[thread_num][hash_value].push_back(pair_id);
-                            thread_new_pair_hashes[thread_num].insert(hash_value);
+                            thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(pair_id);
+                            thread_new_pair_hashes[thread_num][hash_value.high64].insert(hash_value.low64);
                         }
                     }
                 } else {
                     // we're looking at a hash with a pair of other columns
                     auto inter_pair = val_to_pair(val, p);
-                    XXH64_hash_t hash_value = XXH3_64bits_digest(hash_state);
+                    XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
                     XXH3_freeState(hash_state);
                     auto triple_id = triplet_to_val(std::make_tuple(main, std::get<0>(inter_pair), std::get<1>(inter_pair)), p);
                     thread_seen_pair_with_main[thread_num][main].push_back(val);
                     // thread_seen_together[thread_num].push_back(triple_id);
-                    if (indicols->cols_for_hash.contains(hash_value)
-                        || thread_new_cols_for_hash[thread_num].contains(hash_value)) {
+                    if (indicols->cols_for_hash[hash_value.high64].contains(hash_value.low64)
+                        || thread_new_cols_for_hash[thread_num][hash_value.high64].contains(hash_value.low64)) {
                         thread_new_skip_triple_ids[thread_num].insert(triple_id);
                     } else {
-                        thread_new_cols_for_hash[thread_num][hash_value].push_back(triple_id);
+                        thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(triple_id);
                     }
                 }
             }
@@ -503,10 +504,14 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             //     indicols->seen_together.insert(seen_together);
             for (auto val_key : thread_new_cols_for_hash[thread_id]) {
                 // indicols.cols_for_hash
-                int_fast64_t hash = val_key.first;
-                std::vector<int_fast64_t> new_cols = val_key.second;
-                for (auto col : new_cols) {
-                    indicols->cols_for_hash[hash].insert(col);
+                XXH64_hash_t hash_high64 = val_key.first;
+                robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>> low_hash_new_cols = val_key.second;
+                for (auto hc_pair : low_hash_new_cols) {
+                    XXH64_hash_t hash_low64 = hc_pair.first;
+                    auto new_cols = hc_pair.second;
+                    for (auto col : new_cols) {
+                        indicols->cols_for_hash[hash_high64][hash_low64].insert(col);
+                    }
                 }
             }
             for (auto val: thread_new_skip_pair_ids[thread_id]) {
@@ -515,27 +520,14 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             for (auto val: thread_new_skip_triple_ids[thread_id]) {
                 indicols->skip_triple_ids.insert(val);
             }
-            for (auto val: thread_new_pair_hashes[thread_id]) {
-                indicols->pair_col_hashes.insert(val);
+            for (auto hu_set : thread_new_pair_hashes[thread_id]) {
+                auto hash_high64 = hu_set.first;
+                auto set = hu_set.second;
+                for (auto hash_low64 : set)
+                    indicols->pair_col_hashes[hash_high64].insert(hash_low64);
             }
         }
     }
-    // sanity check:
-    // for (auto val : indicols->seen_together) {
-    //     if (val < p*p) {
-    //         auto pair = val_to_pair(val, p);
-    //         auto main = std::get<0>(pair);
-    //         auto inter = std::get<1>(pair);
-    //         bool found = indicols->seen_with_main[main].contains(inter);
-    //         if (!found) {
-    //             fprintf(stderr, "missing inter %ld,%ld\n", main, inter);
-    //         }
-    //         g_assert_true(found);
-    //     }
-    // }
-    // printf("%.2f%% (%ld) main columns used\n", 100.0*(double)main_cols_used/(double)count_may_update, main_cols_used);
-    // printf("%.2f%% (%ld) pair columns skipped\n", 100.0*(double)skipped_pair_cols/(double)(skipped_pair_cols+used_pair_cols), skipped_pair_cols);
-    // printf("current unique cols: %ld\n", indicols->cols_for_hash.size());
     return increased_set;
 }
 
