@@ -47,7 +47,7 @@ float pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
 // the worst case effect is \leq last_max * alpha + pessimistic_estimate()
 float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
     float last_max, float* last_rowsum,
-    float* rowsum)
+    float* rowsum, struct continuous_info* ci)
 {
     float alpha = 0.0;
     // read through the compressed column
@@ -70,6 +70,8 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
         alpha = 0.0;
 
     float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, col, X.host_col_nz[k]);
+    if (ci->use_cont)
+        remainder *= fabs(ci->col_max_vals[k]);
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     return total_estimate;
@@ -87,10 +89,10 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
  */
 // TODO: should beta[k] be in here?
 bool wont_update_effect(X_uncompressed X, float lambda, int_fast64_t k, float last_max,
-    float* last_rowsum, float* rowsum, int_fast64_t* column_cache)
+    float* last_rowsum, float* rowsum, int_fast64_t* column_cache, struct continuous_info* ci)
 {
     // int_fast64_t* cache = malloc(X.n * sizeof *column_cache);
-    float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum);
+    float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, ci);
     return upper_bound <= lambda * total_sqrt_error;
 }
 
@@ -115,7 +117,7 @@ float as_pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
     return estimate;
 }
 
-float as_combined_estimate(float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* cache)
+float as_combined_estimate(float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* cache, float col_max, bool use_cont)
 {
     float alpha = 0.0;
     // read through the compressed column
@@ -149,12 +151,14 @@ float as_combined_estimate(float lambda, float last_max, float* last_rowsum, flo
         alpha = 0.0;
 
     float remainder = as_pessimistic_estimate(alpha, last_rowsum, rowsum, cache, col_entry_pos);
+    if (use_cont)
+        remainder *= fabs(col_max);
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     return total_estimate;
 }
-bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* column_cache)
+bool as_wont_update(X_uncompressed Xu, float lambda, float last_max, float* last_rowsum, float* rowsum, S8bCol col, int_fast64_t* column_cache, float col_max, bool use_cont)
 {
-    float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache);
+    float upper_bound = as_combined_estimate(lambda, last_max, last_rowsum, rowsum, col, column_cache, col_max, use_cont);
     return upper_bound <= lambda * total_sqrt_error;
 }

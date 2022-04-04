@@ -32,11 +32,13 @@ void free_row_set(struct row_set rs)
     }
     free(rs.row_lengths);
     free(rs.rows);
+    if (rs.row_real_vals != NULL)
+        delete[] rs.row_real_vals;
 }
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
     bool* remove,
-    Thread_Cache* thread_caches)
+    Thread_Cache* thread_caches, struct continuous_info* ci)
 {
     int_fast64_t p = Xc.p;
     int_fast64_t n = Xc.n;
@@ -44,6 +46,9 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
     rs.num_rows = n;
     int_fast64_t** new_rows = (int_fast64_t**)calloc(n, sizeof *new_rows);
     int_fast64_t* row_lengths = (int_fast64_t*)calloc(n, sizeof *row_lengths);
+    std::vector<float>* row_real_vals = NULL;
+    if (ci->use_cont)
+        row_real_vals = new std::vector<float>[n];
 
     // #pragma omp parallel for
     for (int_fast64_t row = 0; row < n; row++) {
@@ -64,9 +69,20 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
             new_rows[row] = (int_fast64_t*)malloc(row_pos * sizeof *new_rows);
         memcpy(new_rows[row], row_cache, row_pos * sizeof *new_rows);
     }
+    if (ci->use_cont) {
+        for (int col = 0; col < p; col++) {
+            int_fast64_t* col_vals = &Xu.host_X[Xu.host_col_offsets[col]];
+            for (int ri = 0; ri < Xu.host_col_nz[col]; ri++) {
+                int_fast64_t row = col_vals[ri];
+                float col_real_val = ci->col_real_vals[col][ri];
+                row_real_vals[row].push_back(col_real_val);
+            }
+        }
+    }
 
     rs.rows = new_rows;
     rs.row_lengths = row_lengths;
+    rs.row_real_vals = row_real_vals;
     return rs;
 }
 
@@ -161,7 +177,8 @@ void free_indicols(IndiCols indi) {
 
 std::vector<int_fast64_t> update_main_indistinguishable_cols(
     X_uncompressed Xu, bool* wont_update, struct row_set relevant_row_set,
-    IndiCols* indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols)
+    IndiCols* indi, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
+    struct continuous_info* ci)
 {
     int_fast64_t total_cols_checked = 0;
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>>
@@ -171,7 +188,14 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
         total_cols_checked++;
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
-        XXH128_hash_t main_hash = XXH3_128bits(column_entries, main_col_len * sizeof(int_fast64_t));
+        XXH3_state_t* mh_state = XXH3_createState();
+        XXH3_128bits_reset(mh_state);
+        XXH3_128bits_update(mh_state, column_entries, main_col_len * sizeof(int_fast64_t));
+        if (ci->use_cont)
+            XXH3_128bits_update(mh_state, &ci->col_real_vals[main][0], ci->col_real_vals[main].size() * sizeof(ci->col_real_vals[0]));
+        XXH128_hash_t main_hash = XXH3_128bits_digest(mh_state);
+        XXH3_freeState(mh_state);
+
 
         if (indi->main_col_hashes[main_hash.high64].contains(main_hash.low64))
             // indi->skip_main_col_ids.insert(main);

@@ -119,6 +119,7 @@ typedef struct IC_Entry {
     float last_max;
     float* last_rowsum;
     S8bCol col;
+    float col_max;
 } IC_Entry;
 static IC_Entry* inter_cache = NULL;
 void free_inter_cache(int_fast64_t p)
@@ -138,7 +139,7 @@ void free_inter_cache(int_fast64_t p)
 }
 
 void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float last_max,
-    int_fast64_t* col, int_fast64_t col_len)
+    int_fast64_t* col, int_fast64_t col_len, float col_max)
 {
     if (!inter_cache[k].was_present) {
         S8bCol comp_col = col_to_s8b_col(col_len, col);
@@ -147,6 +148,7 @@ void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float las
         inter_cache[k].present = true;
         inter_cache[k].was_present = true;
         inter_cache[k].skipped_this_iter = false;
+        inter_cache[k].col_max = col_max;
     } else if (!inter_cache[k].present) {
         inter_cache[k].present = true;
         inter_cache[k].skipped_this_iter = false;
@@ -163,7 +165,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     X_uncompressed Xu, float* rowsum,
     bool* wont_update, int_fast64_t p, int_fast64_t n, float lambda,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
-    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance, const bool check_duplicates)
+    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance, const bool check_duplicates, struct continuous_info* ci)
 {
     int_fast64_t* host_X = Xu.host_X;
     int_fast64_t* host_col_nz = Xu.host_col_nz;
@@ -224,8 +226,16 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
 
         for (int_fast64_t entry_i = 0; entry_i < main_col_len; entry_i++) {
             int_fast64_t row_main = column_entries[entry_i];
+
+            float main_val = 1.0;
+            if (ci->use_cont)
+                main_val = ci->col_real_vals[main_i][entry_i];
+
             float rowsum_diff = rowsum[row_main];
-            sum_with_col[main] += rowsum_diff; //TODO: slow
+            if (ci->use_cont)
+                sum_with_col[main] += main_val*rowsum_diff; //TODO: slow
+            else
+                sum_with_col[main] += rowsum_diff; //TODO: slow
             if (depth > 1) {
                 int_fast64_t ri = 0;
                 int_fast64_t jump_dist = relevant_row_set.row_lengths[row_main]/2;
@@ -246,12 +256,18 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 const int_fast64_t row_length = relevant_row_set.row_lengths[row_main];
                 for (; ri < row_length; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
+                    float inter_val = 1.0;
+                    if (ci->use_cont)
+                        inter_val = relevant_row_set.row_real_vals[row_main][ri];
                     const bool inter_is_new = new_cols->contains(inter);
                     if (check_duplicates && skip_main_col_ids[inter]) //TODO: maybe slow
                         continue;
                     if (inter - main > max_interaction_distance)
                         break;
-                    sum_with_col[inter] += rowsum_diff; //TODO: slow
+                    if (ci->use_cont)
+                        sum_with_col[inter] += main_val*inter_val*rowsum_diff; //TODO: slow
+                    else
+                        sum_with_col[inter] += rowsum_diff; //TODO: slow
                     if (check_duplicates) {
                         if (!indicols->seen_with_main[main].contains(inter)) { //TODO: slow
                            if (!hash_with_col.contains(inter)) {
@@ -281,7 +297,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                             bool res = !as_wont_update(
                                 Xu, lambda, inter_cache[k].last_max,
                                 inter_cache[k].last_rowsum, rowsum, inter_cache[k].col,
-                                thread_caches[thread_num].col_j);
+                                thread_caches[thread_num].col_j, inter_cache[k].col_max, ci->use_cont);
                             inter_cache[k].checked_this_iter = true;
                             if (!res) {
                                 inter_cache[k].skipped_this_iter = true;
@@ -293,12 +309,18 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                             for (int_fast64_t ri2 = ri + 1;
                                  ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                                 int_fast64_t inter2 = relevant_row_set.rows[row_main][ri2];
+                                float inter2_val = 1.0;
+                                if (ci->use_cont)
+                                    inter2_val = relevant_row_set.row_real_vals[row_main][ri2];
                                 if (inter2 - main > max_interaction_distance)
                                     break;
                                 if (skip_main_col_ids[inter2])
                                     continue;
                                 int_fast64_t inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                                sum_with_col[inter_ind] += rowsum_diff;
+                                if (ci->use_cont)
+                                    sum_with_col[inter_ind] += main_val*inter_val*inter2_val*rowsum_diff;
+                                else
+                                    sum_with_col[inter_ind] += rowsum_diff;
                                 const int_fast64_t triplet_val = triplet_to_val(std::make_tuple(main, inter, inter2), p);
                                 if (check_duplicates) {
                                     if (!indicols->seen_pair_with_main[main].contains(inter_ind)) {
@@ -427,6 +449,9 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
             }
             if (depth > 2 && tuple_val != main && tuple_val < p) {
                 int_fast64_t ik = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + tuple_val;
+                float inter_col_max = 1.0;
+                if (ci->use_cont)
+                    inter_col_max = fabs(ci->col_max_vals[main]) * fabs(ci->col_max_vals[tuple_val]);
                 if (!inter_cache[ik].present) {
                     int_fast64_t a = main;
                     int_fast64_t b = tuple_val;
@@ -445,10 +470,10 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     }
                     // #pragma omp critical
                     update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val],
-                        col_j_cache, inter_len);
+                        col_j_cache, inter_len, inter_col_max);
                 } else {
                     update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val],
-                        col_j_cache, 0);
+                        col_j_cache, 0, inter_col_max);
                 }
             }
         }
@@ -504,15 +529,15 @@ std::pair<bool, std::vector<int_fast64_t>> update_working_set(X_uncompressed Xu,
     Active_Set* as, Thread_Cache* thread_caches,
     float* last_max,
     int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
-    int_fast64_t max_interaction_distance, bool check_duplicates)
+    int_fast64_t max_interaction_distance, bool check_duplicates, struct continuous_info* ci)
 {
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, ci);
     std::vector<int_fast64_t> vals_to_remove;
     if (check_duplicates)
-        vals_to_remove = update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols);
+        vals_to_remove = update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols, ci);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,
-        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance, check_duplicates);
+        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance, check_duplicates, ci);
 
     free_row_set(new_row_set);
     return std::make_pair(increased_set, vals_to_remove);

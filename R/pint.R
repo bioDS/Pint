@@ -75,6 +75,10 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
         stop("Y does not have the same number of rows as X, or the format is wrong")
     }
 
+    # combination currently not implemented
+    if (continuous_X) {
+        check_duplicates <- FALSE
+    }
     continuous_X <- FALSE # not implemented yet.
 
     log_level_enum = 0;

@@ -321,20 +321,36 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 
     float halt_error_diff = asReal(halt_error_diff_);
 
+    std::vector<float>* col_real_vals = new std::vector<float>[p];
+    float* col_max_vals = new float[p];
     int_fast64_t** X = (int_fast64_t**)malloc(p * sizeof *X);
     for (int_fast64_t i = 0; i < p; i++)
         X[i] = (int_fast64_t*)malloc(n * sizeof *X[i]);
 
     for (int_fast64_t i = 0; i < p; i++) {
+        float col_max_val = 0.0;
         for (int_fast64_t j = 0; j < n; j++) {
-            X[i][j] = (int)(x[j + i * n]);
+            float x_val = x[j + i * n];
+            if (fabs(x_val) > 0.0) {
+                col_real_vals[i].push_back(x_val);
+                X[i][j] = 1;
+                if (fabs(x_val) > fabs(col_max_val))
+                    col_max_val = x_val;
+            } else {
+                X[i][j] = 0;
+            }
         }
+        col_max_vals[i] = col_max_val;
     }
+    struct continuous_info ci;
+    ci.col_max_vals = col_max_vals;
+    ci.col_real_vals = col_real_vals;
+    ci.use_cont = continuous_X;
+   
     float* Y = (float*)malloc(n * sizeof(float));
     for (int_fast64_t i = 0; i < n; i++) {
         Y[i] = (float)y[i];
     }
-
     XMatrix xmatrix;
     xmatrix.actual_cols = n;
     xmatrix.X = X;
@@ -343,7 +359,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, halt_error_diff, log_level, NULL, 0,
-        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept, check_duplicates, continuous_X);
+        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept, check_duplicates, continuous_X, ci);
     float final_lambda = lasso_result.final_lambda;
     float regularized_intercept = lasso_result.regularized_intercept;
     float unbiased_intercept = lasso_result.unbiased_intercept;

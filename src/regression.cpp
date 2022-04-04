@@ -243,7 +243,8 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
 
 int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates)
+    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates,
+    struct continuous_info* cont_inf)
 {
     XMatrixSparse Xc = vars->Xc;
     X_uncompressed Xu = vars->Xu;
@@ -297,7 +298,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         for (int_fast64_t j = 0; j < p; j++) {
             bool prev_wont_update = wont_update[j];
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
-                thread_caches[omp_get_thread_num()].col_j);
+                thread_caches[omp_get_thread_num()].col_j, cont_inf);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
             // if (!wont_update[j] && !prev_wont_update) {
             // if (true) {
@@ -352,7 +353,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
         auto working_set_results = update_working_set(vars->Xu, Xc, rowsum, wont_update, p, n, lambda,
             updateable_items, count_may_update, active_set,
-            thread_caches, last_max, depth, indi, &new_cols, max_interaction_distance, check_duplicates);
+            thread_caches, last_max, depth, indi, &new_cols, max_interaction_distance, check_duplicates, cont_inf);
         bool increased_set = working_set_results.first;
         auto vals_to_remove = working_set_results.second;
         for (auto val : vals_to_remove) {
@@ -494,7 +495,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     float hed, enum LOG_LEVEL log_level,
     const char** job_args, int_fast64_t job_args_num,
     int_fast64_t mnz_beta, const char* log_filename, int_fast64_t depth,
-    const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, const bool continuous_X)
+    const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, const bool continuous_X, struct continuous_info* cont_inf)
 {
     int_fast64_t max_nz_beta = mnz_beta;
     if (verbose)
@@ -724,7 +725,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         int_fast64_t last_iter_count = 0;
 
         nz_beta += run_lambda_iters_pruned(&iter_vars_pruned, lambda, rowsum,
-            old_rowsum, &active_set, depth, use_intercept, &indi, check_duplicates);
+            old_rowsum, &active_set, depth, use_intercept, &indi, check_duplicates, cont_inf);
 
         {
             int_fast64_t nonzero = beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size();

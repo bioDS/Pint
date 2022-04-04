@@ -90,10 +90,12 @@ int main(int argc, const char** argv)
         return 1;
     }
 
+    struct continuous_info empty_cont_inf;
+    empty_cont_inf.use_cont = false;
     printf("begginning coordinate descent\n");
     const char* log_file = "exe.log";
     auto lasso_result = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1, lambda, 1000, 300, VERBOSE,
-    1.0001, log_level, argv, argc, max_nz, log_file, depth, false, true, true, false);
+    1.0001, log_level, argv, argc, max_nz, log_file, depth, false, true, true, false, &empty_cont_inf);
     auto beta_sets = lasso_result.regularized_result;
     int nbeta_int = nbeta;
     auto beta = beta_sets.beta3;

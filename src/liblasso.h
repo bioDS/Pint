@@ -99,6 +99,12 @@ struct OpenCL_Setup {
 //     int_fast64_t b : 64;
 // } int_128;
 
+struct continuous_info {
+    bool use_cont;
+    std::vector<float>* col_real_vals;
+    float* col_max_vals;
+};
+
 typedef struct {
     robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<int_fast64_t>>> cols_for_hash;
     // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;

@@ -154,3 +154,8 @@ int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p)
     }
     return X2;
 }
+
+void free_continuous_info(struct continuous_info ci) {
+    delete[] ci.col_real_vals;
+    delete[] ci.col_max_vals;
+}

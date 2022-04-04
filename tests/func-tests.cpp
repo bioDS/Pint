@@ -22,10 +22,13 @@ extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates);
+    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates,
+    struct continuous_info* cont_inf);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
+
+static const struct continuous_info empty_cont_inf = {false, 0, 0};
 
 // #pragma omp declare target
 // float fabs(float a) {
@@ -517,7 +520,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
 
     Lasso_Result lr = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, false);
+        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     beta = beta_sets.beta3; //TODO: don't
 
@@ -883,7 +886,7 @@ bool get_wont_update(char* working_set, bool* wont_update, int_fast64_t p,
     for (int_fast64_t j = 0; j < p; j++) {
         float sum = 0.0;
         wont_update[j] = wont_update_effect(
-            Xu, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache);
+            Xu, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache, &empty_cont_inf);
         if (wont_update[j])
             ruled_out = true;
     }
@@ -1190,7 +1193,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
     int_fast64_t max_interaction_distance = 20;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         max_interaction_distance, 0.01, 100,
-        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, false);
+        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     for (auto beta : beta_sets.beta2) {
         int_fast64_t val = beta.first;
@@ -1221,7 +1224,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, true, 1.01,
         NONE, NULL, 0,
-        97, log_file, 2, false, false, check_duplicates, false);
+        97, log_file, 2, false, false, check_duplicates, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     vector<pair<int, int>> true_effects = {
@@ -1323,7 +1326,7 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 47504180,
         200, true, 1.01,
         NONE, NULL, 0,
-        500, "test.log", 2, false, false, check_duplicates, false);
+        500, "test.log", 2, false, false, check_duplicates, false, &empty_cont_inf);
     beta_sets = lr.regularized_result;
 
     check_results();
@@ -1553,7 +1556,7 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         printf("lambda: %f\n", lambda);
         IndiCols empty_indi = get_empty_indicols(p);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, 2, false, &empty_indi, false);
+            &active_set, 2, false, &empty_indi, false, &empty_cont_inf);
         free_indicols(empty_indi);
     }
 
@@ -1735,7 +1738,7 @@ void test_row_list_without_columns()
         thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
-    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
+    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches, &empty_cont_inf);
 
     g_assert_true(rs.row_lengths[0] == 1);
     g_assert_true(rs.row_lengths[1] == 2);
@@ -1929,7 +1932,7 @@ void trivial_3way_test()
         -1, 0.01, 100,
         100, true, 1.01,
         NONE, NULL, 0,
-        7, "test.log", 3, false, false, true, false);
+        7, "test.log", 3, false, false, true, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
@@ -2144,7 +2147,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int_fast64_t result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, false);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     int_fast64_t final_iter, final_lambda_count;
@@ -2171,6 +2174,8 @@ static void test_simple_indistinguishable_cols()
     int_fast64_t** xm = sm.xm;
     XMatrixSparse Xc  = sm.Xc;
     X_uncompressed Xu = sm.Xu;
+    struct continuous_info empty_cont_inf;
+    empty_cont_inf.use_cont = false;
     
     bool wont_update[sm.Xu.p];
     for (int i = 0; i < sm.Xu.p; i++)
@@ -2198,7 +2203,7 @@ static void test_simple_indistinguishable_cols()
 
     IndiCols indi = get_empty_indicols(p);
 
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, &empty_cont_inf);
     std::vector<int_fast64_t> new_cols = {0,1,4,5};
     float Y[n];
     for (int i = 0; i < n; i++) {
@@ -2209,7 +2214,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, false);
+        100, log_file, 3, false, false, true, false, &empty_cont_inf);
     
     for (auto main_id : lr.indi.skip_main_col_ids) {
         printf("skipped main col: %ld as a duplicate\n", main_id);
@@ -2379,7 +2384,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, false);
+        100, log_file, 3, false, false, true, false, &empty_cont_inf);
     printf("Beta values found:\n");
     printf("beta 1:\n");
     print_beta_set(&lr.regularized_result.beta1, p);
