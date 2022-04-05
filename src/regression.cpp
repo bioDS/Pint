@@ -158,7 +158,7 @@ static auto rng = std::default_random_engine();
 
 void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
-    int_fast64_t depth, char use_intercept)
+    int_fast64_t depth, char use_intercept, struct continuous_info* cont_inf)
 {
     float** last_rowsum = vars->last_rowsum;
     Thread_Cache* thread_caches = vars->thread_caches;
@@ -205,8 +205,8 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
             if (entry.present) {
                 if (current_beta_set->contains(k) && fabs(current_beta_set->at(k)) != 0.0) {
                     update_beta_cyclic(
-                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
-                        thread_caches[omp_get_thread_num()].col_i);
+                        &entry, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
+                        thread_caches[omp_get_thread_num()].col_i, cont_inf);
                 }
             }
         }
@@ -265,6 +265,7 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
     for (int_fast64_t i = 0; i < n; i++) {
         error += rowsum[i] * rowsum[i];
     }
+    error = sqrt(error);
 
     // run several iterations of will_update to make sure we catch any new
     // columns
@@ -405,8 +406,8 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
                         was_zero = FALSE;
                     total_beta_updates++;
                     Changes changes = update_beta_cyclic(
-                        entry.col, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
-                        thread_caches[omp_get_thread_num()].col_i);
+                        &entry, Y, rowsum, n, p, lambda, current_beta_set, k, vars->intercept,
+                        thread_caches[omp_get_thread_num()].col_i, cont_inf);
                     if (changes.actual_diff == 0.0) {
                         total_unchanged++;
                     } else {
@@ -495,8 +496,9 @@ Lasso_Result simple_coordinate_descent_lasso(
     float hed, enum LOG_LEVEL log_level,
     const char** job_args, int_fast64_t job_args_num,
     int_fast64_t mnz_beta, const char* log_filename, int_fast64_t depth,
-    const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, const bool continuous_X, struct continuous_info* cont_inf)
+    const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, struct continuous_info* cont_inf)
 {
+    const bool continuous_X = cont_inf->use_cont;
     int_fast64_t max_nz_beta = mnz_beta;
     if (verbose)
         printf("n: %ld, p: %ld\n", n, p);
@@ -857,7 +859,7 @@ Lasso_Result simple_coordinate_descent_lasso(
         };
         // run_lambda_iters_pruned(&iter_vars_pruned, 0.0, rowsum,
         subproblem_only(&iter_vars_pruned, 0.0, rowsum,
-            old_rowsum, &active_set, depth, use_intercept);
+            old_rowsum, &active_set, depth, use_intercept, cont_inf);
         if (verbose)
             printf("un-regularized error: %f\n", calculate_error(Y, rowsum, n));
         unbiased_intercept = iter_vars_pruned.intercept;
@@ -965,18 +967,22 @@ Changes update_beta_cyclic_old(
 
     return changes;
 }
-Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int_fast64_t n, int_fast64_t p,
+Changes update_beta_cyclic(AS_Entry* as_entry, float* Y, float* rowsum, int_fast64_t n, int_fast64_t p,
     float lambda,
     robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
-    int_fast64_t k, float intercept, int_fast64_t* column_entry_cache)
+    int_fast64_t k, float intercept, int_fast64_t* column_entry_cache, struct continuous_info* ci)
 {
+    S8bCol col = as_entry->col;
     float sumk = col.nz;
+    if (ci->use_cont)
+        sumk = 0.0;
     float bk = 0.0;
     if (beta->contains(k)) {
         bk = beta->at(k);
     }
-    float sumn = col.nz * bk;
+    float sumn = 0.0;
     int_fast64_t* column_entries = column_entry_cache;
+    std::vector<float> col_real_vals = as_entry->real_vals;
 
     int_fast64_t col_entry_pos = 0;
     int_fast64_t entry = -1;
@@ -988,12 +994,20 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int_fast64_t n, 
             if (diff != 0) {
                 entry += diff;
                 column_entries[col_entry_pos] = entry;
-                sumn -= rowsum[entry];
+                float rs = rowsum[entry];
+                if (ci->use_cont) {
+                    float cv = col_real_vals[col_entry_pos];
+                    rs *= cv;
+                    sumk += cv*cv;
+                    // sumn += cv*bk;
+                }
+                sumn -= rs;
                 col_entry_pos++;
             }
             values >>= item_width[word.selector];
         }
     }
+    sumn += sumk*bk;
 
     float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / sumk; // square root lasso
     float Bk_diff = new_value - bk;
@@ -1011,8 +1025,11 @@ Changes update_beta_cyclic(S8bCol col, float* Y, float* rowsum, int_fast64_t n, 
     if (Bk_diff != 0) {
         for (int_fast64_t e = 0; e < col.nz; e++) {
             int_fast64_t i = column_entries[e];
+            float offset = Bk_diff;
+            if (ci->use_cont)
+                offset *= col_real_vals[e];
 #pragma omp atomic
-            rowsum[i] += Bk_diff;
+            rowsum[i] += offset;
         }
     } else {
         zero_updates++;

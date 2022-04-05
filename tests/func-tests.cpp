@@ -520,7 +520,7 @@ static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
 
     Lasso_Result lr = simple_coordinate_descent_lasso(
         fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, false, &empty_cont_inf);
+        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     beta = beta_sets.beta3; //TODO: don't
 
@@ -1193,7 +1193,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
     int_fast64_t max_interaction_distance = 20;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         max_interaction_distance, 0.01, 100,
-        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, false, &empty_cont_inf);
+        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     for (auto beta : beta_sets.beta2) {
         int_fast64_t val = beta.first;
@@ -1213,6 +1213,53 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
     free_lasso_result(lr);
 }
 
+
+void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* true_effects, int p, X_uncompressed* Xu) {
+    g_assert_true(beta_sets->beta3.size() == 0);
+
+    printf("found:\n");
+    for (auto& b1 : beta_sets->beta1) {
+        int_fast64_t val = b1.first;
+        printf(" %ld\n", val);
+    }
+    for (auto& b2 : beta_sets->beta2) {
+        int_fast64_t val = b2.first;
+        std::tuple<int_fast64_t, long> inter = val_to_pair(val, p);
+        printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
+    }
+
+    for (auto it = true_effects->begin(); it != true_effects->end(); it++) {
+        int_fast64_t first = it->first - 1;
+        int_fast64_t second = it->second - 1;
+        printf("checking %ld,%ld\n", first, second);
+        int_fast64_t val = pair_to_val(std::make_tuple(first, second), p);
+        auto actual_col = get_col_by_id(*Xu, val);
+        XXH128_hash_t actual_col_hash = XXH3_128bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
+        printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets->beta2[val]);
+        // for (auto val : lr.indi.cols_for_hash[actual_col_hash.high64][actual_col_hash.low64]) {
+        //     printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets->beta2[val]);
+        // }
+        g_assert_true(fabs(beta_sets->beta2[val]) > 0.0);
+    }
+};
+
+vector<pair<int, int>> true_effects_small = {
+    { 79, 432 },
+    { 107, 786 },
+    { 265, 522 },
+    { 265, 630 },
+    { 293, 432 },
+    { 314, 779 },
+    { 314, 812 },
+    { 382, 816 },
+    { 522, 811 },
+    { 585, 939 },
+    { 630, 786 },
+    { 630, 820 },
+    { 656, 812 },
+    { 107, 382 }
+};
+
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
 {
@@ -1224,60 +1271,14 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, true, 1.01,
         NONE, NULL, 0,
-        97, log_file, 2, false, false, check_duplicates, false, &empty_cont_inf);
+        97, log_file, 2, false, false, check_duplicates, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
-    vector<pair<int, int>> true_effects = {
-        { 79, 432 },
-        { 107, 786 },
-        { 265, 522 },
-        { 265, 630 },
-        { 293, 432 },
-        { 314, 779 },
-        { 314, 812 },
-        { 382, 816 },
-        { 522, 811 },
-        { 585, 939 },
-        { 630, 786 },
-        { 630, 820 },
-        { 656, 812 },
-        { 107, 382 }
-    };
-
-    auto check_results = [&]() {
-        g_assert_true(beta_sets.beta3.size() == 0);
-
-        printf("found:\n");
-        for (auto& b1 : beta_sets.beta1) {
-            int_fast64_t val = b1.first;
-            printf(" %ld\n", val);
-        }
-        for (auto& b2 : beta_sets.beta2) {
-            int_fast64_t val = b2.first;
-            std::tuple<int_fast64_t, long> inter = val_to_pair(val, fixture->p);
-            printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
-        }
-
-        for (auto it = true_effects.begin(); it != true_effects.end(); it++) {
-            int_fast64_t first = it->first - 1;
-            int_fast64_t second = it->second - 1;
-            printf("checking %ld,%ld\n", first, second);
-            int_fast64_t val = pair_to_val(std::make_tuple(first, second), fixture->p);
-            auto actual_col = get_col_by_id(fixture->Xu, val);
-            XXH128_hash_t actual_col_hash = XXH3_128bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
-            printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
-            for (auto val : lr.indi.cols_for_hash[actual_col_hash.high64][actual_col_hash.low64]) {
-                printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
-            }
-            g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
-        }
-    };
-
-    check_results();
+    check_results_match(&beta_sets, &true_effects_small, fixture->p, &fixture->Xu);
     free_lasso_result(lr);
 
     // these are the values that the previous version reliably finds
-    true_effects = {
+    vector<pair<int, int>> true_effects = {
         { 4, 195 },
         { 24, 109 },
         { 52, 881 },
@@ -1326,11 +1327,117 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 47504180,
         200, true, 1.01,
         NONE, NULL, 0,
-        500, "test.log", 2, false, false, check_duplicates, false, &empty_cont_inf);
-    beta_sets = lr.regularized_result;
+        500, "test.log", 2, false, false, check_duplicates, &empty_cont_inf);
 
-    check_results();
+    check_results_match(&lr.regularized_result, &true_effects, fixture->p, &fixture->Xu);
+
     free_lasso_result(lr);
+}
+
+void check_small_continuous() {
+    int n = 5;
+    int p = 5;
+    struct continuous_info ci;
+    ci.col_real_vals = new vector<float>[p];
+    ci.col_max_vals = new float[p];
+    ci.use_cont = true;
+
+    XMatrix xm;
+    xm.X = calloc(p, sizeof(int_fast64_t*));
+    for (int j = 0; j < p; j++) {
+        xm.X[j] = calloc(n, sizeof(int_fast64_t));
+        for (int i = 0; i < n; i++) {
+            xm.X[j][i] = 1;
+        }
+    }
+    xm.actual_cols = p;
+    ci.col_real_vals[0] = {0.2, 1.2, 1.4, -2.3, -0.1};
+    ci.col_real_vals[1] = {-0.2, -1.2, 3.4, -1.3, 0.1};
+    ci.col_real_vals[2] = {-1.3, 0.2, -3.4, 2.3, 0.7};
+    ci.col_real_vals[3] = {0.2, 0.2, 0.4, -3.3, 2.1};
+    ci.col_real_vals[4] = {-0.2, -1.2, 3.2, 3.5, 0.1};
+
+    for (int j = 0; j < p; j++) {
+        float max_val = 0.0;
+        for (auto v : ci.col_real_vals[j]) {
+            if (fabs(v) > fabs(max_val))
+                max_val = v;
+        }
+        ci.col_max_vals[j] = max_val;
+    }
+
+    std::vector<float> beta = {0.3, 1.1, 0.9, -2.2, 1.5};
+    float* Y = calloc(n, sizeof(float));
+    float intercept = 3.0;
+    for (int i = 0; i < n; i++) {
+        float rowsum = intercept;
+        for (int j = 0; j < p; j++) {
+            rowsum += beta[j] * ci.col_real_vals[j][i];
+        }
+        Y[i] = rowsum;
+    }
+
+    Lasso_Result lr = simple_coordinate_descent_lasso(xm, Y, n, p, -1, 0.00001, 5, 500, true, 1.00001, NONE, NULL, 0, 50, "test.log", 1, false, true, true, &ci);
+
+    printf("intercept: %f\n", lr.regularized_intercept);
+    float found_beta[p];
+    for (int j = 0; j < p; j++) {
+        found_beta[j] = lr.regularized_result.beta1[j];
+        printf("beta %d: %f\n", j, lr.regularized_result.beta1[j]);
+    }
+    // it may not be the correct fit, but it should be _a_ fit.
+    // check the error is small.
+    float error = 0.0;
+    for (int i = 0; i < n; i++) {
+        float pred_y = lr.regularized_intercept;
+        for (int j = 0; j < p; j++) {
+            pred_y += found_beta[j] * ci.col_real_vals[j][i];
+        }
+        printf("Y[%d], %f \t pred_y %d: %f\n", i, Y[i], i, pred_y);
+        float diff = Y[i] - pred_y;
+        error += diff*diff;
+    }
+    printf("error: %f\n", error);
+    g_assert_true(error < 0.0001);
+
+    free(Y);
+    free_continuous_info(ci);
+    free_lasso_result(lr);
+    for (int i = 0; i < p; i++)
+        free(xm.X[i]);
+    free(xm.X);
+}
+
+void check_continous_ones(UpdateFixture* fixture,
+    gconstpointer user_data) {
+    // check continuos X doesn't break anything
+    auto n = fixture->n;
+    auto p = fixture->p;
+    std::vector<float>* col_real_vals = new std::vector<float>[p];
+    float* col_max_vals = new float[p];
+
+    for (int_fast64_t i = 0; i < p; i++) {
+        int_fast64_t col_len = fixture->Xu.host_col_nz[i];
+        int_fast64_t* col = fixture->Xu.host_X[fixture->Xu.host_col_offsets[i]];
+        for (int_fast64_t ri = 0; ri < col_len; ri++) {
+            col_real_vals[i].push_back(1.0);
+        }
+        col_max_vals[i] = 1.0;
+    }
+    struct continuous_info ci;
+    ci.col_max_vals = col_max_vals;
+    ci.col_real_vals = col_real_vals;
+    ci.use_cont = true;
+    bool check_duplicates = true;
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        -1, 0.01, 200,
+        200, true, 1.01,
+        NONE, NULL, 0,
+        97, "test.log", 2, false, false, check_duplicates, &ci);
+
+    check_results_match(&lr.regularized_result, &true_effects_small, fixture->p, &fixture->Xu);
+    free_lasso_result(lr);
+    free_continuous_info(ci);
 }
 
 static void check_branch_pruning_faster(UpdateFixture* fixture,
@@ -1930,9 +2037,9 @@ void trivial_3way_test()
     const int_fast64_t use_adcal = FALSE;
     Lasso_Result lr = simple_coordinate_descent_lasso(X, Y, n, p,
         -1, 0.01, 100,
-        100, true, 1.01,
+        100, true, 1.00001,
         NONE, NULL, 0,
-        7, "test.log", 3, false, false, true, false, &empty_cont_inf);
+        7, "test.log", 3, false, false, true, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
@@ -1944,6 +2051,13 @@ void trivial_3way_test()
     print_beta_set(&beta_sets.beta2, p);
     printf("beta 3:\n");
     print_beta_set(&beta_sets.beta3, p);
+
+    int num_zero = 0;
+    for (auto set : {beta_sets.beta1, beta_sets.beta2, beta_sets.beta3})
+        for (auto v : set)
+            if (fabs(v.second) < 0.0001)
+                num_zero++;
+    printf("%d ~== 0\n", num_zero);
     
     for (auto main_id : lr.indi.skip_main_col_ids) {
         printf("skipped main col: %ld as a duplicate\n", main_id);
@@ -1959,11 +2073,11 @@ void trivial_3way_test()
 
     g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.08);
     int_fast64_t tmpval = pair_to_val(std::make_tuple(0, 3), p);
-    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 0.4);
+    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 0.35);
     tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
     g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -4.0);
 
-    g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
+    g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() - num_zero < 8);
 
     free_lasso_result(lr);
     free_simple_matrix(sm);
@@ -2147,7 +2261,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int_fast64_t result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, false, &empty_cont_inf);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     int_fast64_t final_iter, final_lambda_count;
@@ -2214,7 +2328,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, false, &empty_cont_inf);
+        100, log_file, 3, false, false, true, &empty_cont_inf);
     
     for (auto main_id : lr.indi.skip_main_col_ids) {
         printf("skipped main col: %ld as a duplicate\n", main_id);
@@ -2384,7 +2498,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, false, &empty_cont_inf);
+        100, log_file, 3, false, false, true, &empty_cont_inf);
     printf("Beta values found:\n");
     printf("beta 1:\n");
     print_beta_set(&lr.regularized_result.beta1, p);
@@ -2463,6 +2577,9 @@ int main(int argc, char* argv[])
     g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
         pruning_fixture_set_up, check_branch_pruning_accuracy,
         pruning_fixture_tear_down);
+    g_test_add("/func/test-continuous-ones", UpdateFixture, &accuracy_setup,
+        pruning_fixture_set_up, check_continous_ones,
+        pruning_fixture_tear_down);
     g_test_add("/func/test-max_interaction_distance", UpdateFixture, &accuracy_setup,
         pruning_fixture_set_up, check_max_interaction_distance,
         pruning_fixture_tear_down);
@@ -2483,6 +2600,7 @@ int main(int argc, char* argv[])
     g_test_add("/func/test-adcal", UpdateFixture, 0,
         pruning_fixture_set_up, test_adcal,
         pruning_fixture_tear_down);
+    g_test_add_func("/func/test_small_continuous", check_small_continuous);
 
     return g_test_run();
 }

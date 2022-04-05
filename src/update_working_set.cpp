@@ -63,7 +63,7 @@ bool active_set_present(Active_Set* as, int_fast64_t value)
     return (entries->contains(value) && entries->at(value).present);
 }
 
-void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, int_fast64_t len)
+void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, int_fast64_t len, std::vector<float> vals)
 {
     robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries;
     int_fast64_t p = as->p;
@@ -88,6 +88,7 @@ void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, in
         e.present = TRUE;
         e.was_present = TRUE;
         e.col = col_to_s8b_col(len, col);
+        e.real_vals = vals;
         int_fast64_t i = as->length;
         entries->insert_or_assign(value, e);
     }
@@ -229,7 +230,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
 
             float main_val = 1.0;
             if (ci->use_cont)
-                main_val = ci->col_real_vals[main_i][entry_i];
+                main_val = ci->col_real_vals[main][entry_i];
 
             float rowsum_diff = rowsum[row_main];
             if (ci->use_cont)
@@ -397,6 +398,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 int_fast64_t a, b, c;
                 int_fast64_t k;
                 std::tuple<int_fast64_t, long> inter_pair = val_to_pair(tuple_val, p);
+                int inter_depth = 1;
                 if (tuple_val == main) {
                     a = main;
                     b = main; // TODO: unnecessary
@@ -406,6 +408,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     if (skip_main_col_ids[k])
                         continue;
                 } else if (tuple_val < p) {
+                    inter_depth = 2;
                     a = main;
                     b = tuple_val;
                     c = main; // TODO: unnecessary
@@ -413,6 +416,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     if (indicols->skip_pair_ids.contains(k) || thread_new_skip_pair_ids->contains(k))
                         continue;
                 } else {
+                    inter_depth = 3;
                     // this is a three way interaction, update the last_inter_max of the
                     // relevant pair as well
                     a = main;
@@ -431,6 +435,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 int_fast64_t* colC = &Xu.host_X[Xu.host_col_offsets[c]];
                 int_fast64_t ib = 0, ic = 0;
                 int_fast64_t inter_len = 0;
+                std::vector<float> inter_vals;
                 for (int_fast64_t ia = 0; ia < Xu.host_col_nz[a]; ia++) {
                     int_fast64_t cur_row = colA[ia];
                     while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
@@ -440,10 +445,25 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     if (cur_row == colB[ib] && cur_row == colC[ic]) {
                         col_j_cache[inter_len] = cur_row;
                         inter_len++;
+                        if (ci->use_cont)
+                            switch(inter_depth) {
+                                case 1:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]);
+                                    break;
+                                case 2:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]
+                                                        * ci->col_real_vals[b][ib]);
+                                    break;
+                                case 3:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]
+                                                        * ci->col_real_vals[b][ib]
+                                                        * ci->col_real_vals[c][ic]);
+                                    break;
+                            }
                     }
                 }
 #pragma omp critical
-                active_set_append(as, k, col_j_cache, inter_len);
+                active_set_append(as, k, col_j_cache, inter_len, inter_vals);
                 increased_set = TRUE;
                 total++;
             }

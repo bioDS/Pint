@@ -61,12 +61,11 @@ void* queue_pop_head(Queue* q)
 void queue_free(Queue* q)
 {
     Queue_Item* current_item = q->first_item;
-    Queue_Item* next_item = (Queue_Item*)current_item->next;
 
     // free the queue contents
     while (current_item != NULL) {
         free(current_item->contents);
-        next_item = (Queue_Item*)current_item->next;
+        Queue_Item* next_item = (Queue_Item*)current_item->next;
         free(current_item);
         current_item = next_item;
     }

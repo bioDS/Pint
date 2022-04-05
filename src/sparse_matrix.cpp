@@ -192,7 +192,7 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
         XXH3_128bits_reset(mh_state);
         XXH3_128bits_update(mh_state, column_entries, main_col_len * sizeof(int_fast64_t));
         if (ci->use_cont)
-            XXH3_128bits_update(mh_state, &ci->col_real_vals[main][0], ci->col_real_vals[main].size() * sizeof(ci->col_real_vals[0]));
+            XXH3_128bits_update(mh_state, &ci->col_real_vals[main][0], ci->col_real_vals[main].size() * sizeof(ci->col_real_vals[main][0]));
         XXH128_hash_t main_hash = XXH3_128bits_digest(mh_state);
         XXH3_freeState(mh_state);
 

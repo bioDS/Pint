@@ -104,6 +104,7 @@ struct continuous_info {
     std::vector<float>* col_real_vals;
     float* col_max_vals;
 };
+void free_continuous_info(struct continuous_info ci);
 
 typedef struct {
     robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<int_fast64_t>>> cols_for_hash;
@@ -145,6 +146,7 @@ struct AS_Entry {
     S8bCol col;
     float *last_rowsum;
     float last_max;
+    std::vector<float> real_vals;
 };
 
 typedef struct {

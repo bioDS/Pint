@@ -10,6 +10,7 @@ add_project_arguments([
   '-ffast-math',
   '-fno-stack-protector',
   '-fpermissive',
+  '-Wno-unused',
  #'-Ofast',
  # '-g',
   # '-Os',
