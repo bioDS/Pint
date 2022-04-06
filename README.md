@@ -7,7 +7,7 @@ This repo is an installable R package, you can install a locally cloned copy wit
 Alternatively, install directly from github with:
 ```
 library(devtools)
-install_github("bioDS/Pint", ref = "v1.0")
+install_github("bioDS/Pint", ref = "main")
 ```
 
 This package requires a 64-bit compiler. If you find R attempting to install a 32 bit version as well and failing (this typically happens on Windows), use `install_github("bioDS/Pint", INSTALL_opts=c("--no-multiarch"))`
