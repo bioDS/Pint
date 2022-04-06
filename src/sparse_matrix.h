@@ -54,8 +54,8 @@ typedef struct XMatrix_sparse_row {
     int_fast64_t* row_nz;
 } XMatrix_sparse_row;
 
-XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
-    int_fast64_t max_interaction_distance, int_fast64_t shuffle);
+XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
+    int_fast64_t shuffle);
 XMatrixSparse sparsify_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches, struct continuous_info* ci);

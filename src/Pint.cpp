@@ -215,22 +215,22 @@ SEXP process_beta(
     }
 
     for (int i = 0; i < cbs.main_len; i++)
-        free(cbs.indist_from_main[i]);
+        delete[] (cbs.indist_from_main[i]);
     for (int i = 0; i < cbs.int_len; i++)
-        free(cbs.indist_from_int[i]);
+        delete[] (cbs.indist_from_int[i]);
     for (int i = 0; i < cbs.trip_len; i++)
-        free(cbs.indist_from_trip[i]);
-    free(cbs.indist_from_main);
-    free(cbs.num_indist_from_main);
-    free(cbs.indist_from_int);
-    free(cbs.num_indist_from_int);
-    free(cbs.indist_from_trip);
-    free(cbs.num_indist_from_trip);
-    free(cbs.int_i);
-    free(cbs.int_j);
-    free(cbs.trip_a);
-    free(cbs.trip_b);
-    free(cbs.trip_c);
+        delete[] (cbs.indist_from_trip[i]);
+    delete[] (cbs.indist_from_main);
+    delete[] (cbs.num_indist_from_main);
+    delete[] (cbs.indist_from_int);
+    delete[] (cbs.num_indist_from_int);
+    delete[] (cbs.indist_from_trip);
+    delete[] (cbs.num_indist_from_trip);
+    delete[] (cbs.int_i);
+    delete[] (cbs.int_j);
+    delete[] (cbs.trip_a);
+    delete[] (cbs.trip_b);
+    delete[] (cbs.trip_c);
 
     REAL(intercept)
     [0] = f_intercept;
@@ -352,7 +352,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
         Y[i] = (float)y[i];
     }
     XMatrix xmatrix;
-    xmatrix.actual_cols = n;
+    xmatrix.actual_cols = p;
     xmatrix.X = X;
 
     bool use_adaptive_calibration = false; // option has been removed.
