@@ -12,8 +12,6 @@
 val_to_list_name <- function(val, X) {
     range <- ncol(X)
     names <- colnames(X)
-    print(sprintf("val: %s", val))
-    print(sprintf("range: %s", range))
     if (val < range) {
         return(names[val + 1])
     } else if (val < range * range) {
@@ -32,38 +30,40 @@ process_result <- function(X, result) {
     i <- colnames(X)[result[[1]]]
     strength <- result[[2]]
     equiv_list <- c()
-    if (length(result[[3]][0]) > 0) {
+    if (length(result[[3]][1]) > 0 && !is.null(unlist(result[[3]][1]))) {
         equiv_list <- lapply(result[[3]], val_to_list_name, X)
         names(equiv_list) <- i
     }
-    df_main <- list(i=i,strength=strength,equivalent=equiv_list)
+    df_main <- list(effects=data.frame(i=i,strength=strength),equivalent=equiv_list)
 
     i <- colnames(X)[result[[4]]]
     j <- colnames(X)[result[[5]]]
     strength <- result[[6]]
     equiv_list <- c()
-    if (length(result[[7]][0]) > 0) {
+    if (length(result[[7]][1]) > 0 && !is.null(unlist(result[[7]][1]))) {
         equiv_list <- lapply(result[[7]], val_to_list_name, X)
         names(equiv_list) <- paste0(i, ",", j)
     }
-    df_int <- list(i=i,j=j,strength=strength,equivalent=equiv_list)
+    df_int <- list(effects=data.frame(i=i,j=j,strength=strength),equivalent=equiv_list)
 
     i <- colnames(X)[result[[8]]]
     j <- colnames(X)[result[[9]]]
     k <- colnames(X)[result[[10]]]
     equiv_list <- c()
-    if (length(result[[12]][0]) > 0) {
+    print(unlist(result[[12]][1]))
+    print(is.null(unlist(result[[12]][1][1])))
+    if (length(result[[12]][1]) > 0 && !is.null(unlist(result[[12]][1]))) {
         equiv_list <- lapply(result[[12]], val_to_list_name, X)
         names(equiv_list) <- paste0(i, ",", j, ",", k)
     }
     strength <- result[[11]]
-    df_trip <- list(i=i,j=j,k=k,strength=strength,equivalent=equiv_list)
+    df_trip <- list(effects=data.frame(i=i,j=j,k=k,strength=strength),equivalent=equiv_list)
 
     intercept <- result[[13]]
 
     rm(result)
 
-    return (list(intercept=intercept, main_effects = df_main, pairwise_effects = df_int, triple_effects = df_trip))
+    return (list(intercept=intercept, main = df_main, pairwise = df_int, triple = df_trip))
 }
 
 read_log <- function(log_filename="regression.log") {
@@ -83,6 +83,9 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     } else {
         # binarise X
         X[X != 0] <- 1
+    }
+    if (is.null(colnames(X))) {
+        colnames(X) <- seq(ncol(X))
     }
 
     log_level_enum <- 0;

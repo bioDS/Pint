@@ -63,11 +63,13 @@ More precisely:
 
 `intercept` : (if `use_intercept=TRUE`) the intercept value.
 
-`main_effects` : $i, \beta_i$ for individual columns $X_i$
+`main` : A data frame `effects` containing $i, \beta_i$ for individual columns $X_i$, and a list `eqiuvalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
 
-`pairwise_effects` (if `depth` $\geq 2$) $i,j, \beta_{i,j}$ for $X_i \circ X_j$
+`pairwise` (if `depth` $\geq 2$) A data frame `effects` containing $i,j, \beta_{i,j}$ for $X_i \circ X_j$ and a list `equivalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
 
-`triple_effects` (if `depth` $\geq 3$) $i,j,k, \beta_{i,j,k}$ for $X_i \circ X_j \circ X_k$
+
+`triple` (if `depth` $\geq 3$) A data frame `effects` containing $i,j,k, \beta_{i,j,k}$ for $X_i \circ X_j \circ X_k$ and a list `equivalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
+
 
 `estimate_unbiased` : (if `estimate_unbiased=TRUE`) $\beta_i, \beta_{i,j}, \beta_{i,j,k}$ fit with $\lambda = 0$, including only the effects that are non-zero for $lambda = $ final_lambda.
 For an estimate of the best fit, while excluding columns lasso regression sets to zero.

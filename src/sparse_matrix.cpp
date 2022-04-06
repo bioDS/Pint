@@ -327,7 +327,6 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     for (int_fast64_t i = 0; i < p; i++) {
         total_words += X2.cols[i].nwords;
         total_entries += X2.cols[i].nz;
-        printf("col %d entries: %d\n", i, X2.cols[i].nz);
     }
     if (VERBOSE) {
         printf("mean nz entries: %f\n", (float)total_entries / (float)p);
@@ -388,7 +387,6 @@ X_uncompressed construct_host_X(XMatrixSparse* Xc)
         host_col_offsets[k] = offset;
         host_col_nz[k] = Xc->cols[k].nz;
         int_fast64_t* col = &host_X[offset];
-        printf("col: %x\n", col);
         // read column
         {
             int_fast64_t col_entry_pos = 0;
