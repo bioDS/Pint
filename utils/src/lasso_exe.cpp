@@ -69,7 +69,7 @@ int main(int argc, const char** argv)
         printf("using 'log_level = NONE', no valid argument given");
     }
 
-    initialise_static_resources();
+    initialise_static_resources(-1);
 
     // testing: wip
     XMatrix xmatrix = read_x_csv(argv[1], N, P);
@@ -90,22 +90,15 @@ int main(int argc, const char** argv)
         return 1;
     }
 
+    struct continuous_info empty_cont_inf;
+    empty_cont_inf.use_cont = false;
     printf("begginning coordinate descent\n");
     const char* log_file = "exe.log";
-    auto lasso_result = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1,
-        -1, lambda, 300, VERBOSE, -1, 1.0001, log_level, argv, argc, FALSE, max_nz, log_file, depth, FALSE, TRUE);
+    auto lasso_result = simple_coordinate_descent_lasso(xmatrix, Y, N, nbeta, -1, lambda, 1000, 300, VERBOSE,
+    1.0001, log_level, argv, argc, max_nz, log_file, depth, false, true, true, &empty_cont_inf);
     auto beta_sets = lasso_result.regularized_result;
     int nbeta_int = nbeta;
     auto beta = beta_sets.beta3;
-    //nbeta_int = get_p_int(nbeta, max_interaction_distance);
-    //if (beta == NULL) {
-    //	fprintf(stderr, "failed to estimate beta values\n");
-    //	return 1;
-    //}
-    //for (int_fast64_t i = 0; i < nbeta_int; i++) {
-    //	printf("%f ", beta[i]);
-    //}
-    //printf("\n");
 
     printf("indices non-zero (|x| != 0):\n");
     int_fast64_t printed = 0;
@@ -141,17 +134,6 @@ int main(int argc, const char** argv)
             float coef = it->second;
             printf("%ld,%ld,%ld: %f\n", std::get<0>(abc), std::get<1>(abc), std::get<2>(abc), coef);
         }
-        //for (int_fast64_t i = 0; i < nbeta_int && printed < 100; i++) {
-        //    if (fabs((beta)[i]) > 0) {
-        //        printed++;
-        //        sig_beta_count++;
-        //        int_pair ip = get_num(i, nbeta);
-        //        if (ip.i == ip.j)
-        //            printf("main: %ld (%ld):     %f\n", i, ip.i + 1, (beta)[i]);
-        //        else
-        //            printf("int: %ld  (%ld, %ld): %f\n", i, ip.i + 1, ip.j + 1, (beta)[i]);
-        //    }
-        //}
         break;
     case file:
         for (int_fast64_t i = 0; i < nbeta_int; i++) {
@@ -172,8 +154,6 @@ int main(int argc, const char** argv)
     }
     if (output_mode == terminal) {
     }
-    //endwin();
-    // free(beta);
     beta.clear();
     free_static_resources();
     return 0;

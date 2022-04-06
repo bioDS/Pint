@@ -16,6 +16,7 @@ liblasso_deps = [
 	dependency('openmp'),
 	#dependency('OpenCL'),
     dependency('glib-2.0'),
+    dependency('libxxhash'),
     #dependency('boost'),
 	#rt_dependency,
 ]

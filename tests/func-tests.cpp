@@ -1,4 +1,5 @@
 #include "../src/liblasso.h"
+#include <cstdint>
 #include <glib-2.0/glib.h>
 #include <locale.h>
 #include <omp.h>
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <time.h>
 #include <vector>
+#include <xxhash.h>
 
 #include <algorithm>
 
@@ -19,10 +21,14 @@ using namespace std;
 extern struct timespec start_time, end_time;
 static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
-    float* old_rowsum, Active_Set* active_set, struct OpenCL_Setup* ocl_setup, int_fast64_t depth, char use_intercept);
+    float* old_rowsum, Active_Set* active_set,
+    int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates,
+    struct continuous_info* cont_inf);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
+
+static const struct continuous_info empty_cont_inf = {false, 0, 0};
 
 // #pragma omp declare target
 // float fabs(float a) {
@@ -49,6 +55,7 @@ typedef struct {
     int_fast64_t** column_caches;
     XMatrixSparse Xc;
     XMatrixSparse X2c;
+    X_uncompressed Xu;
 } UpdateFixture;
 
 const static float small_X2_correct_beta[630] = {
@@ -209,20 +216,6 @@ static void update_beta_fixture_tear_down(UpdateFixture* fixture,
     free(fixture->column_caches);
 }
 
-static void test_update_beta_cyclic(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    printf("beta[27]: %f\n", fixture->beta[27]);
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-    update_beta_cyclic_old(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
-        fixture->n, fixture->p, fixture->lambda, &fixture->beta,
-        fixture->k, fixture->intercept,
-        fixture->precalc_get_num, fixture->column_caches[0]);
-    printf("beta[27]: %f\n", fixture->beta[27]);
-    g_assert_true(fixture->beta[27] != 0.0);
-    g_assert_true(fixture->beta[27] < -263.94);
-    g_assert_true(fixture->beta[27] > -263.941);
-}
 
 static void test_soft_threshold() { printf("not implemented yet\n"); }
 
@@ -309,24 +302,22 @@ static void test_compressed_main_X()
     free(Xs.cols);
 }
 
-static void test_X2_from_X()
+static void test_Xc_from_X()
 {
     int_fast64_t n = 1000;
     int_fast64_t p = 100;
-    int_fast64_t p_int = p * (p + 1) / 2;
     XMatrix xm = read_x_csv("../testX.csv", n, p);
-    XMatrix xm2 = read_x_csv("../testX2.csv", n, p_int);
 
-    XMatrixSparse X2s = sparse_X2_from_X(xm.X, n, p, -1, FALSE);
+    XMatrixSparse X2s = sparse_X_from_X(xm.X, n, p, FALSE);
 
     g_assert_true(X2s.n == n);
-    g_assert_true(X2s.p == p_int);
+    g_assert_true(X2s.p == p);
 
     int_fast64_t column_entries[n];
 
-    for (int_fast64_t k = 0; k < p_int; k++) {
+    for (int_fast64_t k = 0; k < p; k++) {
         if (k == 2905) {
-            printf("xm2.X[%ld][0] == %ld\n", k, xm2.X[k][0]);
+            printf("xm2.X[%ld][0] == %ld\n", k, xm.X[k][0]);
         }
         int_fast64_t col_entry_pos = 0;
         int_fast64_t entry = -1;
@@ -350,12 +341,12 @@ static void test_X2_from_X()
         for (int_fast64_t i = 0; i < n; i++) {
             // printf("\ncolumn %ld contains %ld entries", k, X2s.nz[k]);
             if (col_entry_pos > X2s.cols[k].nz || column_entries[col_entry_pos] < i) {
-                if (xm2.X[k][i] != 0) {
+                if (xm.X[k][i] != 0) {
                     printf("\n[%ld][%ld] is not in the index but should be", k, i);
                     g_assert_true(FALSE);
                 }
             } else if (X2s.cols[k].nz > 0 && column_entries[col_entry_pos] == i) {
-                if (xm2.X[k][i] != 1) {
+                if (xm.X[k][i] != 1) {
                     printf("\n[%ld][%ld] missing from \n", k, i);
                     g_assert_true(FALSE);
                 }
@@ -368,13 +359,8 @@ static void test_X2_from_X()
     for (int i = 0; i < p; i++) {
         free(xm.X[i]);
     }
-    for (int k = 0; k < p_int; k++) {
-        free(X2s.cols[k].compressed_indices);
-        free(xm2.X[k]);
-    }
     free(xm.X);
-    free(xm2.X);
-    free(X2s.cols);
+    free_sparse_matrix(X2s);
 }
 
 struct pruning_test_setup_details {
@@ -448,92 +434,6 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture* fixture,
     free(fixture->column_caches);
 }
 
-static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    // are we running the shuffle test, or sequential?
-    float acceptable_diff = 0.1;
-    int_fast64_t shuffle = FALSE;
-    if ((int_fast64_t)user_data == TRUE) {
-        printf("\nrunning shuffle test!\n");
-        acceptable_diff = 10;
-        shuffle = TRUE;
-    }
-    float* glmnet_beta = read_y_csv(
-        "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
-    printf("starting interaction test\n");
-    fixture->xmatrix = read_x_csv(
-        "/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
-    fixture->X = fixture->xmatrix.X;
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
-    int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta = fixture->beta;
-
-    float dBMax;
-    for (int_fast64_t j = 0; j < 10; j++)
-        for (int_fast64_t i = 0; i < p_int; i++) {
-            int_fast64_t k = i;
-            Changes changes = update_beta_cyclic_old(
-                fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n,
-                fixture->p, fixture->lambda, &beta, k, 0, fixture->precalc_get_num,
-                fixture->column_caches[0]);
-            dBMax = changes.actual_diff;
-        }
-
-    int_fast64_t no_agreeing = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
-        int_fast64_t k = i;
-        printf("testing beta[%ld] (%f) ~ %f [", i, beta[i],
-            small_X2_correct_beta[k]);
-
-        if ((beta[i] < small_X2_correct_beta[k] + acceptable_diff) && (beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
-            no_agreeing++;
-            printf("x]\n");
-        } else {
-            printf(" ]\n");
-        }
-    }
-    printf("frac agreement: %f\n", (float)no_agreeing / p_int);
-    g_assert_true(no_agreeing == p_int);
-}
-
-static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    float* glmnet_beta = read_y_csv(
-        "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
-    printf("starting interaction test\n");
-    fixture->p = 35;
-    fixture->xmatrix = read_x_csv(
-        "/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
-    fixture->X = fixture->xmatrix.X;
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
-    int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta = fixture->beta;
-
-    Lasso_Result lr = simple_coordinate_descent_lasso(
-        fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        0, -1, 1.0001, NONE, NULL, 0, FALSE, -1, "test.log", 2, FALSE, FALSE);
-    Beta_Value_Sets beta_sets = lr.regularized_result;
-    beta = beta_sets.beta3; //TODO: don't
-
-    float acceptable_diff = 10;
-    int_fast64_t no_agreeing = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
-        int_fast64_t k = i;
-        printf("testing beta[%ld] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
-
-        if ((beta[k] < glmnet_beta[i] + acceptable_diff) && (beta[k] > glmnet_beta[i] - acceptable_diff)) {
-            no_agreeing++;
-            printf("x]\n");
-        } else {
-            printf(" ]\n");
-        }
-    }
-    printf("frac agreement: %f\n", (float)no_agreeing / p_int);
-    g_assert_true(no_agreeing >= 0.8 * p_int);
-}
-
 // will fail if Y has been normalised
 static void test_read_y_csv()
 {
@@ -563,25 +463,22 @@ void printBits(size_t const size, void const* const ptr)
     puts("");
 }
 
-static void check_X2_encoding()
+static void check_Xc_encoding()
 {
     int_fast64_t n = 1000;
     int_fast64_t p = 35;
-    int_fast64_t p_int = p * (p + 1) / 2;
     XMatrix xmatrix = read_x_csv("../testXSmall.csv", n, p);
-    XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
-    XMatrixSparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE);
+    // XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
+    XMatrixSparse xmatrix_sparse = sparse_X_from_X(xmatrix.X, n, p, FALSE);
 
     int_pair* nums = get_all_nums(p, -1);
     // create uncompressed sparse version of X2.
-    int_fast64_t** col_nz_indices = (int_fast64_t**)malloc(sizeof *col_nz_indices * p_int);
-    for (int_fast64_t j = 0; j < p_int; j++) {
-    }
-    int_fast64_t* col_sizes = (int_fast64_t*)malloc(sizeof *col_sizes * p_int);
-    for (int_fast64_t j = 0; j < p_int; j++) {
+    int_fast64_t** col_nz_indices = (int_fast64_t**)malloc(sizeof *col_nz_indices * p);
+    int_fast64_t* col_sizes = (int_fast64_t*)malloc(sizeof *col_sizes * p);
+    for (int_fast64_t j = 0; j < p; j++) {
         Queue* col_q = queue_new();
         for (int_fast64_t i = 0; i < n; i++) {
-            if (X2.X[j][i] != 0) {
+            if (xmatrix.X[j][i] != 0) {
                 queue_push_tail(col_q, (void*)i);
             }
         }
@@ -603,7 +500,7 @@ static void check_X2_encoding()
     // mean entry size
     int_fast64_t total = 0;
     int_fast64_t no_entries = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
+    for (int_fast64_t i = 0; i < p; i++) {
         no_entries += xmatrix_sparse.cols[i].nz;
         for (int_fast64_t j = 0; j < xmatrix_sparse.cols[i].nz; j++) {
             total += col_nz_indices[i][j];
@@ -614,7 +511,7 @@ static void check_X2_encoding()
     // mean diff size
     total = 0;
     int_fast64_t prev_entry = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
+    for (int_fast64_t i = 0; i < p; i++) {
         prev_entry = 0;
         for (int_fast64_t j = 0; j < xmatrix_sparse.cols[i].nz; j++) {
             total += col_nz_indices[i][j] - prev_entry;
@@ -711,7 +608,7 @@ static void check_X2_encoding()
     g_queue_free(s8b_col);
 
     printf("checking [s8b] == [int]\n");
-    for (int_fast64_t k = 0; k < p_int; k++) {
+    for (int_fast64_t k = 0; k < p; k++) {
         printf("col %ld (interaction %ld,%ld)\n", k, nums[k].i, nums[k].j);
         int_fast64_t checked = 0;
         int_fast64_t col_entry_pos = 0;
@@ -755,7 +652,7 @@ static void check_X2_encoding()
     g_assert_true(xmatrix_sparse.cols[0].nwords == length);
     printf("correct number of words\n");
 
-    for (int_fast64_t j = 0; j < p_int; j++) {
+    for (int_fast64_t j = 0; j < p; j++) {
         free(col_nz_indices[j]);
     }
     free(col_nz_indices);
@@ -766,10 +663,7 @@ static void check_X2_encoding()
     }
     for (int i = 0; i < xmatrix_sparse.p; i++)
         free(xmatrix_sparse.cols[i].compressed_indices);
-    for (int i = 0; i < p_int; i++)
-        free(X2.X[i]);
     free(xmatrix.X);
-    free(X2.X);
     free(xmatrix_sparse.cols);
     free(actual_col);
 }
@@ -842,6 +736,158 @@ int_fast64_t check_didnt_update(int_fast64_t p, int_fast64_t p_int, bool* wont_u
     return no_disagreeing;
 }
 
+XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
+    int_fast64_t max_interaction_distance, int_fast64_t shuffle)
+{
+    XMatrixSparse X2;
+    int_fast64_t colno, length;
+
+    int_fast64_t iter_done = 0;
+    int_fast64_t p_int = p * (p + 1) / 2;
+    // TODO: for the moment we use the maximum possible p_int for allocation,
+    // because things assume it.
+    // TODO: this is wrong for dist == 1! (i.e. the main only case). Or at least,
+    // so we hope.
+    p_int = get_p_int(p, max_interaction_distance);
+    if (max_interaction_distance < 0)
+        max_interaction_distance = p;
+    printf("p_int: %ld\n", p_int);
+
+    X2.cols = (S8bCol*)malloc(sizeof *X2.cols * p_int);
+
+    int_fast64_t done_percent = 0;
+    int_fast64_t total_count = 0;
+    int_fast64_t total_sum = 0;
+    // size_t testcol = -INT_MAX;
+    colno = 0;
+    int_fast64_t d = max_interaction_distance;
+    int_fast64_t limit_instead = ((p - d) * p - (p - d) * (p - d - 1) / 2 - (p - d));
+// TODO: iter_done isn't exactly being updated safely
+#pragma omp parallel for shared(X2, X, iter_done) private(length, colno) num_threads(NumCores) reduction(+ \
+                                                                                                         : total_count, total_sum) schedule(static)
+    for (int_fast64_t i = 0; i < p; i++) {
+        for (int_fast64_t j = i; j < min(i + max_interaction_distance, (int_fast64_t)p); j++) {
+            int_fast64_t val;
+            // GQueue *current_col = g_queue_new();
+            // GQueue *current_col_actual = g_queue_new();
+            Queue* current_col = queue_new();
+            // worked out by hand as being equivalent to the offset we would have
+            // reached.
+            int_fast64_t a = min(i, p - d); // number of iters limited by d.
+            int_fast64_t b = max(i - (p - d), (int_fast64_t)0); // number of iters of i limited by p rather than d.
+            // int_fast64_t tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
+            int_fast64_t suma = a * (d - 1);
+            int_fast64_t k = max(p - d + b, (int_fast64_t)0);
+            // sumb is the amount we would have reached w/o the limit - the amount
+            // that was actually covered by the limit.
+            int_fast64_t sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
+            colno = j + suma + sumb;
+            // Read through the the current column entries, and append them to X2 as
+            // an s8b-encoded list of offsets
+            int_fast64_t* col_entries = (int_fast64_t*)malloc(60 * sizeof *col_entries);
+            int_fast64_t count = 0;
+            int_fast64_t largest_entry = 0;
+            // int_fast64_t max_bits = max_size_given_entries[0];
+            int_fast64_t diff = 0;
+            int_fast64_t prev_row = -1;
+            int_fast64_t total_nz_entries = 0;
+            for (int_fast64_t row = 0; row < n; row++) {
+                val = X[i][row] * X[j][row];
+                if (val == 1) {
+                    total_nz_entries++;
+                    diff = row - prev_row;
+                    total_sum += diff;
+                    int_fast64_t used = 0;
+                    int_fast64_t tdiff = diff;
+                    while (tdiff > 0) {
+                        used++;
+                        tdiff >>= 1;
+                    }
+                    // max_bits = max_size_given_entries[count + 1];
+                    // if the current diff won't fit in the s8b word, push the word and
+                    // start a new one
+                    if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
+                        S8bWord* word = (S8bWord*)malloc(sizeof(
+                            S8bWord)); // we (maybe?) can't rely on this being the size of a
+                        // pointer, so we'll add by reference
+                        S8bWord tempword = to_s8b(count, col_entries);
+                        total_count += count;
+                        memcpy(word, &tempword, sizeof(S8bWord));
+                        queue_push_tail(current_col, word);
+                        count = 0;
+                        largest_entry = 0;
+                        // max_bits = max_size_given_entries[1];
+                    }
+                    // things for the next iter
+                    // g_assert_true(count < 60);
+                    col_entries[count] = diff;
+                    count++;
+                    if (used > largest_entry)
+                        largest_entry = used;
+                    prev_row = row;
+                } else if (val != 0)
+                    fprintf(stderr, "Attempted to convert a non-binary matrix, values "
+                                    "will be missing!\n");
+            }
+            // push the last (non-full) word
+            S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
+            S8bWord tempword = to_s8b(count, col_entries);
+            memcpy(word, &tempword, sizeof(S8bWord));
+            queue_push_tail(current_col, word);
+            free(col_entries);
+            length = queue_get_length(current_col);
+
+            S8bWord* indices = (S8bWord*)malloc(sizeof *indices * length);
+            count = 0;
+            while (!queue_is_empty(current_col)) {
+                S8bWord* current_word = (S8bWord*)queue_pop_head(current_col);
+                indices[count] = *current_word;
+                free(current_word);
+                count++;
+            }
+
+            S8bCol new_col = { indices, total_nz_entries, length };
+            X2.cols[colno] = new_col;
+
+            queue_free(current_col);
+            current_col = NULL;
+        }
+        iter_done++;
+        if (p >= 100 && iter_done % (p / 100) == 0) {
+            if (VERBOSE)
+                printf("create interaction matrix, %ld%%\n", done_percent);
+            done_percent++;
+        }
+    }
+    int_fast64_t total_words = 0;
+    int_fast64_t total_entries = 0;
+    for (int_fast64_t i = 0; i < p_int; i++) {
+        total_words += X2.cols[i].nwords;
+        total_entries += X2.cols[i].nz;
+    }
+    printf("mean nz entries: %f\n", (float)total_entries / (float)p_int);
+    printf("mean words: %f\n", (float)total_count / (float)total_words);
+    printf("mean size: %f\n", (float)total_sum / (float)total_entries);
+    X2.total_words = total_words;
+    X2.total_entries = total_entries;
+
+    S8bWord* compressed_indices;
+    int_fast64_t* col_start;
+    int_fast64_t* col_nz;
+    int_fast64_t offset = 0;
+
+    permutation_splits = NumCores;
+    permutation_split_size = p_int / permutation_splits;
+    final_split_size = p_int % permutation_splits;
+    printf("%ld splits of size %ld\n", permutation_splits, permutation_split_size);
+    printf("final split size: %ld\n", final_split_size);
+
+    X2.n = n;
+    X2.p = p_int;
+
+    return X2;
+}
+
 static void pruning_fixture_set_up(UpdateFixture* fixture,
     struct pruning_test_setup_details* setup)
 {
@@ -851,12 +897,13 @@ static void pruning_fixture_set_up(UpdateFixture* fixture,
     printf("getting sparse X2\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     if (setup->make_x2) {
-        XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+        XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE); //TODO
         fixture->X2c = X2c;
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
     x2_conversion_time = ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
     fixture->Xc = Xc;
+    fixture->Xu = construct_host_X(&Xc);
 }
 
 static void pruning_fixture_tear_down(UpdateFixture* fixture,
@@ -864,6 +911,7 @@ static void pruning_fixture_tear_down(UpdateFixture* fixture,
 {
     free_sparse_matrix(fixture->Xc);
     free_sparse_matrix(fixture->X2c);
+    free_host_X(&fixture->Xu);
 
     test_simple_coordinate_descent_tear_down(fixture, NULL);
 }
@@ -877,7 +925,7 @@ bool get_wont_update(char* working_set, bool* wont_update, int_fast64_t p,
     for (int_fast64_t j = 0; j < p; j++) {
         float sum = 0.0;
         wont_update[j] = wont_update_effect(
-            Xu, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache);
+            Xu, lambda, j, last_max[j], last_rowsum[j], rowsum, column_cache, &empty_cont_inf);
         if (wont_update[j])
             ruled_out = true;
     }
@@ -1175,7 +1223,81 @@ struct to_append {
 //  // target_col_offsets = temp_offset;
 //}
 
-// struct X_uncompressed construct_host_X(XMatrixSparse *Xc) {
+// X_uncompressed construct_host_X(XMatrixSparse *Xc) {
+
+static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer user_data) {
+    printf("starting interaction distance test\n");
+    int_fast64_t use_adcal = FALSE;
+    const char* log_file = "test.log";
+    int_fast64_t max_interaction_distance = 20;
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        max_interaction_distance, 0.01, 100,
+        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, &empty_cont_inf);
+    Beta_Value_Sets beta_sets = lr.regularized_result;
+    for (auto beta : beta_sets.beta2) {
+        int_fast64_t val = beta.first;
+        auto pair = val_to_pair(val, fixture->p);
+        g_assert_true(std::abs(std::get<0>(pair) - std::get<1>(pair)) <= max_interaction_distance);
+    }
+    for (auto beta : beta_sets.beta3) {
+        int_fast64_t val = beta.first;
+        auto triple = val_to_triplet(val, fixture->p);
+        auto a = std::get<0>(triple);
+        auto b = std::get<0>(triple);
+        auto c = std::get<0>(triple);
+        g_assert_true(std::abs(a-b) <= max_interaction_distance);
+        g_assert_true(std::abs(a-c) <= max_interaction_distance);
+        g_assert_true(std::abs(b-c) <= max_interaction_distance);
+    }
+    free_lasso_result(lr);
+}
+
+
+void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* true_effects, int p, X_uncompressed* Xu) {
+    g_assert_true(beta_sets->beta3.size() == 0);
+
+    printf("found:\n");
+    for (auto& b1 : beta_sets->beta1) {
+        int_fast64_t val = b1.first;
+        printf(" %ld\n", val);
+    }
+    for (auto& b2 : beta_sets->beta2) {
+        int_fast64_t val = b2.first;
+        std::tuple<int_fast64_t, long> inter = val_to_pair(val, p);
+        printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
+    }
+
+    for (auto it = true_effects->begin(); it != true_effects->end(); it++) {
+        int_fast64_t first = it->first - 1;
+        int_fast64_t second = it->second - 1;
+        printf("checking %ld,%ld\n", first, second);
+        int_fast64_t val = pair_to_val(std::make_tuple(first, second), p);
+        auto actual_col = get_col_by_id(*Xu, val);
+        XXH128_hash_t actual_col_hash = XXH3_128bits(actual_col.data(), actual_col.size()*sizeof(actual_col[0]));
+        printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets->beta2[val]);
+        // for (auto val : lr.indi.cols_for_hash[actual_col_hash.high64][actual_col_hash.low64]) {
+        //     printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets->beta2[val]);
+        // }
+        g_assert_true(fabs(beta_sets->beta2[val]) > 0.0);
+    }
+};
+
+vector<pair<int, int>> true_effects_small = {
+    { 79, 432 },
+    { 107, 786 },
+    { 265, 522 },
+    { 265, 630 },
+    { 293, 432 },
+    { 314, 779 },
+    { 314, 812 },
+    { 382, 816 },
+    { 522, 811 },
+    { 585, 939 },
+    { 630, 786 },
+    { 630, 820 },
+    { 656, 812 },
+    { 107, 382 }
+};
 
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
@@ -1183,58 +1305,19 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     printf("starting accuracy test\n");
     int_fast64_t use_adcal = FALSE;
     const char* log_file = "test.log";
+    bool check_duplicates = true;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 100,
-        200, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        77, log_file, 2, FALSE, FALSE);
+        200, true, 1.01,
+        NONE, NULL, 0,
+        97, log_file, 2, false, false, check_duplicates, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
-    vector<pair<int, int>> true_effects = {
-        { 79, 432 },
-        { 107, 786 },
-        { 265, 522 },
-        { 265, 630 },
-        { 293, 432 },
-        { 314, 779 },
-        { 314, 812 },
-        { 382, 816 },
-        { 522, 811 },
-        { 585, 939 },
-        { 630, 786 },
-        { 630, 820 },
-        { 656, 812 },
-        { 107, 382 }
-    };
-
-    auto check_results = [&]() {
-        g_assert_true(beta_sets.beta3.size() == 0);
-
-        printf("found:\n");
-        for (auto& b1 : beta_sets.beta1) {
-            int_fast64_t val = b1.first;
-            printf(" %ld\n", val);
-        }
-        for (auto& b2 : beta_sets.beta2) {
-            int_fast64_t val = b2.first;
-            std::tuple<int_fast64_t, long> inter = val_to_pair(val, fixture->p);
-            printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
-        }
-
-        for (auto it = true_effects.begin(); it != true_effects.end(); it++) {
-            int_fast64_t first = it->first - 1;
-            int_fast64_t second = it->second - 1;
-            printf("checking %ld,%ld\n", first, second);
-            int_fast64_t val = pair_to_val(std::make_tuple(first, second), fixture->p);
-            printf("beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets.beta2[val]);
-            g_assert_true(fabs(beta_sets.beta2[val]) > 0.0);
-        }
-    };
-
-    check_results();
+    check_results_match(&beta_sets, &true_effects_small, fixture->p, &fixture->Xu);
+    free_lasso_result(lr);
 
     // these are the values that the previous version reliably finds
-    true_effects = {
+    vector<pair<int, int>> true_effects = {
         { 4, 195 },
         { 24, 109 },
         { 52, 881 },
@@ -1281,14 +1364,119 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
 
     lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 47504180,
-        200, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        500, "test.log", 2, FALSE, FALSE);
-    beta_sets = lr.regularized_result;
+        200, true, 1.01,
+        NONE, NULL, 0,
+        500, "test.log", 2, false, false, check_duplicates, &empty_cont_inf);
 
-    check_results();
-    // beta_sets.beta2;
-    // g_assert_true(beta_sets.beta2[])
+    check_results_match(&lr.regularized_result, &true_effects, fixture->p, &fixture->Xu);
+
+    free_lasso_result(lr);
+}
+
+void check_small_continuous() {
+    int n = 5;
+    int p = 5;
+    struct continuous_info ci;
+    ci.col_real_vals = new vector<float>[p];
+    ci.col_max_vals = new float[p];
+    ci.use_cont = true;
+
+    XMatrix xm;
+    xm.X = calloc(p, sizeof(int_fast64_t*));
+    for (int j = 0; j < p; j++) {
+        xm.X[j] = calloc(n, sizeof(int_fast64_t));
+        for (int i = 0; i < n; i++) {
+            xm.X[j][i] = 1;
+        }
+    }
+    xm.actual_cols = p;
+    ci.col_real_vals[0] = {0.2, 1.2, 1.4, -2.3, -0.1};
+    ci.col_real_vals[1] = {-0.2, -1.2, 3.4, -1.3, 0.1};
+    ci.col_real_vals[2] = {-1.3, 0.2, -3.4, 2.3, 0.7};
+    ci.col_real_vals[3] = {0.2, 0.2, 0.4, -3.3, 2.1};
+    ci.col_real_vals[4] = {-0.2, -1.2, 3.2, 3.5, 0.1};
+
+    for (int j = 0; j < p; j++) {
+        float max_val = 0.0;
+        for (auto v : ci.col_real_vals[j]) {
+            if (fabs(v) > fabs(max_val))
+                max_val = v;
+        }
+        ci.col_max_vals[j] = max_val;
+    }
+
+    std::vector<float> beta = {0.3, 1.1, 0.9, -2.2, 1.5};
+    float* Y = calloc(n, sizeof(float));
+    float intercept = 3.0;
+    for (int i = 0; i < n; i++) {
+        float rowsum = intercept;
+        for (int j = 0; j < p; j++) {
+            rowsum += beta[j] * ci.col_real_vals[j][i];
+        }
+        Y[i] = rowsum;
+    }
+
+    Lasso_Result lr = simple_coordinate_descent_lasso(xm, Y, n, p, -1, 0.00001, 5, 500, true, 1.00001, NONE, NULL, 0, 50, "test.log", 1, false, true, true, &ci);
+
+    printf("intercept: %f\n", lr.regularized_intercept);
+    float found_beta[p];
+    for (int j = 0; j < p; j++) {
+        found_beta[j] = lr.regularized_result.beta1[j];
+        printf("beta %d: %f\n", j, lr.regularized_result.beta1[j]);
+    }
+    // it may not be the correct fit, but it should be _a_ fit.
+    // check the error is small.
+    float error = 0.0;
+    for (int i = 0; i < n; i++) {
+        float pred_y = lr.regularized_intercept;
+        for (int j = 0; j < p; j++) {
+            pred_y += found_beta[j] * ci.col_real_vals[j][i];
+        }
+        printf("Y[%d], %f \t pred_y %d: %f\n", i, Y[i], i, pred_y);
+        float diff = Y[i] - pred_y;
+        error += diff*diff;
+    }
+    printf("error: %f\n", error);
+    g_assert_true(error < 0.0001);
+
+    free(Y);
+    free_continuous_info(ci);
+    free_lasso_result(lr);
+    for (int i = 0; i < p; i++)
+        free(xm.X[i]);
+    free(xm.X);
+}
+
+void check_continous_ones(UpdateFixture* fixture,
+    gconstpointer user_data) {
+    // check continuos X doesn't break anything
+    auto n = fixture->n;
+    auto p = fixture->p;
+    std::vector<float>* col_real_vals = new std::vector<float>[p];
+    float* col_max_vals = new float[p];
+
+    for (int_fast64_t i = 0; i < p; i++) {
+        int_fast64_t col_len = fixture->Xu.host_col_nz[i];
+        int_fast64_t* col = fixture->Xu.host_X[fixture->Xu.host_col_offsets[i]];
+        for (int_fast64_t ri = 0; ri < col_len; ri++) {
+            col_real_vals[i].push_back(1.0);
+        }
+        col_max_vals[i] = 1.0;
+    }
+    struct continuous_info ci;
+    ci.col_max_vals = col_max_vals;
+    ci.col_real_vals = col_real_vals;
+    ci.use_cont = true;
+    bool check_duplicates = true;
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
+        -1, 0.01, 200,
+        200, true, 1.01,
+        NONE, NULL, 0,
+        97, "test.log", 2, false, false, check_duplicates, &ci);
+
+    check_results_match(&lr.regularized_result, &true_effects_small, fixture->p, &fixture->Xu);
+    free_lasso_result(lr);
+    free_continuous_info(ci);
 }
 
 static void check_branch_pruning_faster(UpdateFixture* fixture,
@@ -1303,14 +1491,18 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
     printf("starting interaction test\n");
     printf("creating X2\n");
     int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
-    Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta3;
-    Beta_Value_Sets pruning_beta_sets = { pruning_beta1, pruning_beta2, pruning_beta3, p };
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    // Beta_Value_Sets beta_sets = { beta1, beta2, beta3, p };
+    Beta_Value_Sets beta_sets;
+    beta_sets.p = p;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta1;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta2;
+    // robin_hood::unordered_flat_map<int_fast64_t, float> pruning_beta3;
+    // Beta_Value_Sets pruning_beta_sets = { pruning_beta1, pruning_beta2, pruning_beta3, p };
+    Beta_Value_Sets pruning_beta_sets;
+    pruning_beta_sets.p = p;
 
     for (int_fast64_t i = 0; i < p_int; i++) {
         beta_sets.beta2[i] = 0.0;
@@ -1369,7 +1561,8 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
     float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
-    struct X_uncompressed Xu = construct_host_X(&Xc);
+    X_uncompressed Xu = construct_host_X(&Xc);
+    std::vector<bool> seen_before(p, false);
 
     Iter_Vars iter_vars_basic = {
         Xc,
@@ -1379,12 +1572,15 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         &beta_sets,
         last_max,
         NULL,
+        &seen_before,
         p,
         p_int,
         X2c,
         fixture->Y,
         max_int_delta,
         Xu,
+        0.0,
+        p,
     };
     struct timespec start, end;
     float basic_cpu_time_used, pruned_cpu_time_used;
@@ -1466,12 +1662,15 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         &pruning_beta_sets,
         last_max,
         wont_update,
+        &seen_before,
         p,
         p_int,
         X2c_fake,
         fixture->Y,
         max_int_delta,
         Xu,
+        0.0,
+        p
     };
 
     printf("getting time for pruned version\n");
@@ -1501,8 +1700,10 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
 
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
+        IndiCols empty_indi = get_empty_indicols(p);
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, NULL, 2, FALSE);
+            &active_set, 2, false, &empty_indi, false, &empty_cont_inf);
+        free_indicols(empty_indi);
     }
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -1683,7 +1884,7 @@ void test_row_list_without_columns()
         thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
-    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches);
+    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches, &empty_cont_inf);
 
     g_assert_true(rs.row_lengths[0] == 1);
     g_assert_true(rs.row_lengths[1] == 2);
@@ -1733,15 +1934,23 @@ void test_row_list_without_columns()
     free_row_set(rs);
 }
 
-void trivial_3way_test()
-{
-    int_fast64_t n = 5, p = 5;
+struct simple_matrix {
+    int_fast64_t n;
+    int_fast64_t p;
+    int_fast64_t** xm;
+    XMatrixSparse Xc;
+    X_uncompressed Xu;
+    XMatrix xmat;
+};
+struct simple_matrix setup_simple_matrix() {
+    const int_fast64_t n = 5, p = 6;
+    // no need to transpose this reading it, xm comes like this.
     const int_fast64_t xm_a[n][p] = {
-        { 1, 1, 1, 0, 0 },
-        { 1, 0, 1, 1, 0 },
-        { 0, 1, 1, 1, 1 },
-        { 1, 1, 0, 0, 0 },
-        { 1, 1, 1, 0, 0 },
+        { 1, 1, 1, 0, 0, 1 },
+        { 1, 0, 1, 1, 0, 1 },
+        { 0, 1, 1, 1, 1, 0 },
+        { 1, 1, 0, 0, 0, 1 },
+        { 1, 1, 1, 0, 0, 1 },
     };
     int_fast64_t** xm = new int_fast64_t*[p];
     for (int_fast64_t j = 0; j < p; j++) {
@@ -1749,9 +1958,50 @@ void trivial_3way_test()
     }
     for (int_fast64_t i = 0; i < n; i++)
         for (int_fast64_t j = 0; j < p; j++) {
-            xm[i][j] = xm_a[j][i];
+            xm[j][i] = xm_a[i][j];
         }
+    XMatrixSparse Xc = sparsify_X(xm, n, p);
+    X_uncompressed Xu = construct_host_X(&Xc);
+    XMatrix xmat;
+    xmat.X = xm;
+    xmat.actual_cols = p;
+    struct simple_matrix sm = {n, p, xm, Xc, Xu, xmat};
+    return sm;
+}
+void free_simple_matrix(struct simple_matrix sm)
+{
+    for (int_fast64_t i = 0; i < sm.p; i++) {
+        delete[] sm.xm[i];
+    }
+    delete[] sm.xm;
+    free_host_X(&sm.Xu);
+    free_sparse_matrix(sm.Xc);
+}
 
+    
+void print_beta_set(robin_hood::unordered_flat_map<int_fast64_t, float>* beta_set, int_fast64_t p) {
+    for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
+        int_fast64_t val = it->first;
+        if (val < p) {
+            printf("%ld: %f\n", val, it->second);
+        } else if (val < p * p) {
+            auto pair = val_to_pair(val, p);
+            printf("%ld,%ld: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
+        } else {
+            g_assert_true(val < p * p * p);
+            auto triple = val_to_triplet(val, p);
+            printf("%ld,%ld,%ld: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
+        }
+    }
+}
+void trivial_3way_test()
+{
+    struct simple_matrix sm = setup_simple_matrix();
+    int_fast64_t n = sm.n;
+    int_fast64_t p = sm.p;
+    int_fast64_t** xm = sm.xm;
+    XMatrixSparse Xc  = sm.Xc;
+    X_uncompressed Xu = sm.Xu;
     robin_hood::unordered_map<int_fast64_t, float> correct_beta;
     //robin_hood::unordered_map<std::pair<int_fast64_t,long>, float> correct_beta2;
     //robin_hood::unordered_map<std::tuple<int_fast64_t,int_fast64_t,long>, float> correct_beta3;
@@ -1823,64 +2073,61 @@ void trivial_3way_test()
     X.X = xm;
     X.actual_cols = p;
 
-    XMatrixSparse Xc = sparsify_X(xm, n, p);
-    X_uncompressed Xu = construct_host_X(&Xc);
-
     const int_fast64_t use_adcal = FALSE;
     Lasso_Result lr = simple_coordinate_descent_lasso(X, Y, n, p,
         -1, 0.01, 100,
-        100, FALSE, -1, 1.01,
-        NONE, NULL, 0, use_adcal,
-        7, "test.log", 3, FALSE, FALSE);
+        100, true, 1.00001,
+        NONE, NULL, 0,
+        7, "test.log", 3, false, false, true, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
     int_fast64_t total_effects = 0;
-    auto print_beta_set = [&](auto beta_set) {
-        for (auto it = beta_set->begin(); it != beta_set->end(); it++) {
-            int_fast64_t val = it->first;
-            if (val < p) {
-                printf("%ld: %f\n", val, it->second);
-            } else if (val < p * p) {
-                auto pair = val_to_pair(val, p);
-                printf("%ld,%ld: %f\n", std::get<0>(pair), std::get<1>(pair), it->second);
-            } else {
-                g_assert_true(val < p * p * p);
-                auto triple = val_to_triplet(val, p);
-                printf("%ld,%ld,%ld: %f\n", std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), it->second);
-            }
-        }
-    };
     printf("Beta values found:\n");
     printf("beta 1:\n");
-    print_beta_set(&beta_sets.beta1);
+    print_beta_set(&beta_sets.beta1, p);
     printf("beta 2:\n");
-    print_beta_set(&beta_sets.beta2);
+    print_beta_set(&beta_sets.beta2, p);
     printf("beta 3:\n");
-    print_beta_set(&beta_sets.beta3);
+    print_beta_set(&beta_sets.beta3, p);
 
-    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.4);
-    int_fast64_t tmpval = pair_to_val(std::make_tuple(0, 3), p);
-    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 1.5);
-    tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
-    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -8.0);
-
-    g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() < 8);
-
-    for (int_fast64_t i = 0; i < p; i++) {
-        delete[] xm[i];
+    int num_zero = 0;
+    for (auto set : {beta_sets.beta1, beta_sets.beta2, beta_sets.beta3})
+        for (auto v : set)
+            if (fabs(v.second) < 0.0001)
+                num_zero++;
+    printf("%d ~== 0\n", num_zero);
+    
+    for (auto main_id : lr.indi.skip_main_col_ids) {
+        printf("skipped main col: %ld as a duplicate\n", main_id);
     }
-    delete[] xm;
-    free_host_X(&Xu);
-    free_sparse_matrix(Xc);
+    for (auto pair_id : lr.indi.skip_pair_ids) {
+        auto pair = val_to_pair(pair_id, p);
+        printf("skipped pair col: %ld(%ld,%ld) as a duplicate\n", pair_id, std::get<0>(pair), std::get<1>(pair));
+    }
+    for (auto triple_id : lr.indi.skip_triple_ids) {
+        auto triple = val_to_triplet(triple_id, p);
+        printf("skipped triple col: %ld(%ld,%ld,%ld) as a duplicate\n", triple_id, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
+    }
+
+    g_assert_true(beta_sets.beta1.contains(0) && beta_sets.beta1.at(0) > 0.08);
+    int_fast64_t tmpval = pair_to_val(std::make_tuple(0, 3), p);
+    g_assert_true(beta_sets.beta2.contains(tmpval) && beta_sets.beta2.at(tmpval) > 0.35);
+    tmpval = triplet_to_val(std::make_tuple(0, 1, 2), p);
+    g_assert_true(beta_sets.beta3.contains(tmpval) && beta_sets.beta3.at(tmpval) < -4.0);
+
+    g_assert_true(beta_sets.beta1.size() + beta_sets.beta2.size() + beta_sets.beta3.size() - num_zero < 8);
+
+    free_lasso_result(lr);
+    free_simple_matrix(sm);
 }
 
 void test_tuple_vals()
 {
     int_fast64_t p = 100;
     for (int_fast64_t a = 0; a < p; a++) {
-        for (int_fast64_t b = 0; b < p; b++) {
-            for (int_fast64_t c = 0; c < p; c++) {
+        for (int_fast64_t b = a+1; b < p; b++) {
+            for (int_fast64_t c = b+1; c < p; c++) {
                 int_fast64_t val = triplet_to_val(std::make_tuple(a, b, c), p);
                 auto tp = val_to_triplet(val, p);
                 int_fast64_t x = std::get<0>(tp);
@@ -2028,7 +2275,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     float lambda_min = 0.01;
     float lambda_max = 10000;
     int_fast64_t max_iter = 200;
-    int_fast64_t VERBOSE = FALSE;
+    bool VERBOSE = true;
     float frac_overlap_allowed = -1;
     float halt_beta_diff = 1.01;
     LOG_LEVEL log_level = LOG_LEVEL::LAMBDA;
@@ -2053,7 +2300,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int_fast64_t result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, frac_overlap_allowed, halt_beta_diff, log_level, job_args, job_args_num, use_adaptive_calibration, max_nz_beta, log_filename, depth, FALSE, FALSE);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, &empty_cont_inf);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     int_fast64_t final_iter, final_lambda_count;
@@ -2069,6 +2316,245 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     free(beta1.values);
     free(beta2.indices);
     free(beta2.values);
+    free_lasso_result(lr);
+}
+
+static void test_simple_indistinguishable_cols()
+{
+    struct simple_matrix sm = setup_simple_matrix();
+    int_fast64_t n = sm.n;
+    int_fast64_t p = sm.p;
+    int_fast64_t** xm = sm.xm;
+    XMatrixSparse Xc  = sm.Xc;
+    X_uncompressed Xu = sm.Xu;
+    struct continuous_info empty_cont_inf;
+    empty_cont_inf.use_cont = false;
+    
+    bool wont_update[sm.Xu.p];
+    for (int i = 0; i < sm.Xu.p; i++)
+        wont_update[i] = false;
+    wont_update[2] = true;
+    wont_update[3] = true;
+    Thread_Cache thread_caches[NumCores];
+    for (int_fast64_t i = 0; i < NumCores; i++) {
+        thread_caches[i].col_i = (int_fast64_t*)malloc(max(n, p) * sizeof *thread_caches[i].col_i);
+        thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
+    }
+    
+    int_fast64_t ida = 0, idb = 2, idc = 3;
+    auto comb_ind = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(ida, idb), Xu.p);
+    std::vector<int_fast64_t> testcol = get_col_by_id(sm.Xu, comb_ind);
+    g_assert_true(testcol.size() == 3);
+    g_assert_true(testcol[0] == 0);
+    g_assert_true(testcol[1] == 1);
+    g_assert_true(testcol[2] == 4);
+
+    comb_ind = triplet_to_val(std::tuple<int_fast64_t, int_fast64_t, int_fast64_t>(ida, idb, idc), Xu.p);
+    testcol = get_col_by_id(sm.Xu, comb_ind);
+    g_assert_true(testcol.size() == 1);
+    g_assert_true(testcol[0] == 1);
+
+    IndiCols indi = get_empty_indicols(p);
+
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, &empty_cont_inf);
+    std::vector<int_fast64_t> new_cols = {0,1,4,5};
+    float Y[n];
+    for (int i = 0; i < n; i++) {
+        Y[i] = g_random_double()*g_random_int_range(0, 100);
+    }
+    const char* log_file = "test.log";
+    Lasso_Result lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
+        -1, 0.00000001, 100,
+        500, true, 1.01,
+        NONE, NULL, 0,
+        100, log_file, 3, false, false, true, &empty_cont_inf);
+    
+    for (auto main_id : lr.indi.skip_main_col_ids) {
+        printf("skipped main col: %ld as a duplicate\n", main_id);
+    }
+    for (auto pair_id : lr.indi.skip_pair_ids) {
+        auto pair = val_to_pair(pair_id, p);
+        printf("skipped pair col: %ld(%ld,%ld) as a duplicate\n", pair_id, std::get<0>(pair), std::get<1>(pair));
+    }
+    for (auto triple_id : lr.indi.skip_triple_ids) {
+        auto triple = val_to_triplet(triple_id, p);
+        printf("skipped triple col: %ld(%ld,%ld,%ld) as a duplicate\n", triple_id, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple));
+    }
+    g_assert_false(lr.indi.skip_main_col_ids[0]);
+    g_assert_false(lr.indi.skip_main_col_ids[1]);
+    g_assert_false(lr.indi.skip_main_col_ids[2]);
+    g_assert_false(lr.indi.skip_main_col_ids[3]);
+    g_assert_false(lr.indi.skip_main_col_ids[4]);
+    g_assert_true(lr.indi.skip_main_col_ids[5]);
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(0));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(1));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(2));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(3));
+    // g_assert_false(lr.indi.skip_main_col_ids.contains(4));
+    // g_assert_true(lr.indi.skip_main_col_ids.contains(5));
+    
+    auto sanity_check = [&]() {
+        for (auto hash_hash_colset : lr.indi.cols_for_hash) {
+            XXH64_hash_t hash_high64 = hash_hash_colset.first;
+            for (auto hash_colset : hash_hash_colset.second) {
+                XXH64_hash_t hash_low64 = hash_colset.first;
+                robin_hood::unordered_flat_set<int_fast64_t> colset = hash_colset.second;
+                int_fast64_t first_col_id = -1;
+                for (auto tmp : colset) {
+                    first_col_id = tmp;
+                    break;
+                }
+                // printf("hash: %ld, %ld\n", hash_high64, hash_low64);
+                if (first_col_id == -1)
+                    continue;
+                g_assert_true(first_col_id >= 0);
+                auto first_col = get_col_by_id(sm.Xu, first_col_id);
+                for (auto col_id : colset) {
+                    printf("checking claim that cols %ld,% ld match\n", first_col_id, col_id);
+                    auto this_col = get_col_by_id(sm.Xu, col_id);
+                    g_assert_true(check_cols_match(first_col, this_col));
+                }
+            }
+        }
+        for (auto pair_id : lr.indi.skip_pair_ids) {
+            auto pair_cols = val_to_pair(pair_id, sm.p);
+            printf("checking pair %ld,%ld really is a duplicate\n", std::get<0>(pair_cols), std::get<1>(pair_cols));
+            auto this_col = get_col_by_id(sm.Xu, pair_id);
+            XXH128_hash_t this_col_hash = XXH3_128bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash.high64][this_col_hash.low64];
+
+            int_fast64_t first_col_id = -1;
+            for (auto tmp : cols_matching_hash) {
+                if (tmp != pair_id) {
+                    first_col_id = tmp;
+                    break;
+                }
+            }
+            g_assert_true(first_col_id >= 0);
+            auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
+            printf("checking claim that cols %ld,% ld(%ld,%ld) match\n", first_col_id, pair_id, std::get<0>(pair_cols), std::get<1>(pair_cols));
+            g_assert_true(check_cols_match(this_col, first_hash_col));
+        }
+        for (auto triple_id : lr.indi.skip_triple_ids) {
+            auto triple_cols = val_to_triplet(triple_id, sm.p);
+            printf("checking triple %ld(%ld,%ld,%ld) really is a duplicate\n", triple_id, std::get<0>(triple_cols), std::get<1>(triple_cols), std::get<2>(triple_cols));
+            auto this_col = get_col_by_id(sm.Xu, triple_id);
+            XXH128_hash_t this_col_hash = XXH3_128bits(&this_col[0], this_col.size()*sizeof(int_fast64_t));
+            auto cols_matching_hash = lr.indi.cols_for_hash[this_col_hash.high64][this_col_hash.low64];
+
+            int_fast64_t first_col_id = -1;
+            for (auto tmp : cols_matching_hash) {
+                if (tmp != triple_id) {
+                    first_col_id = tmp;
+                    break;
+                }
+            }
+            g_assert_true(first_col_id >= 0);
+            auto first_hash_col = get_col_by_id(sm.Xu, first_col_id);
+            printf("checking claim that cols %ld,% ld(%ld,%ld,%ld) match\n", first_col_id, triple_id, std::get<0>(triple_cols), std::get<1>(triple_cols), std::get<2>(triple_cols));
+            g_assert_true(check_cols_match(this_col, first_hash_col));
+        }
+        robin_hood::unordered_flat_map<int_fast64_t, int_fast64_t> seen_hashes;
+        for (auto beta : lr.regularized_result.beta1) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
+            printf("checking assigned-val col %ld is not a duplicate = %.2f\n", val, beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+        for (auto beta : lr.regularized_result.beta2) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
+            auto pair = val_to_pair(val, sm.p);
+            printf("checking assigned-val col %ld(%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(pair), std::get<1>(pair), beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+        for (auto beta : lr.regularized_result.beta3) {
+            if (beta.second == 0.0)
+                continue;
+            int_fast64_t val = beta.first;
+            auto col = get_col_by_id(sm.Xu, val);
+            int_fast64_t hash = XXH64(&col[0], col.size()*sizeof(int_fast64_t), 0);
+            auto triple = val_to_triplet(val, sm.p);
+            printf("checking assigned-val col %ld(%ld,%ld,%ld) = %.2f is not a duplicate\n", val, std::get<0>(triple), std::get<1>(triple), std::get<2>(triple), beta.second);
+            if (seen_hashes.contains(hash)) {
+                printf("already seen this hash for col %ld\n", seen_hashes[hash]);
+            }
+            g_assert_false(seen_hashes.contains(hash));
+            seen_hashes[hash] = val;
+        }
+    };
+    
+    sanity_check();
+    free_lasso_result(lr);
+    
+    // re-run with 'trivial-3way' test Y.
+    robin_hood::unordered_map<int_fast64_t, float> correct_beta;
+    correct_beta[0] = 2.3;
+    correct_beta[pair_to_val(std::make_tuple(0, 3), p)] = 5;
+    correct_beta[triplet_to_val(std::make_tuple(0, 1, 2), p)] = -14.6;
+    // val_to_triplet()
+
+    for (int_fast64_t i = 0; i < n; i++) {
+        Y[i] = 0.0;
+    }
+    for (int_fast64_t i = 0; i < n; i++) {
+        for (int_fast64_t j = 0; j < p; j++) {
+            if (xm[j][i] != 0) {
+                for (int_fast64_t j2 = j; j2 < p; j2++) {
+                    if (xm[j2][i] != 0) {
+                        for (int_fast64_t j3 = j2; j3 < p; j3++) {
+                            if (xm[j3][i] != 0) {
+                                float cb = correct_beta[triplet_to_val(std::make_tuple(j, j2, j3), p)];
+                                if (cb != 0.0) {
+                                    printf("Y[%ld] +=  %f (%ld,%ld,%ld)\n", i, cb, j, j2, j3);
+                                    Y[i] += cb;
+                                }
+                            }
+                        }
+                        Y[i] += correct_beta[pair_to_val(std::make_tuple(j, j2), p)];
+                    }
+                }
+                Y[i] += correct_beta[j];
+            }
+        }
+    }
+    
+    lr = simple_coordinate_descent_lasso(sm.xmat, Y, sm.n, sm.p,
+        -1, 0.00000001, 100,
+        500, true, 1.01,
+        NONE, NULL, 0,
+        100, log_file, 3, false, false, true, &empty_cont_inf);
+    printf("Beta values found:\n");
+    printf("beta 1:\n");
+    print_beta_set(&lr.regularized_result.beta1, p);
+    printf("beta 2:\n");
+    print_beta_set(&lr.regularized_result.beta2, p);
+    printf("beta 3:\n");
+    print_beta_set(&lr.regularized_result.beta3, p);
+    sanity_check();
+
+    free_row_set(new_row_set);
+    for (int_fast64_t i = 0; i < NumCores; i++) {
+        free(thread_caches[i].col_i);
+        free(thread_caches[i].col_j);
+    }
+    free_simple_matrix(sm);
+    free_indicols(indi);
+    free_lasso_result(lr);
 }
 
 static struct pruning_test_setup_details accuracy_setup = {
@@ -2098,37 +2584,28 @@ static struct pruning_test_setup_details bigger_setup = {
 
 int main(int argc, char* argv[])
 {
-    initialise_static_resources();
+    initialise_static_resources(-1);
     setlocale(LC_ALL, "");
     g_test_init(&argc, &argv, NULL);
 
     g_test_add_func("/func/test-read-y-csv", test_read_y_csv);
     g_test_add_func("/func/test-read-x-csv", test_read_x_csv);
     g_test_add_func("/func/test-soft-threshol", test_soft_threshold);
-    g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL,
-        update_beta_fixture_set_up, test_update_beta_cyclic,
-        update_beta_fixture_tear_down);
-    g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
+    g_test_add_func("/func/test-Xc_from_X", test_Xc_from_X);
     g_test_add_func("/func/test-compressed-main-X", test_compressed_main_X);
-    g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, FALSE,
-        test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_int,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture,
-        TRUE, test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_int,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture,
-        TRUE, test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_vs_glmnet,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
+    g_test_add_func("/func/test-Xc-encoding", check_Xc_encoding);
     g_test_add_func("/func/test-permutation", check_permutation);
     g_test_add("/func/test-branch-pruning", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
         pruning_fixture_set_up, check_branch_pruning_accuracy,
+        pruning_fixture_tear_down);
+    g_test_add("/func/test-continuous-ones", UpdateFixture, &accuracy_setup,
+        pruning_fixture_set_up, check_continous_ones,
+        pruning_fixture_tear_down);
+    g_test_add("/func/test-max_interaction_distance", UpdateFixture, &accuracy_setup,
+        pruning_fixture_set_up, check_max_interaction_distance,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-faster", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning_faster,
@@ -2143,9 +2620,11 @@ int main(int argc, char* argv[])
     g_test_add_func("/func/test_tuple_vals", test_tuple_vals);
     g_test_add_func("/func/test_row_list_without_columns", test_row_list_without_columns);
     g_test_add_func("/func/test_save_restore_log", save_restore_log);
+    g_test_add_func("/func/test_simple_indistinguishable_cols", test_simple_indistinguishable_cols);
     g_test_add("/func/test-adcal", UpdateFixture, 0,
         pruning_fixture_set_up, test_adcal,
         pruning_fixture_tear_down);
+    g_test_add_func("/func/test_small_continuous", check_small_continuous);
 
     return g_test_run();
 }

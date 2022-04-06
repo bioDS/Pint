@@ -1,2 +1,2 @@
 PKG_CXXFLAGS = -std=c++14 -fopenmp -Ofast -ffast-math -g -DR_PACKAGE -g
-PKG_LIBS = -lgomp
+PKG_LIBS = -lgomp -lxxhash

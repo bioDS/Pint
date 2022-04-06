@@ -10,6 +10,7 @@ XMatrix read_x_csv(const char* fn, int_fast64_t n, int_fast64_t p)
 
     std::ifstream in_file(fn, std::ifstream::in);
 
+    bool printed_eof_err = false;
     int_fast64_t col = 0, row = 0, actual_cols = p;
     int_fast64_t readline_result = 0;
     for (std::string buf; std::getline(in_file, buf); ) {
@@ -37,8 +38,10 @@ XMatrix read_x_csv(const char* fn, int_fast64_t n, int_fast64_t p)
             if (++col >= p)
                 break;
         }
-        if (buf[i] != '\n')
+        if (buf[i] != '\n' && !printed_eof_err) {
             fprintf(stderr, "reached end of file without a newline\n");
+            printed_eof_err = true;
+        }
         if (col < actual_cols)
             actual_cols = col;
         col = 0;

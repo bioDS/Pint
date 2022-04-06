@@ -3,6 +3,7 @@
 
 #include "flat_hash_map.hpp"
 #include "robin_hood.h"
+#include <cstdint>
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
@@ -10,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 
 // #include <CL/opencl.h>
 #include <math.h>
@@ -17,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <xxhash.h>
 
 #ifdef R_PACKAGE
 extern "C" {
@@ -34,6 +37,7 @@ typedef struct {
     int_fast64_t* col_i;
     int_fast64_t* col_j;
     robin_hood::unordered_flat_map<int_fast64_t, float> lf_map;
+    robin_hood::unordered_flat_map<int_fast64_t, XXH3_state_t*> hash_with_col;
 } Thread_Cache;
 typedef struct {
     int_fast64_t val;
@@ -53,7 +57,7 @@ enum LOG_LEVEL {
     NONE,
 };
 
-struct X_uncompressed {
+typedef struct {
     int_fast64_t* host_X;
     int_fast64_t* host_col_nz;
     int_fast64_t* host_col_offsets;
@@ -63,7 +67,7 @@ struct X_uncompressed {
     int_fast64_t n;
     int_fast64_t p;
     size_t total_size;
-};
+} X_uncompressed;
 struct AS_Properties {
     int_fast64_t was_present : 1;
     int_fast64_t present : 1;
@@ -90,6 +94,33 @@ struct OpenCL_Setup {
 /*
  * Fits 6 to a cache line. As int_fast64_t as schedule is static, this should be fine.
  */
+// typedef struct {
+//     int_fast64_t a : 64;
+//     int_fast64_t b : 64;
+// } int_128;
+
+struct continuous_info {
+    bool use_cont;
+    std::vector<float>* col_real_vals;
+    float* col_max_vals;
+};
+void free_continuous_info(struct continuous_info ci);
+
+typedef struct {
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<int_fast64_t>>> cols_for_hash;
+    // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>> defining_co;
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> main_col_hashes;
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> pair_col_hashes;
+    // robin_hood::unordered_flat_set<int_fast32_t> skip_main_col_ids;
+    std::vector<bool> skip_main_col_ids;
+    robin_hood::unordered_flat_set<int_fast64_t> skip_pair_ids;
+    robin_hood::unordered_flat_set<int_fast64_t> skip_triple_ids;
+    robin_hood::unordered_flat_set<int_fast64_t> seen_together;
+    robin_hood::unordered_flat_set<uint_fast32_t>* seen_with_main;
+    robin_hood::unordered_flat_set<uint_fast64_t>* seen_pair_with_main;
+    // robin_hood::unordered_flat_set<int_fast64_t> found_hashes;
+    // int_fast64_t total_found_hash_count;
+} IndiCols;
 
 #include "s8b.h"
 #include "sparse_matrix.h"
@@ -115,6 +146,7 @@ struct AS_Entry {
     S8bCol col;
     float *last_rowsum;
     float last_max;
+    std::vector<float> real_vals;
 };
 
 typedef struct {
@@ -130,7 +162,11 @@ typedef struct {
     float final_lambda;
     float regularized_intercept;
     float unbiased_intercept;
+    IndiCols indi;
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> indist_from_val;
 } Lasso_Result;
+
+void free_lasso_result(Lasso_Result lr);
 
 typedef struct {
     XMatrixSparse Xc;
@@ -141,13 +177,15 @@ typedef struct {
     Beta_Value_Sets* beta_sets;
     float* last_max;
     bool* wont_update;
+    std::vector<bool>* seen_before;
     int_fast64_t p;
     int_fast64_t p_int;
     XMatrixSparse X2c;
     float* Y;
     float* max_int_delta;
-    struct X_uncompressed Xu;
+    X_uncompressed Xu;
     float intercept;
+    int_fast64_t max_interaction_distance;
 } Iter_Vars;
 
 #include "csv.h"
@@ -160,7 +198,7 @@ typedef struct {
 int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 int_pair get_num(int_fast64_t num, int_fast64_t p);
 void free_static_resources();
-void initialise_static_resources();
+void initialise_static_resources(int_fast64_t num_cores);
 int_fast64_t get_p_int(int_fast64_t p, int_fast64_t max_interaction_distance);
 int_pair* get_all_nums(int_fast64_t p, int_fast64_t max_interaction_distance);
 
@@ -203,7 +241,7 @@ extern float halt_error_diff;
 extern float max_rowsums[NUM_MAX_ROWSUMS];
 extern float max_cumulative_rowsums[NUM_MAX_ROWSUMS];
 extern int_pair* cached_nums;
-extern int_fast64_t VERBOSE;
+extern bool VERBOSE;
 extern float total_sqrt_error;
 
 #endif

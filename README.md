@@ -7,7 +7,7 @@ This repo is an installable R package, you can install a locally cloned copy wit
 Alternatively, install directly from github with:
 ```
 library(devtools)
-install_github("bioDS/Pint")
+install_github("bioDS/Pint", ref = "v1.0")
 ```
 
 This package requires a 64-bit compiler. If you find R attempting to install a 32 bit version as well and failing (this typically happens on Windows), use `install_github("bioDS/Pint", INSTALL_opts=c("--no-multiarch"))`
@@ -26,27 +26,32 @@ output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1,
 
 `lambda_min` : optionally set the final value of lambda. If $ < 0$ the default value of $ϕ⁻¹(\frac{0.95}{2 \times p})$ is used.
 
-`frac_overlap_allowed` : currently not used
-
 `halt_error_diff` : The loss-threshold to determine when an iteration is complete.
 
-`max_interaction_distance` : currently not used
+`max_interaction_distance` : The maximum distance between any two components of an interaction effect. Set to '-1' for no limit (default).
 
-`used_adaptive_calibration` : currently not used
+`max_nz_beta` : If >=0, halt after this many $\beta$ values are non-zero (note the the current $\lambda$ iteration will be completed first, so more values may be set). '-1' implies no limit.
 
-`max_nz_beta` : If >=0, halt after this many $\beta$ values are non-zero (note the the current $\lambda$ iteration will be completed first, so more values may be set).
-
-`max_lambdas` : maximum number of iterations (i.e. number of $\lambda$ values).
-
-`log_filename` : name of file to save current progress in case the process needs to be interrupted and resumed.
-
-`log_level` : options are 'none' (no logging), and 'lambda' where progress is saved after each $\lambda$ iteration is completed. N.B. This has not been thoroughly tested.
+`max_lambdas` : maximum number of iterations (i.e. number of $\lambda$ values). Initial iterations in which no $\beta$ values are changed do not count.
 
 `depth` : Maximum number of columns that may be included in an interaction. If depth=1, only main effects (columns on their own) are included. If depth=2, pairwise interactions are also included. If depth=3 main effects, pairwise and three-way interactions are included.
 
 `estimate_unbiased` : once the non-zero $\beta$ values have been determined, optionally re-fit with $\lambda=0$ to avoid the minimising effect on $\beta$ values, while still keeping the result sparse.
 
-`use_intercept` : If True, allow a non-zero intercept.
+`use_intercept` : If true, allow a non-zero intercept.
+
+`approximate_hierarchy` : Approximates a strong hierarchy by first fitting main effects only, then fitting interactions using only columns that had non-zero main effects. This can considerably speed up fitting interactions on large data sets.
+
+`check_duplicates` : Identify and report any duplicate columns or interactions, and only assign an effect to the one of them.
+
+### Experimental Features
+A number of options have been implemented, but not thoroughly tested. These are:
+
+`continuous_X` : If true, use floating point values for X. If false, all non-zero values in X are treated as 1. Note that this currently disables duplicate column detection.
+
+`log_filename` : name of file to save current progress in case the process needs to be interrupted and resumed.
+
+`log_level` : options are 'none' (no logging), and 'lambda' where progress is saved after each $\lambda$ iteration is completed.
 
 ## Return Values
 
@@ -58,11 +63,13 @@ More precisely:
 
 `intercept` : (if `use_intercept=TRUE`) the intercept value.
 
-`main_effects` : $i, \beta_i$ for individual columns $X_i$
+`main` : A data frame `effects` containing $i, \beta_i$ for individual columns $X_i$, and a list `eqiuvalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
 
-`pairwise_effects` (if `depth` $\geq 2$) $i,j, \beta_{i,j}$ for $X_i \circ X_j$
+`pairwise` (if `depth` $\geq 2$) A data frame `effects` containing $i,j, \beta_{i,j}$ for $X_i \circ X_j$ and a list `equivalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
 
-`triple_effects` (if `depth` $\geq 3$) $i,j,k, \beta_{i,j,k}$ for $X_i \circ X_j \circ X_k$
+
+`triple` (if `depth` $\geq 3$) A data frame `effects` containing $i,j,k, \beta_{i,j,k}$ for $X_i \circ X_j \circ X_k$ and a list `equivalent` of the columns/interactions that were indistinguishable from each (if check_duplicates was enabled).
+
 
 `estimate_unbiased` : (if `estimate_unbiased=TRUE`) $\beta_i, \beta_{i,j}, \beta_{i,j,k}$ fit with $\lambda = 0$, including only the effects that are non-zero for $lambda = $ final_lambda.
 For an estimate of the best fit, while excluding columns lasso regression sets to zero.

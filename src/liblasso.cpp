@@ -16,7 +16,7 @@ int_fast64_t total_updates_entries = 0;
 int_fast64_t zero_updates = 0;
 int_fast64_t zero_updates_entries = 0;
 
-int_fast64_t VERBOSE = 1;
+bool VERBOSE;
 int_fast64_t* colsum;
 float* col_ysum;
 
@@ -40,10 +40,17 @@ int_fast64_t min(int_fast64_t a, int_fast64_t b)
 int_pair* cached_nums = NULL;
 
 // TODO: the compiler should really do this
-void initialise_static_resources()
+void initialise_static_resources(int_fast64_t use_cores)
 {
-    NumCores = omp_get_num_procs();
-    printf("using %ld cores\n", NumCores);
+    if (use_cores < 1) {
+        NumCores = omp_get_num_procs();
+    }
+    else {
+        NumCores = use_cores;
+        omp_set_num_threads(NumCores);
+    }
+    if (VERBOSE)
+        printf("using %ld cores\n", NumCores);
 }
 
 void free_static_resources()
@@ -64,7 +71,8 @@ int_fast64_t get_p_int(int_fast64_t p, int_fast64_t dist)
             + dist * (dist + 1) / 2;
     }
 
-    printf("p: %ld, dist: %ld, interactions = %ld\n", p, dist, p_int);
+    if (VERBOSE)
+        printf("p: %ld, dist: %ld, interactions = %ld\n", p, dist, p_int);
     return p_int;
 }
 
@@ -145,4 +153,9 @@ int_fast64_t** X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p)
         }
     }
     return X2;
+}
+
+void free_continuous_info(struct continuous_info ci) {
+    delete[] ci.col_real_vals;
+    delete[] ci.col_max_vals;
 }

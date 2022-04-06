@@ -14,7 +14,7 @@ if [ $isdiff -eq 1 ]; then
 	git reset --quiet --soft HEAD~1
 fi
 
-test_output=$(ninja -C build test)
+test_output=$(meson test -C build --num-processes 1)
 coverage_output=$(ninja -C build coverage)
 
 ok=$(echo $test_output | grep  "Ok:\s\s*[0-9][0-9]*" -o | grep "[0-9][0-9]*" -o)

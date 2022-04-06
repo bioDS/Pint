@@ -1,3 +1,6 @@
+#ifndef s8b_h
+#define s8b_h
+
 typedef struct S8bWord {
     unsigned int selector : 4;
     unsigned long long values: 60;
@@ -34,3 +37,5 @@ const static unsigned short selector_given_count[241] = {15, 15, 14, 13, 12, 11,
 
 S8bWord to_s8b(int_fast64_t count, int_fast64_t* vals);
 S8bCol col_to_s8b_col(int_fast64_t size, int_fast64_t* col);
+
+#endif

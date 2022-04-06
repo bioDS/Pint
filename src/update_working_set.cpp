@@ -1,6 +1,9 @@
 #include "robin_hood.h"
+#include <cstdint>
 #include <omp.h>
 #include <stdlib.h>
+#include <tuple>
+#include <xxhash.h>
 
 #include "flat_hash_map.hpp"
 #include "liblasso.h"
@@ -60,24 +63,15 @@ bool active_set_present(Active_Set* as, int_fast64_t value)
     return (entries->contains(value) && entries->at(value).present);
 }
 
-void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, int_fast64_t len)
+void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, int_fast64_t len, std::vector<float> vals)
 {
-    // if (value == pair_to_val(std::make_tuple(interesting_col, interesting_col),
-    // 100)) {
-    //  printf("appending interesting col %ld to as\n", value);
-    //}
-    // printf("as, adding val %ld as ", value);
     robin_hood::unordered_flat_map<int_fast64_t, AS_Entry>* entries;
     int_fast64_t p = as->p;
     if (value < p) {
-        // if (VERBOSE && value == interesting_col)
-        //    printf("[%ld < %ld]: main\n", value, p);
         entries = &as->entries1;
     } else if (value < p * p) {
-        // printf("[%ld < %ld]: pair\n", value, p*p);
         entries = &as->entries2;
     } else {
-        // printf("triple\n");
         entries = &as->entries3;
     }
     if (entries->contains(value)) {
@@ -94,6 +88,7 @@ void active_set_append(Active_Set* as, int_fast64_t value, int_fast64_t* col, in
         e.present = TRUE;
         e.was_present = TRUE;
         e.col = col_to_s8b_col(len, col);
+        e.real_vals = vals;
         int_fast64_t i = as->length;
         entries->insert_or_assign(value, e);
     }
@@ -111,19 +106,11 @@ void active_set_remove(Active_Set* as, int_fast64_t value)
     } else {
         entries = &as->entries3;
     }
-    entries->at(value).present = FALSE; // TODO does this work?
-    as->length--;
+    if (entries->contains(value)) {
+        entries->at(value).present = FALSE; // TODO does this work?
+        as->length--;
+    }
 }
-
-// int active_set_get_index(Active_Set* as, int_fast64_t index)
-//{
-//    struct AS_Entry* e = &as->entries[index];
-//    if (e->present) {
-//        return e->val;
-//    } else {
-//        return -INT_MAX;
-//    }
-//}
 
 typedef struct IC_Entry {
     bool skipped_this_iter;
@@ -132,12 +119,10 @@ typedef struct IC_Entry {
     bool was_present;
     float last_max;
     float* last_rowsum;
-    // robin_hood::unordered_flat_map<int_fast64_t, float> last_rowsum;
     S8bCol col;
+    float col_max;
 } IC_Entry;
-// static robin_hood::unordered_flat_map<int_fast64_t, IC_Entry> inter_cache;
 static IC_Entry* inter_cache = NULL;
-// static bool inter_cache_init_done = false;
 void free_inter_cache(int_fast64_t p)
 {
     if (NULL == inter_cache)
@@ -145,7 +130,6 @@ void free_inter_cache(int_fast64_t p)
 
     int_fast64_t p_int = p * (p + 1) / 2;
     for (int_fast64_t i = 0; i < p_int; i++) {
-        // if (NULL != inter_cache[i].last_rowsum) {
         if (inter_cache[i].was_present) {
             free(inter_cache[i].last_rowsum);
             free(inter_cache[i].col.compressed_indices);
@@ -156,12 +140,8 @@ void free_inter_cache(int_fast64_t p)
 }
 
 void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float last_max,
-    int_fast64_t* col, int_fast64_t col_len)
+    int_fast64_t* col, int_fast64_t col_len, float col_max)
 {
-    // if (col_len < 100) {
-    //    inter_cache[k].skip = true;
-    //    return;
-    //}
     if (!inter_cache[k].was_present) {
         S8bCol comp_col = col_to_s8b_col(col_len, col);
         inter_cache[k].last_rowsum = (float*)malloc(col_len * sizeof *rowsum);
@@ -169,32 +149,24 @@ void update_inter_cache(int_fast64_t k, int_fast64_t n, float* rowsum, float las
         inter_cache[k].present = true;
         inter_cache[k].was_present = true;
         inter_cache[k].skipped_this_iter = false;
+        inter_cache[k].col_max = col_max;
     } else if (!inter_cache[k].present) {
         inter_cache[k].present = true;
         inter_cache[k].skipped_this_iter = false;
     }
     inter_cache[k].last_max = last_max;
-    // memcpy(inter_cache[k].last_rowsum, rowsum, n * sizeof *rowsum);
-    for (int_fast64_t i = 0; i < col_len; i++) {
-        int_fast64_t entry = col[i];
-        if (entry > n) {
-            fprintf(stderr, "broken entry %ld in inter %ld\n", entry, k);
-            exit(EXIT_FAILURE);
-        }
-        inter_cache[k].last_rowsum[i] = rowsum[entry];
-    }
 }
+
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
 char update_working_set_cpu(struct XMatrixSparse Xc,
     struct row_set relevant_row_set,
     Thread_Cache* thread_caches, Active_Set* as,
-    struct X_uncompressed Xu, float* rowsum,
+    X_uncompressed Xu, float* rowsum,
     bool* wont_update, int_fast64_t p, int_fast64_t n, float lambda,
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
-    float* last_max, int_fast64_t depth)
+    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance, const bool check_duplicates, struct continuous_info* ci)
 {
     int_fast64_t* host_X = Xu.host_X;
     int_fast64_t* host_col_nz = Xu.host_col_nz;
@@ -204,12 +176,13 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     int_fast64_t total = 0, skipped = 0;
     int_fast64_t p_int = p * (p + 1) / 2;
     int_fast64_t int2_used = 0, int2_skipped = 0;
+    const std::vector<bool> skip_main_col_ids = indicols->skip_main_col_ids;
 
     if (depth > 2) {
         // TODO: quite a hack
         if (unlikely(NULL == inter_cache)) {
             // init inter cache
-            inter_cache = (IC_Entry*)calloc(p_int, sizeof(IC_Entry)); // TODO: free
+            inter_cache = (IC_Entry*)calloc(p_int, sizeof(IC_Entry));
             for (int_fast64_t i = 0; i < p_int; i++) {
                 inter_cache[i].present = false;
                 inter_cache[i].was_present = false;
@@ -222,182 +195,228 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
 
     int_fast64_t total_inter_cols = 0;
     int_fast64_t correct_k = 0;
-#pragma omp parallel for reduction(+ \
-                                   : total_inter_cols, total, skipped, int2_used, int2_skipped)
+    int_fast64_t main_cols_used = 0;
+    int_fast64_t skipped_pair_cols = 0, used_pair_cols = 0;
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>>> thread_new_cols_for_hash[NumCores];
+    robin_hood::unordered_flat_map<XXH64_hash_t, robin_hood::unordered_flat_set<XXH64_hash_t>> thread_new_pair_hashes[NumCores];
+    robin_hood::unordered_flat_set<int64_t> thread_new_skip_pair_ids[NumCores];
+    robin_hood::unordered_flat_set<int64_t> thread_new_skip_triple_ids[NumCores];
+    std::vector<int_fast64_t> thread_seen_together[NumCores];
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> thread_seen_with_main[NumCores];
+    robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> thread_seen_pair_with_main[NumCores];
+#pragma omp parallel for schedule(static) reduction(+ \
+                                   : total_inter_cols, total, skipped, int2_used, int2_skipped, main_cols_used, skipped_pair_cols, used_pair_cols)
     for (int_fast64_t main_i = 0; main_i < count_may_update; main_i++) {
+        const int_fast64_t thread_num = omp_get_thread_num();
         // use Xc to read main effect
-        Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
+        int_fast64_t main = updateable_items[main_i];
+        if (check_duplicates && skip_main_col_ids[main]) {
+            continue;
+        }
+        main_cols_used++;
+        Thread_Cache thread_cache = thread_caches[thread_num];
         int_fast64_t* col_i_cache = thread_cache.col_i;
         int_fast64_t* col_j_cache = thread_cache.col_j;
-        int_fast64_t main = updateable_items[main_i];
         float max_inter_val = 0;
         int_fast64_t inter_cols = 0;
-        robin_hood::unordered_flat_map<int_fast64_t, float> sum_with_col;
-        // robin_hood::unordered_flat_map<int_fast64_t, float> sum_with_col =
-        // thread_cache.lf_map; robin_hood::unordered_flat_map<int_fast64_t, >
+        robin_hood::unordered_flat_map<int_fast64_t, float> sum_with_col; //TODO: set initial length, maybe reuse?
+        robin_hood::unordered_flat_map<int_fast64_t, XXH3_state_t*> hash_with_col;
 
         int_fast64_t main_col_len = Xu.host_col_nz[main];
         int_fast64_t* column_entries = &Xu.host_X[Xu.host_col_offsets[main]];
 
-        // bool checked_interesting_cols = false;
-        // if (main == interesting_col1) {
-        //    printf("checking main col %ld\n", main);
-        //}
-
         for (int_fast64_t entry_i = 0; entry_i < main_col_len; entry_i++) {
             int_fast64_t row_main = column_entries[entry_i];
+
+            float main_val = 1.0;
+            if (ci->use_cont)
+                main_val = ci->col_real_vals[main][entry_i];
+
             float rowsum_diff = rowsum[row_main];
-            sum_with_col[main] += rowsum_diff;
+            if (ci->use_cont)
+                sum_with_col[main] += main_val*rowsum_diff; //TODO: slow
+            else
+                sum_with_col[main] += rowsum_diff; //TODO: slow
             if (depth > 1) {
                 int_fast64_t ri = 0;
-                while (ri < relevant_row_set.row_lengths[row_main] && relevant_row_set.rows[row_main][ri] <= main)
-                    ri++;
-                for (; ri < relevant_row_set.row_lengths[row_main]; ri++) {
+                int_fast64_t jump_dist = relevant_row_set.row_lengths[row_main]/2;
+                const int_fast64_t* row = relevant_row_set.rows[row_main];
+                int_fast64_t tmp = row[ri];
+                while (tmp != main) {
+                    if (tmp < main)
+                        ri += jump_dist;
+                    else if (tmp > main)
+                        ri -= jump_dist;
+                    else if (tmp == main)
+                        break;
+                    jump_dist = std::max((int_fast64_t)1,jump_dist/2);
+                    tmp = row[ri];
+                }
+                ri++;
+
+                const int_fast64_t row_length = relevant_row_set.row_lengths[row_main];
+                for (; ri < row_length; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
-                    // printf("checking pairwise %ld,%ld\n", main, inter); //TOOD:
-                    // maintain separate lists so we can solve them in order
-                    sum_with_col[inter] += rowsum_diff;
-                    // if (!checked_interesting_cols && main == interesting_col1 && inter
-                    // == interesting_col2) {
-                    //    // printf(" adding %f to sum %ld,%ld. new total: %f\n",
-                    //    rowsum_diff, main, inter, sum_with_col[inter]);
-                    //    checked_interesting_cols = true;
-                    //}
+                    float inter_val = 1.0;
+                    if (ci->use_cont)
+                        inter_val = relevant_row_set.row_real_vals[row_main][ri];
+                    const bool inter_is_new = new_cols->contains(inter);
+                    if (check_duplicates && skip_main_col_ids[inter]) //TODO: maybe slow
+                        continue;
+                    if (inter - main > max_interaction_distance)
+                        break;
+                    if (ci->use_cont)
+                        sum_with_col[inter] += main_val*inter_val*rowsum_diff; //TODO: slow
+                    else
+                        sum_with_col[inter] += rowsum_diff; //TODO: slow
+                    if (check_duplicates) {
+                        if (!indicols->seen_with_main[main].contains(inter)) { //TODO: slow
+                           if (!hash_with_col.contains(inter)) {
+                               hash_with_col[inter] = XXH3_createState();
+                               XXH3_128bits_reset(hash_with_col[inter]);
+                           }
+                           XXH3_128bits_update(hash_with_col[inter], &row_main, sizeof(int_fast64_t));
+                        }
+                    }
                     if (depth > 2) {
+                        // It's apparently faster to always update the pairwise hash without checking this, so we put the check here.
+                        int_fast64_t inter_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, inter), p);
+                        if (check_duplicates && indicols->skip_pair_ids.contains(inter_id)) {
+                           skipped_pair_cols++;
+                           continue;
+                        } else {
+                           used_pair_cols++;
+                        }
                         int_fast64_t k = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + inter;
                         auto check_inter_cache = [&](int_fast64_t k) -> bool {
-                            // return true;
-                            // bool res = as_wont_update(Xu, lambda, inter_cache[k].last_max,
-                            // inter_cache[k].last_rowsum, rowsum, inter_cache[k].col,
-                            // thread_caches[omp_get_thread_num()].col_j); return res;
                             if (!inter_cache[k].present)
                                 return true;
                             if (inter_cache[k].skipped_this_iter)
                                 return false;
                             if (inter_cache[k].checked_this_iter)
                                 return true;
-                            // if (relevant_row_set.row_lengths[row_main] - ri <
-                            // inter_cache[k].col.nz)
-                            //    return true;
                             bool res = !as_wont_update(
                                 Xu, lambda, inter_cache[k].last_max,
                                 inter_cache[k].last_rowsum, rowsum, inter_cache[k].col,
-                                thread_caches[omp_get_thread_num()].col_j);
+                                thread_caches[thread_num].col_j, inter_cache[k].col_max, ci->use_cont);
                             inter_cache[k].checked_this_iter = true;
                             if (!res) {
                                 inter_cache[k].skipped_this_iter = true;
                             }
                             return res;
                         };
-                        // int_fast64_t k = pair_to_val(std::make_tuple(main, inter), p);
-                        // if (!inter_cache.contains(k) || !as_wont_update(Xu, lambda,
-                        // inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum,
-                        // inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)) {
-                        // if (!inter_cache.contains(k) || !as_pessimistic_est(lambda,
-                        // rowsum, inter_cache[k].col)) { if (!inter_cache[k].present ||
-                        // !as_pessimistic_est(lambda, rowsum, inter_cache[k].col)) { if
-                        // (inter_cache[k].skip || !inter_cache[k].present ||
-                        // relevant_row_set.row_lengths[row_main] - ri <
-                        // inter_cache[k].col.nz || !as_wont_update(Xu, lambda,
-                        // inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum,
-                        // inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)) {
-                        // if (!inter_cache[k].present || !inter_cache[k].skipped_this_iter
-                        // && (relevant_row_set.row_lengths[row_main] - ri <
-                        // inter_cache[k].col.nz || !as_wont_update(Xu, lambda,
-                        // inter_cache[k].last_max, inter_cache[k].last_rowsum, rowsum,
-                        // inter_cache[k].col, thread_caches[omp_get_thread_num()].col_j)))
-                        // { if (true) { if (true) {
                         if (check_inter_cache(k)) {
                             int2_used++;
                             for (int_fast64_t ri2 = ri + 1;
                                  ri2 < relevant_row_set.row_lengths[row_main]; ri2++) {
                                 int_fast64_t inter2 = relevant_row_set.rows[row_main][ri2];
+                                float inter2_val = 1.0;
+                                if (ci->use_cont)
+                                    inter2_val = relevant_row_set.row_real_vals[row_main][ri2];
+                                if (inter2 - main > max_interaction_distance)
+                                    break;
+                                if (skip_main_col_ids[inter2])
+                                    continue;
                                 int_fast64_t inter_ind = pair_to_val(std::make_tuple(inter, inter2), p);
-                                // printf("checking triple %ld,%ld,%ld: diff %f\n", main, inter,
-                                // inter2, rowsum_diff);
-                                if (row_main == 0 && inter == 1 && inter2 == 2) {
-                                    // printf("interesting col ind == %ld", inter_ind);
+                                if (ci->use_cont)
+                                    sum_with_col[inter_ind] += main_val*inter_val*inter2_val*rowsum_diff;
+                                else
+                                    sum_with_col[inter_ind] += rowsum_diff;
+                                const int_fast64_t triplet_val = triplet_to_val(std::make_tuple(main, inter, inter2), p);
+                                if (check_duplicates) {
+                                    if (!indicols->seen_pair_with_main[main].contains(inter_ind)) {
+                                        if (!hash_with_col.contains(inter_ind)) {
+                                            hash_with_col[inter_ind] = XXH3_createState();
+                                            XXH3_128bits_reset(hash_with_col[inter_ind]);
+                                        }
+                                        XXH3_128bits_update(hash_with_col[inter_ind], &row_main, sizeof(int_fast64_t));
+                                    }
                                 }
-                                sum_with_col[inter_ind] += rowsum_diff;
-                                // if (main == interesting_col && inter == interesting_col) {
-                                //    // printf("appending %f to interesting col (%ld,%ld)\n",
-                                //    rowsum_diff, main, inter);
-                                //}
                             }
                         } else {
                             if (inter_cache[k].skipped_this_iter == true) {
                                 int2_skipped++;
                             }
-                            // inter_cache[k].skipped_this_iter = true;
                             int2_skipped++;
                         }
-                        // inter_cache[k].skipped_this_iter = true; // interestingly enough
-                        // this doesn't seem to break the results
                     }
                 }
             }
         }
 
         robin_hood::unordered_flat_map<int_fast64_t, float> last_inter_max;
-        // if (VERBOSE && main == interesting_col) {
-        //    printf("interesting column sum %ld: %f\n", main, sum_with_col[main]);
-        //}
-        // if (main == interesting_col1)
-        //    printf(" %ld sum with col %ld: %f\n", main, interesting_col2,
-        //    sum_with_col[interesting_col2]);
         inter_cols = sum_with_col.size();
         total_inter_cols += inter_cols;
-        auto curr_inter = sum_with_col.cbegin();
-        auto last_inter = sum_with_col.cend();
-        while (curr_inter != last_inter) {
-            int_fast64_t tuple_val = curr_inter->first;
-            float sum = std::abs(curr_inter->second);
-            //            if (VERBOSE && tuple_val == main && main == interesting_col)
-            //            {
-            //                printf("%ld,sum: %f > %f (lambda)?\n", main, sum,
-            //                lambda);
-            //            } else if (tuple_val < p) {
-            //                // printf("%ld,%ld, sum: %f > %f (lambda)?\n", main,
-            //                tuple_val, sum, lambda);
-            //            } else {
-            //#ifdef NOT_R
-            //                g_assert_true(tuple_val < p * p);
-            //#endif
-            //                // std::tuple<int_fast64_t,long> inter_pair_tmp =
-            //                val_to_pair(tuple_val, p);
-            //                // printf("%ld,%ld,%ld sum: %f > %f (lambda)?\n", main,
-            //                std::get<0>(inter_pair_tmp),
-            //                std::get<1>(inter_pair_tmp), sum, lambda);
-            //            }
+        if (check_duplicates) {
+            for (auto inter_hash: hash_with_col) {
+                int_fast64_t val = inter_hash.first;
+                XXH3_state_t* hash_state = inter_hash.second;
+
+                auto check_set = [&](auto* set, XXH128_hash_t value) {
+                    return set->contains(value.high64) && (*set)[value.high64].contains(value.low64);
+                };
+
+
+                XXH128_hash_t hash_value = XXH3_128bits_digest(hash_state);
+                XXH3_freeState(hash_state);
+                if (val < p) {
+                    auto pair_id = pair_to_val(std::make_tuple(main, val), p);
+                    if (!indicols->seen_pair_with_main[main].contains(val)) {
+                        thread_seen_with_main[thread_num][main].push_back(val);
+                        if (check_set(&indicols->pair_col_hashes, hash_value)
+                            || check_set(&indicols->main_col_hashes, hash_value) 
+                            || check_set(&thread_new_pair_hashes[thread_num], hash_value)) {
+                            thread_new_skip_pair_ids[thread_num].insert(pair_id);
+                        } else {
+                            thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(pair_id);
+                            thread_new_pair_hashes[thread_num][hash_value.high64].insert(hash_value.low64);
+                        }
+                    }
+                } else {
+                    // we're looking at a hash with a pair of other columns
+                    auto inter_pair = val_to_pair(val, p);
+                    auto triple_id = triplet_to_val(std::make_tuple(main, std::get<0>(inter_pair), std::get<1>(inter_pair)), p);
+                    thread_seen_pair_with_main[thread_num][main].push_back(val);
+                    if (check_set(&indicols->cols_for_hash, hash_value)
+                        || check_set(&thread_new_cols_for_hash[thread_num], hash_value)) {
+                        thread_new_skip_triple_ids[thread_num].insert(triple_id);
+                    } else {
+                        thread_new_cols_for_hash[thread_num][hash_value.high64][hash_value.low64].push_back(triple_id);
+                    }
+                }
+            }
+        }
+        for (auto curr_inter : sum_with_col) {
+            int_fast64_t tuple_val = curr_inter.first;
+            auto pair_id = pair_to_val(std::tuple<int_fast64_t, int_fast64_t>(main, tuple_val), p);
+            if (indicols->skip_pair_ids.contains(pair_id) || thread_new_skip_pair_ids[thread_num].contains(pair_id)) {
+                continue;
+            }
+            float sum = std::abs(curr_inter.second);
             max_inter_val = std::max(max_inter_val, sum);
-            // printf("testing inter %ld, sum is %ld\n", inter, sum_with_col[inter]);
             if (sum > lambda * total_sqrt_error) {
                 int_fast64_t a, b, c;
                 int_fast64_t k;
                 std::tuple<int_fast64_t, long> inter_pair = val_to_pair(tuple_val, p);
+                int inter_depth = 1;
                 if (tuple_val == main) {
                     a = main;
                     b = main; // TODO: unnecessary
                     c = main;
                     // k = pair_to_val(std::make_tuple(a, b), p);
                     k = main;
+                    if (skip_main_col_ids[k])
+                        continue;
                 } else if (tuple_val < p) {
+                    inter_depth = 2;
                     a = main;
                     b = tuple_val;
                     c = main; // TODO: unnecessary
                     k = pair_to_val(std::make_tuple(a, b), p);
-                    // if (a == interesting_col1 && b == interesting_col2)
-                    //    printf("%ld, %ld: sum %f\n", a, b, sum);
-                    // if (k < p) {
-                    //    printf("(%ld,%ld|%ld): k = %ld\n", a, b, p, k);
-                    //}
-#ifdef NOT_R
-                    g_assert_true(k >= p || k < p * p);
-#endif
+                    if (indicols->skip_pair_ids.contains(k) || thread_new_skip_pair_ids->contains(k))
+                        continue;
                 } else {
-#ifdef NOT_R
-                    g_assert_true(tuple_val <= p * p);
-#endif
+                    inter_depth = 3;
                     // this is a three way interaction, update the last_inter_max of the
                     // relevant pair as well
                     a = main;
@@ -406,6 +425,8 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     last_inter_max[b] = std::max(last_inter_max[b],
                         sum); // TODO: assumes that non-entries return 0.0
                     k = triplet_to_val(std::make_tuple(a, b, c), p);
+                    if (indicols->skip_triple_ids.contains(k) || thread_new_skip_triple_ids->contains(k))
+                        continue;
                 }
                 int_fast64_t inter = std::get<0>(inter_pair);
 
@@ -414,30 +435,43 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 int_fast64_t* colC = &Xu.host_X[Xu.host_col_offsets[c]];
                 int_fast64_t ib = 0, ic = 0;
                 int_fast64_t inter_len = 0;
+                std::vector<float> inter_vals;
                 for (int_fast64_t ia = 0; ia < Xu.host_col_nz[a]; ia++) {
                     int_fast64_t cur_row = colA[ia];
-                    // if (a == b && a == c) {
-                    //  printf("%ld: %ld ", ia, cur_row);
-                    //}
                     while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
                         ib++;
                     while (colC[ic] < cur_row && ic < Xu.host_col_nz[c] - 1)
                         ic++;
                     if (cur_row == colB[ib] && cur_row == colC[ic]) {
-                        // if (a == b && a == c) {
-                        //  printf("\n%ld,%ld,%ld\n", ia, ib, ic);
-                        //}
                         col_j_cache[inter_len] = cur_row;
                         inter_len++;
+                        if (ci->use_cont)
+                            switch(inter_depth) {
+                                case 1:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]);
+                                    break;
+                                case 2:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]
+                                                        * ci->col_real_vals[b][ib]);
+                                    break;
+                                case 3:
+                                    inter_vals.push_back( ci->col_real_vals[a][ia]
+                                                        * ci->col_real_vals[b][ib]
+                                                        * ci->col_real_vals[c][ic]);
+                                    break;
+                            }
                     }
                 }
 #pragma omp critical
-                active_set_append(as, k, col_j_cache, inter_len);
+                active_set_append(as, k, col_j_cache, inter_len, inter_vals);
                 increased_set = TRUE;
                 total++;
             }
             if (depth > 2 && tuple_val != main && tuple_val < p) {
                 int_fast64_t ik = (2 * (p - 1) + 2 * (p - 1) * (main - 1) - (main - 1) * (main - 1) - (main - 1)) / 2 + tuple_val;
+                float inter_col_max = 1.0;
+                if (ci->use_cont)
+                    inter_col_max = fabs(ci->col_max_vals[main]) * fabs(ci->col_max_vals[tuple_val]);
                 if (!inter_cache[ik].present) {
                     int_fast64_t a = main;
                     int_fast64_t b = tuple_val;
@@ -447,60 +481,86 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     int_fast64_t inter_len = 0;
                     for (int_fast64_t ia = 0; ia < Xu.host_col_nz[a]; ia++) {
                         int_fast64_t cur_row = colA[ia];
-                        // if (a == b && a == c) {
-                        //  printf("%ld: %ld ", ia, cur_row);
-                        //}
                         while (colB[ib] < cur_row && ib < Xu.host_col_nz[b] - 1)
                             ib++;
                         if (cur_row == colB[ib]) {
-                            // if (a == b && a == c) {
-                            //  printf("\n%ld,%ld,%ld\n", ia, ib, ic);
-                            //}
                             col_j_cache[inter_len] = cur_row;
                             inter_len++;
                         }
                     }
                     // #pragma omp critical
                     update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val],
-                        col_j_cache, inter_len);
+                        col_j_cache, inter_len, inter_col_max);
                 } else {
                     update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val],
-                        col_j_cache, 0);
+                        col_j_cache, 0, inter_col_max);
                 }
             }
-            curr_inter++;
         }
-        // if (VERBOSE && main == interesting_col)
-        //    printf("largest inter found for effect %ld was %f\n", main,
-        //    max_inter_val);
         last_max[main] = max_inter_val;
         sum_with_col.clear();
     }
-
-    // printf("total: %ld, skipped %ld, inter_cols %ld\n", total, skipped,
-    // total_inter_cols); printf("int2 used: %ld, skipped %ld (%.0f\%)\n",
-    // int2_used, int2_skipped, 100.0 * (double)int2_skipped /
-    // (double)(int2_skipped + int2_used)); printf("as size: %ld,%ld,%ld\n",
-    // as->entries1.size(), as->entries2.size(), as->entries3.size());
+    for (int thread_id = 0; thread_id < NumCores; thread_id++) {
+        if (check_duplicates) {
+            for (auto seen_with_main : thread_seen_with_main[thread_id]) {
+                auto main = seen_with_main.first;
+                for (auto with : seen_with_main.second) {
+                    indicols->seen_with_main[main].insert(with);
+                }
+            }
+            for (auto seen_pair_with_main : thread_seen_pair_with_main[thread_id]) {
+                auto main = seen_pair_with_main.first;
+                for (auto with : seen_pair_with_main.second) {
+                    indicols->seen_pair_with_main[main].insert(with);
+                }
+            }
+            for (auto val_key : thread_new_cols_for_hash[thread_id]) {
+                XXH64_hash_t hash_high64 = val_key.first;
+                robin_hood::unordered_flat_map<XXH64_hash_t, std::vector<int_fast64_t>> low_hash_new_cols = val_key.second;
+                for (auto hc_pair : low_hash_new_cols) {
+                    XXH64_hash_t hash_low64 = hc_pair.first;
+                    auto new_cols = hc_pair.second;
+                    for (auto col : new_cols) {
+                        indicols->cols_for_hash[hash_high64][hash_low64].insert(col);
+                    }
+                }
+            }
+            for (auto val: thread_new_skip_pair_ids[thread_id]) {
+                indicols->skip_pair_ids.insert(val);
+            }
+            for (auto val: thread_new_skip_triple_ids[thread_id]) {
+                indicols->skip_triple_ids.insert(val);
+            }
+            for (auto hu_set : thread_new_pair_hashes[thread_id]) {
+                auto hash_high64 = hu_set.first;
+                auto set = hu_set.second;
+                for (auto hash_low64 : set)
+                    indicols->pair_col_hashes[hash_high64].insert(hash_low64);
+            }
+        }
+    }
     return increased_set;
 }
 
-char update_working_set(struct X_uncompressed Xu, XMatrixSparse Xc,
+std::pair<bool, std::vector<int_fast64_t>> update_working_set(X_uncompressed Xu, XMatrixSparse Xc,
     float* rowsum, bool* wont_update, int_fast64_t p, int_fast64_t n,
     float lambda,
-    robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
     Active_Set* as, Thread_Cache* thread_caches,
-    struct OpenCL_Setup* setup, float* last_max,
-    int_fast64_t depth)
+    float* last_max,
+    int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
+    int_fast64_t max_interaction_distance, bool check_duplicates, struct continuous_info* ci)
 {
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches);
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, ci);
+    std::vector<int_fast64_t> vals_to_remove;
+    if (check_duplicates)
+        vals_to_remove = update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols, ci);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,
-        beta, updateable_items, count_may_update, last_max, depth);
+        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance, check_duplicates, ci);
 
     free_row_set(new_row_set);
-    return increased_set;
+    return std::make_pair(increased_set, vals_to_remove);
 }
 
 static struct timespec start, end;
