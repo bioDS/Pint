@@ -216,20 +216,6 @@ static void update_beta_fixture_tear_down(UpdateFixture* fixture,
     free(fixture->column_caches);
 }
 
-static void test_update_beta_cyclic(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    printf("beta[27]: %f\n", fixture->beta[27]);
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, 0, -1);
-    update_beta_cyclic_old(fixture->xmatrix_sparse, fixture->Y, fixture->rowsum,
-        fixture->n, fixture->p, fixture->lambda, &fixture->beta,
-        fixture->k, fixture->intercept,
-        fixture->precalc_get_num, fixture->column_caches[0]);
-    printf("beta[27]: %f\n", fixture->beta[27]);
-    g_assert_true(fixture->beta[27] != 0.0);
-    g_assert_true(fixture->beta[27] < -263.94);
-    g_assert_true(fixture->beta[27] > -263.941);
-}
 
 static void test_soft_threshold() { printf("not implemented yet\n"); }
 
@@ -316,24 +302,22 @@ static void test_compressed_main_X()
     free(Xs.cols);
 }
 
-static void test_X2_from_X()
+static void test_Xc_from_X()
 {
     int_fast64_t n = 1000;
     int_fast64_t p = 100;
-    int_fast64_t p_int = p * (p + 1) / 2;
     XMatrix xm = read_x_csv("../testX.csv", n, p);
-    XMatrix xm2 = read_x_csv("../testX2.csv", n, p_int);
 
-    XMatrixSparse X2s = sparse_X2_from_X(xm.X, n, p, -1, FALSE);
+    XMatrixSparse X2s = sparse_X_from_X(xm.X, n, p, FALSE);
 
     g_assert_true(X2s.n == n);
-    g_assert_true(X2s.p == p_int);
+    g_assert_true(X2s.p == p);
 
     int_fast64_t column_entries[n];
 
-    for (int_fast64_t k = 0; k < p_int; k++) {
+    for (int_fast64_t k = 0; k < p; k++) {
         if (k == 2905) {
-            printf("xm2.X[%ld][0] == %ld\n", k, xm2.X[k][0]);
+            printf("xm2.X[%ld][0] == %ld\n", k, xm.X[k][0]);
         }
         int_fast64_t col_entry_pos = 0;
         int_fast64_t entry = -1;
@@ -357,12 +341,12 @@ static void test_X2_from_X()
         for (int_fast64_t i = 0; i < n; i++) {
             // printf("\ncolumn %ld contains %ld entries", k, X2s.nz[k]);
             if (col_entry_pos > X2s.cols[k].nz || column_entries[col_entry_pos] < i) {
-                if (xm2.X[k][i] != 0) {
+                if (xm.X[k][i] != 0) {
                     printf("\n[%ld][%ld] is not in the index but should be", k, i);
                     g_assert_true(FALSE);
                 }
             } else if (X2s.cols[k].nz > 0 && column_entries[col_entry_pos] == i) {
-                if (xm2.X[k][i] != 1) {
+                if (xm.X[k][i] != 1) {
                     printf("\n[%ld][%ld] missing from \n", k, i);
                     g_assert_true(FALSE);
                 }
@@ -375,13 +359,8 @@ static void test_X2_from_X()
     for (int i = 0; i < p; i++) {
         free(xm.X[i]);
     }
-    for (int k = 0; k < p_int; k++) {
-        free(X2s.cols[k].compressed_indices);
-        free(xm2.X[k]);
-    }
     free(xm.X);
-    free(xm2.X);
-    free(X2s.cols);
+    free_sparse_matrix(X2s);
 }
 
 struct pruning_test_setup_details {
@@ -455,92 +434,6 @@ static void test_simple_coordinate_descent_tear_down(UpdateFixture* fixture,
     free(fixture->column_caches);
 }
 
-static void test_simple_coordinate_descent_int(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    // are we running the shuffle test, or sequential?
-    float acceptable_diff = 0.1;
-    int_fast64_t shuffle = FALSE;
-    if ((int_fast64_t)user_data == TRUE) {
-        printf("\nrunning shuffle test!\n");
-        acceptable_diff = 10;
-        shuffle = TRUE;
-    }
-    float* glmnet_beta = read_y_csv(
-        "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
-    printf("starting interaction test\n");
-    fixture->xmatrix = read_x_csv(
-        "/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
-    fixture->X = fixture->xmatrix.X;
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, shuffle);
-    int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta = fixture->beta;
-
-    float dBMax;
-    for (int_fast64_t j = 0; j < 10; j++)
-        for (int_fast64_t i = 0; i < p_int; i++) {
-            int_fast64_t k = i;
-            Changes changes = update_beta_cyclic_old(
-                fixture->xmatrix_sparse, fixture->Y, fixture->rowsum, fixture->n,
-                fixture->p, fixture->lambda, &beta, k, 0, fixture->precalc_get_num,
-                fixture->column_caches[0]);
-            dBMax = changes.actual_diff;
-        }
-
-    int_fast64_t no_agreeing = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
-        int_fast64_t k = i;
-        printf("testing beta[%ld] (%f) ~ %f [", i, beta[i],
-            small_X2_correct_beta[k]);
-
-        if ((beta[i] < small_X2_correct_beta[k] + acceptable_diff) && (beta[i] > small_X2_correct_beta[k] - acceptable_diff)) {
-            no_agreeing++;
-            printf("x]\n");
-        } else {
-            printf(" ]\n");
-        }
-    }
-    printf("frac agreement: %f\n", (float)no_agreeing / p_int);
-    g_assert_true(no_agreeing == p_int);
-}
-
-static void test_simple_coordinate_descent_vs_glmnet(UpdateFixture* fixture,
-    gconstpointer user_data)
-{
-    float* glmnet_beta = read_y_csv(
-        "/home/kieran/work/lasso_testing/glmnet_small_output.csv", 630);
-    printf("starting interaction test\n");
-    fixture->p = 35;
-    fixture->xmatrix = read_x_csv(
-        "/home/kieran/work/lasso_testing/testXSmall.csv", fixture->n, fixture->p);
-    fixture->X = fixture->xmatrix.X;
-    fixture->xmatrix_sparse = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
-    int_fast64_t p_int = fixture->p * (fixture->p + 1) / 2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta = fixture->beta;
-
-    Lasso_Result lr = simple_coordinate_descent_lasso(
-        fixture->xmatrix, fixture->Y, fixture->n, fixture->p, -1, 0.05, 1000, 100,
-        true, 1.0001, NONE, NULL, 0, -1, "test.log", 2, false, false, false, &empty_cont_inf);
-    Beta_Value_Sets beta_sets = lr.regularized_result;
-    beta = beta_sets.beta3; //TODO: don't
-
-    float acceptable_diff = 10;
-    int_fast64_t no_agreeing = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
-        int_fast64_t k = i;
-        printf("testing beta[%ld] (%f) ~ %f [", i, beta[k], glmnet_beta[i]);
-
-        if ((beta[k] < glmnet_beta[i] + acceptable_diff) && (beta[k] > glmnet_beta[i] - acceptable_diff)) {
-            no_agreeing++;
-            printf("x]\n");
-        } else {
-            printf(" ]\n");
-        }
-    }
-    printf("frac agreement: %f\n", (float)no_agreeing / p_int);
-    g_assert_true(no_agreeing >= 0.8 * p_int);
-}
-
 // will fail if Y has been normalised
 static void test_read_y_csv()
 {
@@ -570,25 +463,22 @@ void printBits(size_t const size, void const* const ptr)
     puts("");
 }
 
-static void check_X2_encoding()
+static void check_Xc_encoding()
 {
     int_fast64_t n = 1000;
     int_fast64_t p = 35;
-    int_fast64_t p_int = p * (p + 1) / 2;
     XMatrix xmatrix = read_x_csv("../testXSmall.csv", n, p);
-    XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
-    XMatrixSparse xmatrix_sparse = sparse_X2_from_X(xmatrix.X, n, p, -1, FALSE);
+    // XMatrix X2 = read_x_csv("../testX2Small.csv", n, p_int);
+    XMatrixSparse xmatrix_sparse = sparse_X_from_X(xmatrix.X, n, p, FALSE);
 
     int_pair* nums = get_all_nums(p, -1);
     // create uncompressed sparse version of X2.
-    int_fast64_t** col_nz_indices = (int_fast64_t**)malloc(sizeof *col_nz_indices * p_int);
-    for (int_fast64_t j = 0; j < p_int; j++) {
-    }
-    int_fast64_t* col_sizes = (int_fast64_t*)malloc(sizeof *col_sizes * p_int);
-    for (int_fast64_t j = 0; j < p_int; j++) {
+    int_fast64_t** col_nz_indices = (int_fast64_t**)malloc(sizeof *col_nz_indices * p);
+    int_fast64_t* col_sizes = (int_fast64_t*)malloc(sizeof *col_sizes * p);
+    for (int_fast64_t j = 0; j < p; j++) {
         Queue* col_q = queue_new();
         for (int_fast64_t i = 0; i < n; i++) {
-            if (X2.X[j][i] != 0) {
+            if (xmatrix.X[j][i] != 0) {
                 queue_push_tail(col_q, (void*)i);
             }
         }
@@ -610,7 +500,7 @@ static void check_X2_encoding()
     // mean entry size
     int_fast64_t total = 0;
     int_fast64_t no_entries = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
+    for (int_fast64_t i = 0; i < p; i++) {
         no_entries += xmatrix_sparse.cols[i].nz;
         for (int_fast64_t j = 0; j < xmatrix_sparse.cols[i].nz; j++) {
             total += col_nz_indices[i][j];
@@ -621,7 +511,7 @@ static void check_X2_encoding()
     // mean diff size
     total = 0;
     int_fast64_t prev_entry = 0;
-    for (int_fast64_t i = 0; i < p_int; i++) {
+    for (int_fast64_t i = 0; i < p; i++) {
         prev_entry = 0;
         for (int_fast64_t j = 0; j < xmatrix_sparse.cols[i].nz; j++) {
             total += col_nz_indices[i][j] - prev_entry;
@@ -718,7 +608,7 @@ static void check_X2_encoding()
     g_queue_free(s8b_col);
 
     printf("checking [s8b] == [int]\n");
-    for (int_fast64_t k = 0; k < p_int; k++) {
+    for (int_fast64_t k = 0; k < p; k++) {
         printf("col %ld (interaction %ld,%ld)\n", k, nums[k].i, nums[k].j);
         int_fast64_t checked = 0;
         int_fast64_t col_entry_pos = 0;
@@ -762,7 +652,7 @@ static void check_X2_encoding()
     g_assert_true(xmatrix_sparse.cols[0].nwords == length);
     printf("correct number of words\n");
 
-    for (int_fast64_t j = 0; j < p_int; j++) {
+    for (int_fast64_t j = 0; j < p; j++) {
         free(col_nz_indices[j]);
     }
     free(col_nz_indices);
@@ -773,10 +663,7 @@ static void check_X2_encoding()
     }
     for (int i = 0; i < xmatrix_sparse.p; i++)
         free(xmatrix_sparse.cols[i].compressed_indices);
-    for (int i = 0; i < p_int; i++)
-        free(X2.X[i]);
     free(xmatrix.X);
-    free(X2.X);
     free(xmatrix_sparse.cols);
     free(actual_col);
 }
@@ -849,6 +736,158 @@ int_fast64_t check_didnt_update(int_fast64_t p, int_fast64_t p_int, bool* wont_u
     return no_disagreeing;
 }
 
+XMatrixSparse sparse_X2_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
+    int_fast64_t max_interaction_distance, int_fast64_t shuffle)
+{
+    XMatrixSparse X2;
+    int_fast64_t colno, length;
+
+    int_fast64_t iter_done = 0;
+    int_fast64_t p_int = p * (p + 1) / 2;
+    // TODO: for the moment we use the maximum possible p_int for allocation,
+    // because things assume it.
+    // TODO: this is wrong for dist == 1! (i.e. the main only case). Or at least,
+    // so we hope.
+    p_int = get_p_int(p, max_interaction_distance);
+    if (max_interaction_distance < 0)
+        max_interaction_distance = p;
+    printf("p_int: %ld\n", p_int);
+
+    X2.cols = (S8bCol*)malloc(sizeof *X2.cols * p_int);
+
+    int_fast64_t done_percent = 0;
+    int_fast64_t total_count = 0;
+    int_fast64_t total_sum = 0;
+    // size_t testcol = -INT_MAX;
+    colno = 0;
+    int_fast64_t d = max_interaction_distance;
+    int_fast64_t limit_instead = ((p - d) * p - (p - d) * (p - d - 1) / 2 - (p - d));
+// TODO: iter_done isn't exactly being updated safely
+#pragma omp parallel for shared(X2, X, iter_done) private(length, colno) num_threads(NumCores) reduction(+ \
+                                                                                                         : total_count, total_sum) schedule(static)
+    for (int_fast64_t i = 0; i < p; i++) {
+        for (int_fast64_t j = i; j < min(i + max_interaction_distance, (int_fast64_t)p); j++) {
+            int_fast64_t val;
+            // GQueue *current_col = g_queue_new();
+            // GQueue *current_col_actual = g_queue_new();
+            Queue* current_col = queue_new();
+            // worked out by hand as being equivalent to the offset we would have
+            // reached.
+            int_fast64_t a = min(i, p - d); // number of iters limited by d.
+            int_fast64_t b = max(i - (p - d), (int_fast64_t)0); // number of iters of i limited by p rather than d.
+            // int_fast64_t tmp = j + b*(d) + a*p - a*(a-1)/2 - i;
+            int_fast64_t suma = a * (d - 1);
+            int_fast64_t k = max(p - d + b, (int_fast64_t)0);
+            // sumb is the amount we would have reached w/o the limit - the amount
+            // that was actually covered by the limit.
+            int_fast64_t sumb = (k * p - k * (k - 1) / 2 - k) - limit_instead;
+            colno = j + suma + sumb;
+            // Read through the the current column entries, and append them to X2 as
+            // an s8b-encoded list of offsets
+            int_fast64_t* col_entries = (int_fast64_t*)malloc(60 * sizeof *col_entries);
+            int_fast64_t count = 0;
+            int_fast64_t largest_entry = 0;
+            // int_fast64_t max_bits = max_size_given_entries[0];
+            int_fast64_t diff = 0;
+            int_fast64_t prev_row = -1;
+            int_fast64_t total_nz_entries = 0;
+            for (int_fast64_t row = 0; row < n; row++) {
+                val = X[i][row] * X[j][row];
+                if (val == 1) {
+                    total_nz_entries++;
+                    diff = row - prev_row;
+                    total_sum += diff;
+                    int_fast64_t used = 0;
+                    int_fast64_t tdiff = diff;
+                    while (tdiff > 0) {
+                        used++;
+                        tdiff >>= 1;
+                    }
+                    // max_bits = max_size_given_entries[count + 1];
+                    // if the current diff won't fit in the s8b word, push the word and
+                    // start a new one
+                    if (max(used, largest_entry) > max_size_given_entries[count + 1]) {
+                        S8bWord* word = (S8bWord*)malloc(sizeof(
+                            S8bWord)); // we (maybe?) can't rely on this being the size of a
+                        // pointer, so we'll add by reference
+                        S8bWord tempword = to_s8b(count, col_entries);
+                        total_count += count;
+                        memcpy(word, &tempword, sizeof(S8bWord));
+                        queue_push_tail(current_col, word);
+                        count = 0;
+                        largest_entry = 0;
+                        // max_bits = max_size_given_entries[1];
+                    }
+                    // things for the next iter
+                    // g_assert_true(count < 60);
+                    col_entries[count] = diff;
+                    count++;
+                    if (used > largest_entry)
+                        largest_entry = used;
+                    prev_row = row;
+                } else if (val != 0)
+                    fprintf(stderr, "Attempted to convert a non-binary matrix, values "
+                                    "will be missing!\n");
+            }
+            // push the last (non-full) word
+            S8bWord* word = (S8bWord*)malloc(sizeof(S8bWord));
+            S8bWord tempword = to_s8b(count, col_entries);
+            memcpy(word, &tempword, sizeof(S8bWord));
+            queue_push_tail(current_col, word);
+            free(col_entries);
+            length = queue_get_length(current_col);
+
+            S8bWord* indices = (S8bWord*)malloc(sizeof *indices * length);
+            count = 0;
+            while (!queue_is_empty(current_col)) {
+                S8bWord* current_word = (S8bWord*)queue_pop_head(current_col);
+                indices[count] = *current_word;
+                free(current_word);
+                count++;
+            }
+
+            S8bCol new_col = { indices, total_nz_entries, length };
+            X2.cols[colno] = new_col;
+
+            queue_free(current_col);
+            current_col = NULL;
+        }
+        iter_done++;
+        if (p >= 100 && iter_done % (p / 100) == 0) {
+            if (VERBOSE)
+                printf("create interaction matrix, %ld%%\n", done_percent);
+            done_percent++;
+        }
+    }
+    int_fast64_t total_words = 0;
+    int_fast64_t total_entries = 0;
+    for (int_fast64_t i = 0; i < p_int; i++) {
+        total_words += X2.cols[i].nwords;
+        total_entries += X2.cols[i].nz;
+    }
+    printf("mean nz entries: %f\n", (float)total_entries / (float)p_int);
+    printf("mean words: %f\n", (float)total_count / (float)total_words);
+    printf("mean size: %f\n", (float)total_sum / (float)total_entries);
+    X2.total_words = total_words;
+    X2.total_entries = total_entries;
+
+    S8bWord* compressed_indices;
+    int_fast64_t* col_start;
+    int_fast64_t* col_nz;
+    int_fast64_t offset = 0;
+
+    permutation_splits = NumCores;
+    permutation_split_size = p_int / permutation_splits;
+    final_split_size = p_int % permutation_splits;
+    printf("%ld splits of size %ld\n", permutation_splits, permutation_split_size);
+    printf("final split size: %ld\n", final_split_size);
+
+    X2.n = n;
+    X2.p = p_int;
+
+    return X2;
+}
+
 static void pruning_fixture_set_up(UpdateFixture* fixture,
     struct pruning_test_setup_details* setup)
 {
@@ -858,7 +897,7 @@ static void pruning_fixture_set_up(UpdateFixture* fixture,
     printf("getting sparse X2\n");
     clock_gettime(CLOCK_MONOTONIC_RAW, &start_time);
     if (setup->make_x2) {
-        XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE);
+        XMatrixSparse X2c = sparse_X2_from_X(fixture->X, fixture->n, fixture->p, -1, FALSE); //TODO
         fixture->X2c = X2c;
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
@@ -2552,24 +2591,9 @@ int main(int argc, char* argv[])
     g_test_add_func("/func/test-read-y-csv", test_read_y_csv);
     g_test_add_func("/func/test-read-x-csv", test_read_x_csv);
     g_test_add_func("/func/test-soft-threshol", test_soft_threshold);
-    g_test_add("/func/test-update-beta-cyclic", UpdateFixture, NULL,
-        update_beta_fixture_set_up, test_update_beta_cyclic,
-        update_beta_fixture_tear_down);
-    g_test_add_func("/func/test-X2_from_X", test_X2_from_X);
+    g_test_add_func("/func/test-Xc_from_X", test_Xc_from_X);
     g_test_add_func("/func/test-compressed-main-X", test_compressed_main_X);
-    g_test_add("/func/test-simple-coordinate-descent-int", UpdateFixture, FALSE,
-        test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_int,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add("/func/test-simple-coordinate-descent-int-shuffle", UpdateFixture,
-        TRUE, test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_int,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add("/func/test-simple-coordinate-descent-vs-glmnet", UpdateFixture,
-        TRUE, test_simple_coordinate_descent_set_up,
-        test_simple_coordinate_descent_vs_glmnet,
-        test_simple_coordinate_descent_tear_down);
-    g_test_add_func("/func/test-X2-encoding", check_X2_encoding);
+    g_test_add_func("/func/test-Xc-encoding", check_Xc_encoding);
     g_test_add_func("/func/test-permutation", check_permutation);
     g_test_add("/func/test-branch-pruning", UpdateFixture, &faster_setup,
         pruning_fixture_set_up, check_branch_pruning,
