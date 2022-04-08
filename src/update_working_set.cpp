@@ -243,7 +243,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 const int_fast64_t* row = relevant_row_set.rows[row_main];
                 if (use_hierarchy) {
                     // we can't assume row_main is in the reduced row matrix.
-                    while (ri < row_length && row[ri] < main)
+                    while (ri < row_length && row[ri] <= main)
                         ri++;
                 } else {
                     int_fast64_t jump_dist = row_length/2;
