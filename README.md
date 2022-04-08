@@ -40,7 +40,7 @@ output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1,
 
 `use_intercept` : If true, allow a non-zero intercept.
 
-`approximate_hierarchy` : Approximates a strong hierarchy by first fitting main effects only, then fitting interactions using only columns that had non-zero main effects. This can considerably speed up fitting interactions on large data sets.
+`approximate_hierarchy` : Approximates a strong hierarchy by only allowing interactions between columns that are (or were at a larger $\lambda$ value) non-zero. Note that a main effect may still be set to zero after the interactions is included, so this does not strictly enforce either a strong or weak hierarchy. This can considerably speed up fitting interactions on large data sets.
 
 `check_duplicates` : Identify and report any duplicate columns or interactions, and only assign an effect to the one of them.
 
