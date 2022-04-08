@@ -51,7 +51,7 @@ float update_intercept(float* rowsum, float* Y, int n, float lambda, float inter
     for (int i = 0; i < n; i++) {
         sumn -= rowsum[i];
     }
-    float new_value = soft_threshold(sumn, lambda * total_sqrt_error) / n; // square root lasso
+    float new_value = sumn / n; // square root lasso
     float diff = new_value - intercept;
 
     for (int i = 0; i < n; i++) {
