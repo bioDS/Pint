@@ -26,12 +26,16 @@ val_to_list_name <- function(val, X) {
     }
 }
 
+all_vals_to_list_name <- function(val_seq, X) {
+    return(sapply(val_seq, val_to_list_name, X))
+}
+
 process_result <- function(X, result) {
     i <- colnames(X)[result[[1]]]
     strength <- result[[2]]
     equiv_list <- c()
     if (length(result[[3]][1]) > 0 && !is.null(unlist(result[[3]][1]))) {
-        equiv_list <- lapply(result[[3]], val_to_list_name, X)
+        equiv_list <- lapply(result[[3]], all_vals_to_list_name, X)
         names(equiv_list) <- i
     }
     df_main <- list(effects=data.frame(i=i,strength=strength),equivalent=equiv_list)
@@ -41,7 +45,7 @@ process_result <- function(X, result) {
     strength <- result[[6]]
     equiv_list <- c()
     if (length(result[[7]][1]) > 0 && !is.null(unlist(result[[7]][1]))) {
-        equiv_list <- lapply(result[[7]], val_to_list_name, X)
+        equiv_list <- lapply(result[[7]], all_vals_to_list_name, X)
         names(equiv_list) <- paste0(i, ",", j)
     }
     df_int <- list(effects=data.frame(i=i,j=j,strength=strength),equivalent=equiv_list)
@@ -53,7 +57,7 @@ process_result <- function(X, result) {
     print(unlist(result[[12]][1]))
     print(is.null(unlist(result[[12]][1][1])))
     if (length(result[[12]][1]) > 0 && !is.null(unlist(result[[12]][1]))) {
-        equiv_list <- lapply(result[[12]], val_to_list_name, X)
+        equiv_list <- lapply(result[[12]], all_vals_to_list_name, X)
         names(equiv_list) <- paste0(i, ",", j, ",", k)
     }
     strength <- result[[11]]
