@@ -112,23 +112,9 @@ interaction_lasso <- function(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -
     }
     rm(tmp)
 
-    if (approximate_hierarchy && depth > 1) {
-        if (verbose) {
-            print("Finding main effects")
-        }
-        main_only <- .Call(lasso_, X, Ym, lambda_min, lambda_max, halt_error_diff, max_interaction_distance, max_nz_beta*2, max_lambdas, verbose, log_filename, 1, log_level_enum, estimate_unbiased, use_intercept, num_threads, check_duplicates, continuous_X)
-        main_only_result <- process_result(X, main_only[[1]])
-        # we'll use these to allow the second run to report all identical columns again.
-        if (check_duplicates) {
-            all_equiv <- unique(unlist(main_only_result$main_effects$equivalent))
-        } else {
-            all_equiv <- unique(unlist(main_only_result$main_effects$i))
-        }
 
-        X <- X[,all_equiv]
-    }
 
-    result <- .Call(lasso_, X, Ym, lambda_min, lambda_max, halt_error_diff, max_interaction_distance, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads, check_duplicates, continuous_X)
+    result <- .Call(lasso_, X, Ym, lambda_min, lambda_max, halt_error_diff, max_interaction_distance, max_nz_beta, max_lambdas, verbose, log_filename, depth, log_level_enum, estimate_unbiased, use_intercept, num_threads, check_duplicates, continuous_X, approximate_hierarchy)
 
     rm(Ym)
 

@@ -23,7 +23,7 @@ static float x2_conversion_time = 0.0;
 extern int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsum,
     float* old_rowsum, Active_Set* active_set,
     int_fast64_t depth, const bool use_intercept, IndiCols* indi, const bool check_duplicates,
-    struct continuous_info* cont_inf);
+    struct continuous_info* cont_inf, const bool use_hierarchy);
 static int_fast64_t total_basic_beta_updates = 0;
 static int_fast64_t total_basic_beta_nz_updates = 0;
 static float LAMBDA_MIN = 1.5;
@@ -369,6 +369,7 @@ struct pruning_test_setup_details {
     const char* xfile;
     const char* yfile;
     bool make_x2;
+    bool use_hierarchy;
 };
 
 static void test_simple_coordinate_descent_set_up(UpdateFixture* fixture,
@@ -1232,7 +1233,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
     int_fast64_t max_interaction_distance = 20;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         max_interaction_distance, 0.01, 100,
-        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, &empty_cont_inf);
+        200, true, 1.01, NONE, NULL, 0, 1000, log_file, 3, false, false, false, &empty_cont_inf, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     for (auto beta : beta_sets.beta2) {
         int_fast64_t val = beta.first;
@@ -1253,7 +1254,7 @@ static void check_max_interaction_distance(UpdateFixture* fixture, gconstpointer
 }
 
 
-void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* true_effects, int p, X_uncompressed* Xu) {
+void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* true_effects, int p, X_uncompressed* Xu, int acceptable_misses) {
     g_assert_true(beta_sets->beta3.size() == 0);
 
     printf("found:\n");
@@ -1267,6 +1268,7 @@ void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* tru
         printf(" %ld,%ld\n", std::get<0>(inter), std::get<1>(inter));
     }
 
+    int total_hit = 0, total_missed = 0;
     for (auto it = true_effects->begin(); it != true_effects->end(); it++) {
         int_fast64_t first = it->first - 1;
         int_fast64_t second = it->second - 1;
@@ -1278,8 +1280,14 @@ void check_results_match(Beta_Value_Sets *beta_sets, vector<pair<int, int>>* tru
         // for (auto val : lr.indi.cols_for_hash[actual_col_hash.high64][actual_col_hash.low64]) {
         //     printf("[same hash] beta[%ld] (%ld,%ld) = %f\n", val, first, second, beta_sets->beta2[val]);
         // }
-        g_assert_true(fabs(beta_sets->beta2[val]) > 0.0);
+        bool hit = fabs(beta_sets->beta2[val]) > 0.0;
+        if (hit)
+            total_hit++;
+        else
+            total_missed++;
     }
+    printf("hit: %d, missed %d\n", total_hit, total_missed);
+    g_assert_true(total_missed <= acceptable_misses);
 };
 
 vector<pair<int, int>> true_effects_small = {
@@ -1302,6 +1310,10 @@ vector<pair<int, int>> true_effects_small = {
 static void check_branch_pruning_accuracy(UpdateFixture* fixture,
     gconstpointer user_data)
 {
+    struct pruning_test_setup_details* test_setup = user_data;
+    int acceptable_misses = 0;
+    if (test_setup->use_hierarchy)
+        acceptable_misses = 3;
     printf("starting accuracy test\n");
     int_fast64_t use_adcal = FALSE;
     const char* log_file = "test.log";
@@ -1310,10 +1322,10 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 100,
         200, true, 1.01,
         NONE, NULL, 0,
-        97, log_file, 2, false, false, check_duplicates, &empty_cont_inf);
+        97, log_file, 2, false, false, check_duplicates, &empty_cont_inf, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
-    check_results_match(&beta_sets, &true_effects_small, fixture->p, &fixture->Xu);
+    check_results_match(&beta_sets, &true_effects_small, fixture->p, &fixture->Xu, acceptable_misses);
     free_lasso_result(lr);
 
     // these are the values that the previous version reliably finds
@@ -1366,9 +1378,9 @@ static void check_branch_pruning_accuracy(UpdateFixture* fixture,
         -1, 0.01, 47504180,
         200, true, 1.01,
         NONE, NULL, 0,
-        500, "test.log", 2, false, false, check_duplicates, &empty_cont_inf);
+        500, "test.log", 2, false, false, check_duplicates, &empty_cont_inf, test_setup->use_hierarchy);
 
-    check_results_match(&lr.regularized_result, &true_effects, fixture->p, &fixture->Xu);
+    check_results_match(&lr.regularized_result, &true_effects, fixture->p, &fixture->Xu, acceptable_misses);
 
     free_lasso_result(lr);
 }
@@ -1416,7 +1428,7 @@ void check_small_continuous() {
         Y[i] = rowsum;
     }
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(xm, Y, n, p, -1, 0.00001, 5, 500, true, 1.00001, NONE, NULL, 0, 50, "test.log", 1, false, true, true, &ci);
+    Lasso_Result lr = simple_coordinate_descent_lasso(xm, Y, n, p, -1, 0.00001, 5, 500, true, 1.00001, NONE, NULL, 0, 50, "test.log", 1, false, true, true, &ci, false);
 
     printf("intercept: %f\n", lr.regularized_intercept);
     float found_beta[p];
@@ -1472,9 +1484,9 @@ void check_continous_ones(UpdateFixture* fixture,
         -1, 0.01, 200,
         200, true, 1.01,
         NONE, NULL, 0,
-        97, "test.log", 2, false, false, check_duplicates, &ci);
+        97, "test.log", 2, false, false, check_duplicates, &ci, false);
 
-    check_results_match(&lr.regularized_result, &true_effects_small, fixture->p, &fixture->Xu);
+    check_results_match(&lr.regularized_result, &true_effects_small, fixture->p, &fixture->Xu, 0);
     free_lasso_result(lr);
     free_continuous_info(ci);
 }
@@ -1701,8 +1713,9 @@ static void check_branch_pruning_faster(UpdateFixture* fixture,
         //TODO: probably best to remove lambda scalling in all the tests too.
         printf("lambda: %f\n", lambda);
         IndiCols empty_indi = get_empty_indicols(p);
+        const bool use_hierarchy = false;
         run_lambda_iters_pruned(&iter_vars_pruned, lambda, p_rowsum, old_rowsum,
-            &active_set, 2, false, &empty_indi, false, &empty_cont_inf);
+            &active_set, 2, false, &empty_indi, false, &empty_cont_inf, use_hierarchy);
         free_indicols(empty_indi);
     }
 
@@ -1884,7 +1897,7 @@ void test_row_list_without_columns()
         thread_caches[i].col_j = (int_fast64_t*)malloc(n * sizeof *thread_caches[i].col_j);
     }
 
-    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches, &empty_cont_inf);
+    struct row_set rs = row_list_without_columns(Xc, Xu, remove, thread_caches, &empty_cont_inf, false, NULL);
 
     g_assert_true(rs.row_lengths[0] == 1);
     g_assert_true(rs.row_lengths[1] == 2);
@@ -2078,7 +2091,7 @@ void trivial_3way_test()
         -1, 0.01, 100,
         100, true, 1.00001,
         NONE, NULL, 0,
-        7, "test.log", 3, false, false, true, &empty_cont_inf);
+        7, "test.log", 3, false, false, true, &empty_cont_inf, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
     // auto beta = beta_sets.beta3;
 
@@ -2300,7 +2313,7 @@ static void test_adcal(UpdateFixture* fixture, gconstpointer user_data)
     int_fast64_t result = adaptive_calibration_check_beta(0.75, 12.2, &beta1, 10.9, &beta2, fixture->n);
     g_assert_true(result == 1);
 
-    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, &empty_cont_inf);
+    Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p, max_interaction_distance, lambda_min, lambda_max, max_iter, VERBOSE, 1.01, log_level, job_args, job_args_num, -1, log_filename, depth, false, false, true, &empty_cont_inf, false);
     Beta_Value_Sets beta_sets = lr.regularized_result;
 
     int_fast64_t final_iter, final_lambda_count;
@@ -2356,7 +2369,7 @@ static void test_simple_indistinguishable_cols()
 
     IndiCols indi = get_empty_indicols(p);
 
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, &empty_cont_inf);
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, &empty_cont_inf, false, NULL);
     std::vector<int_fast64_t> new_cols = {0,1,4,5};
     float Y[n];
     for (int i = 0; i < n; i++) {
@@ -2367,7 +2380,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, &empty_cont_inf);
+        100, log_file, 3, false, false, true, &empty_cont_inf, false);
     
     for (auto main_id : lr.indi.skip_main_col_ids) {
         printf("skipped main col: %ld as a duplicate\n", main_id);
@@ -2537,7 +2550,7 @@ static void test_simple_indistinguishable_cols()
         -1, 0.00000001, 100,
         500, true, 1.01,
         NONE, NULL, 0,
-        100, log_file, 3, false, false, true, &empty_cont_inf);
+        100, log_file, 3, false, false, true, &empty_cont_inf, false);
     printf("Beta values found:\n");
     printf("beta 1:\n");
     print_beta_set(&lr.regularized_result.beta1, p);
@@ -2561,25 +2574,36 @@ static struct pruning_test_setup_details accuracy_setup = {
     2000, 1000,
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
+    false,
     false
+};
+static struct pruning_test_setup_details hierarchy_setup = {
+    2000, 1000,
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
+    "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
+    false,
+    true
 };
 static struct pruning_test_setup_details faster_setup = {
     1000, 100,
     "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
     "../testcase/n1000_p100_SNR5_nbi100_nbij50_nlethals0_viol0_3231/X.csv",
-    true
+    true,
+    false
 };
 static struct pruning_test_setup_details big_setup = {
     2000, 1000,
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/X.csv",
     "../testcase/n2000_p1000_SNR5_nbi10_nbij200_nlethals50_viol0_11057/Y.csv",
-    true
+    true,
+    false
 };
 static struct pruning_test_setup_details bigger_setup = {
     10000, 5000,
     "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/X.csv",
     "../../n10000_p5000_SNR5_nbi50_nbij1000_nlethals250_viol0_40452/Y.csv",
-    true
+    true,
+    false
 };
 
 int main(int argc, char* argv[])
@@ -2599,6 +2623,9 @@ int main(int argc, char* argv[])
         pruning_fixture_set_up, check_branch_pruning,
         pruning_fixture_tear_down);
     g_test_add("/func/test-branch-pruning-accuracy", UpdateFixture, &accuracy_setup,
+        pruning_fixture_set_up, check_branch_pruning_accuracy,
+        pruning_fixture_tear_down);
+    g_test_add("/func/test-branch-pruning-accuracy-hierarchy", UpdateFixture, &hierarchy_setup,
         pruning_fixture_set_up, check_branch_pruning_accuracy,
         pruning_fixture_tear_down);
     g_test_add("/func/test-continuous-ones", UpdateFixture, &accuracy_setup,

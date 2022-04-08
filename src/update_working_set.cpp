@@ -166,7 +166,7 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     X_uncompressed Xu, float* rowsum,
     bool* wont_update, int_fast64_t p, int_fast64_t n, float lambda,
     int_fast64_t* updateable_items, int_fast64_t count_may_update,
-    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance, const bool check_duplicates, struct continuous_info* ci)
+    float* last_max, int_fast64_t depth, IndiCols* indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols, int_fast64_t max_interaction_distance, const bool check_duplicates, struct continuous_info* ci, const bool use_hierarchy)
 {
     int_fast64_t* host_X = Xu.host_X;
     int_fast64_t* host_col_nz = Xu.host_col_nz;
@@ -239,22 +239,28 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                 sum_with_col[main] += rowsum_diff; //TODO: slow
             if (depth > 1) {
                 int_fast64_t ri = 0;
-                int_fast64_t jump_dist = relevant_row_set.row_lengths[row_main]/2;
-                const int_fast64_t* row = relevant_row_set.rows[row_main];
-                int_fast64_t tmp = row[ri];
-                while (tmp != main) {
-                    if (tmp < main)
-                        ri += jump_dist;
-                    else if (tmp > main)
-                        ri -= jump_dist;
-                    else if (tmp == main)
-                        break;
-                    jump_dist = std::max((int_fast64_t)1,jump_dist/2);
-                    tmp = row[ri];
-                }
-                ri++;
-
                 const int_fast64_t row_length = relevant_row_set.row_lengths[row_main];
+                const int_fast64_t* row = relevant_row_set.rows[row_main];
+                if (use_hierarchy) {
+                    // we can't assume row_main is in the reduced row matrix.
+                    while (ri < row_length && row[ri] < main)
+                        ri++;
+                } else {
+                    int_fast64_t jump_dist = row_length/2;
+                    int_fast64_t tmp = row[ri];
+                    while (tmp != main) {
+                        if (tmp < main)
+                            ri += jump_dist;
+                        else if (tmp > main)
+                            ri -= jump_dist;
+                        else if (tmp == main)
+                            break;
+                        jump_dist = std::max((int_fast64_t)1,jump_dist/2);
+                        tmp = row[ri];
+                    }
+                    ri++;
+                }
+
                 for (; ri < row_length; ri++) {
                     int_fast64_t inter = relevant_row_set.rows[row_main][ri];
                     float inter_val = 1.0;
@@ -549,15 +555,15 @@ std::pair<bool, std::vector<int_fast64_t>> update_working_set(X_uncompressed Xu,
     Active_Set* as, Thread_Cache* thread_caches,
     float* last_max,
     int_fast64_t depth, IndiCols *indicols, robin_hood::unordered_flat_set<int_fast64_t>* new_cols,
-    int_fast64_t max_interaction_distance, bool check_duplicates, struct continuous_info* ci)
+    int_fast64_t max_interaction_distance, bool check_duplicates, struct continuous_info* ci, bool use_hierarchy, Beta_Value_Sets* beta_sets)
 {
-    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, ci);
+    struct row_set new_row_set = row_list_without_columns(Xc, Xu, wont_update, thread_caches, ci, use_hierarchy, beta_sets);
     std::vector<int_fast64_t> vals_to_remove;
     if (check_duplicates)
         vals_to_remove = update_main_indistinguishable_cols(Xu, wont_update, new_row_set, indicols, new_cols, ci);
     char increased_set = update_working_set_cpu(
         Xc, new_row_set, thread_caches, as, Xu, rowsum, wont_update, p, n, lambda,
-        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance, check_duplicates, ci);
+        updateable_items, count_may_update, last_max, depth, indicols, new_cols, max_interaction_distance, check_duplicates, ci, use_hierarchy);
 
     free_row_set(new_row_set);
     return std::make_pair(increased_set, vals_to_remove);

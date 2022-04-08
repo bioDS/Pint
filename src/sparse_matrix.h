@@ -58,7 +58,7 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     int_fast64_t shuffle);
 XMatrixSparse sparsify_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p);
 
-struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches, struct continuous_info* ci);
+struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu, bool* remove, Thread_Cache* thread_caches, struct continuous_info* ci, const bool use_hierarchy, Beta_Value_Sets* beta_sets);
 void free_row_set(struct row_set rs);
 X_uncompressed construct_host_X(XMatrixSparse* Xc);
 void free_host_X(X_uncompressed *Xu);

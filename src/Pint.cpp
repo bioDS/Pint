@@ -275,7 +275,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     SEXP halt_error_diff_, SEXP max_interaction_distance_, SEXP max_nz_beta_,
     SEXP max_lambdas_, SEXP verbose_, SEXP log_filename_, SEXP depth_, SEXP log_level_,
     SEXP estimate_unbiased_, SEXP use_intercept_, SEXP use_cores_,
-    SEXP check_duplicates_, SEXP continuous_X_)
+    SEXP check_duplicates_, SEXP continuous_X_, SEXP use_hierarchy_)
 {
     double* x = REAL(X_);
     double* y = REAL(Y_);
@@ -293,6 +293,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     int_fast64_t use_cores = asInteger(use_cores_);
     bool check_duplicates = asLogical(check_duplicates_);
     bool continuous_X = asLogical(continuous_X_);
+    bool use_hierarchy = asLogical(use_hierarchy_);
 
     VERBOSE = verbose;
 
@@ -359,7 +360,8 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     Lasso_Result lasso_result = simple_coordinate_descent_lasso(
         xmatrix, Y, n, p, max_interaction_distance, asReal(lambda_min_),
         asReal(lambda_max_), max_lambdas, verbose, halt_error_diff, log_level, NULL, 0,
-        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept, check_duplicates, &ci);
+        max_nz_beta, log_filename, depth, estimate_unbiased, use_intercept, check_duplicates, &ci,
+        use_hierarchy);
     float final_lambda = lasso_result.final_lambda;
     float regularized_intercept = lasso_result.regularized_intercept;
     float unbiased_intercept = lasso_result.unbiased_intercept;
@@ -392,7 +394,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    { "lasso_", (DL_FUNC)&lasso_, 17 },
+    { "lasso_", (DL_FUNC)&lasso_, 18 },
     { "read_log_", (DL_FUNC)&read_log_, 1 },
     { NULL, NULL, 0 }
 };

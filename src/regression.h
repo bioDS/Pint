@@ -30,7 +30,7 @@ Lasso_Result simple_coordinate_descent_lasso(
     float lambda_min, float lambda_max, int_fast64_t max_iter, const bool VERBOSE,
     float halt_beta_diff,
     enum LOG_LEVEL log_level, const char** job_args, int_fast64_t job_args_num,
-    int_fast64_t max_nz_beta, const char* log_filename, int_fast64_t depth, const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, struct continuous_info* cont_inf);
+    int_fast64_t max_nz_beta, const char* log_filename, int_fast64_t depth, const bool estimate_unbiased, const bool use_intercept, const bool check_duplicates, struct continuous_info* cont_inf, const bool use_hierarchy);
 float update_intercept_cyclic(float intercept, int_fast64_t** X, float* Y,
     robin_hood::unordered_flat_map<int_fast64_t, float>* beta, int_fast64_t n, int_fast64_t p);
 // Changes update_beta_cyclic(XMatrixSparse xmatrix_sparse, float *Y,

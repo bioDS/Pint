@@ -122,6 +122,13 @@ typedef struct {
     // int_fast64_t total_found_hash_count;
 } IndiCols;
 
+typedef struct {
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
+    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
+    int_fast64_t p;
+} Beta_Value_Sets;
+
 #include "s8b.h"
 #include "sparse_matrix.h"
 #include "tuple_val.h"
@@ -149,12 +156,6 @@ struct AS_Entry {
     std::vector<float> real_vals;
 };
 
-typedef struct {
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta1;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta2;
-    robin_hood::unordered_flat_map<int_fast64_t, float> beta3;
-    int_fast64_t p;
-} Beta_Value_Sets;
 
 typedef struct {
     Beta_Value_Sets regularized_result;

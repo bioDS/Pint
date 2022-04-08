@@ -37,8 +37,8 @@ void free_row_set(struct row_set rs)
 }
 
 struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
-    bool* remove,
-    Thread_Cache* thread_caches, struct continuous_info* ci)
+    bool* remove, Thread_Cache* thread_caches, struct continuous_info* ci,
+    const bool use_hierarchy, Beta_Value_Sets* beta_sets)
 {
     int_fast64_t p = Xc.p;
     int_fast64_t n = Xc.n;
@@ -59,8 +59,10 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
         for (int_fast64_t i = 0; i < Xu.host_row_nz[row]; i++) {
             int_fast64_t col = Xu.host_X_row[Xu.host_row_offsets[row] + i];
             if (!remove[col]) {
-                row_cache[row_pos] = col;
-                row_pos++;
+                if (!use_hierarchy || beta_sets->beta1.contains(col)) {
+                    row_cache[row_pos] = col;
+                    row_pos++;
+                }
             }
         }
 
