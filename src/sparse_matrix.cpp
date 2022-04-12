@@ -370,7 +370,7 @@ void free_host_X(X_uncompressed* Xu)
 
 X_uncompressed construct_host_X(XMatrixSparse* Xc)
 {
-    printf("total entries: %d\n", Xc->total_entries);
+    printf("total entries: %ld\n", Xc->total_entries);
     int_fast64_t* host_X = (int_fast64_t*)calloc(Xc->total_entries, sizeof(int_fast64_t));
     int_fast64_t* host_col_nz = (int_fast64_t*)calloc(Xc->p, sizeof(int_fast64_t));
     int_fast64_t* host_col_offsets = (int_fast64_t*)calloc(Xc->p, sizeof(int_fast64_t));
