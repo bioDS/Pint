@@ -10,8 +10,10 @@
 
 # converts interactions to tuple representation and adjusts for 0/1 start.
 val_to_list_name <- function(val, X) {
-    range <- ncol(X)
-    names <- colnames(X)
+    # integers are only 32 bits. Doubles at least give us 53.
+    val <- as.numeric(val)
+    range <- as.numeric(ncol(X))
+    names <- as.numeric(colnames(X))
     if (val < range) {
         return(names[val + 1])
     } else if (val < range * range) {
