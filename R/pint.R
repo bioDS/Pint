@@ -56,8 +56,6 @@ process_result <- function(X, result) {
     j <- colnames(X)[result[[9]]]
     k <- colnames(X)[result[[10]]]
     equiv_list <- c()
-    print(unlist(result[[12]][1]))
-    print(is.null(unlist(result[[12]][1][1])))
     if (length(result[[12]][1]) > 0 && !is.null(unlist(result[[12]][1]))) {
         equiv_list <- lapply(result[[12]], all_vals_to_list_name, X)
         names(equiv_list) <- paste0(i, ",", j, ",", k)
