@@ -12,10 +12,10 @@ install_github("bioDS/Pint", ref = "main")
 
 This package requires a 64-bit compiler. If you find R attempting to install a 32 bit version as well and failing (this typically happens on Windows), use `install_github("bioDS/Pint", INSTALL_opts=c("--no-multiarch"))`
 
-This library provides a single function that performs square root lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X.
+This library provides a single function that performs square root lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X. The primary function (including default arguments) is:
 
 ```
-output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, frac_overlap_allowed = -1, halt_error_diff=1.01, max_interaction_distance=-1, use_adaptive_calibration=FALSE, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE)
+output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1, halt_error_diff=1.01, max_interaction_distance=-1, max_nz_beta=-1, max_lambdas=200, verbose=FALSE, log_filename="regression.log", depth=2, log_level="none", estimate_unbiased=FALSE, use_intercept=TRUE, num_threads=-1, approximate_hierarchy=FALSE, check_duplicates=FALSE, continuous_X=FALSE)
 ```
 
 ## Arguments:
