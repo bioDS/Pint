@@ -76,6 +76,24 @@ For an estimate of the best fit, while excluding columns lasso regression sets t
 
 For an example that finds non-zero interactions with pint, before finding a more accurate estimate of effect strengths and various summary statistics with lm() see `lm_example.R`
 
+## Build Requirements
+
+Compiling on Ubuntu 22.04 requires the following package:
+
+```
+libxxhash-dev
+```
+
+Additionally, the following are required for the standalone executable and/or running tests:
+
+```
+libgsl-dev
+ninja-build
+libglib2.0-dev
+meson
+gcovr
+```
+
 # Standalone Executable
 There is an executable version (primarily for testing) that can be run on X/Y as .csv files.
 
