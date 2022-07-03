@@ -44,6 +44,8 @@ output <- interaction_lasso(X, Y, n = dim(X)[1], p = dim(X)[2], lambda_min = -1,
 
 `check_duplicates` : Identify and report any duplicate columns or interactions, and only assign an effect to the one of them.
 
+`num_threads` : Number of threads to use, use '-1' (default) to use all available CPU cores.
+
 ### Experimental Features
 A number of options have been implemented, but not thoroughly tested. These are:
 
