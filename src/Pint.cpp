@@ -352,6 +352,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     ci.col_real_vals = col_real_vals;
     ci.use_cont = continuous_X;
     ci.overall_max_val = overall_max_val;
+    ci.depth = depth;
    
     float* Y = (float*)malloc(n * sizeof(float));
     for (int_fast64_t i = 0; i < n; i++) {
