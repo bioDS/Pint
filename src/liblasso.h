@@ -103,6 +103,8 @@ struct continuous_info {
     bool use_cont;
     std::vector<float>* col_real_vals;
     float* col_max_vals;
+    float overall_max_val;
+    int depth;
 };
 void free_continuous_info(struct continuous_info ci);
 

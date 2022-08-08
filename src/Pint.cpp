@@ -328,6 +328,7 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
     for (int_fast64_t i = 0; i < p; i++)
         X[i] = (int_fast64_t*)malloc(n * sizeof *X[i]);
 
+    float overall_max_val = 0.0;
     for (int_fast64_t i = 0; i < p; i++) {
         float col_max_val = 0.0;
         for (int_fast64_t j = 0; j < n; j++) {
@@ -342,11 +343,15 @@ SEXP lasso_(SEXP X_, SEXP Y_, SEXP lambda_min_, SEXP lambda_max_,
             }
         }
         col_max_vals[i] = col_max_val;
+        if (fabs(col_max_val) > overall_max_val) {
+            overall_max_val = fabs(col_max_val);
+        }
     }
     struct continuous_info ci;
     ci.col_max_vals = col_max_vals;
     ci.col_real_vals = col_real_vals;
     ci.use_cont = continuous_X;
+    ci.overall_max_val = overall_max_val;
    
     float* Y = (float*)malloc(n * sizeof(float));
     for (int_fast64_t i = 0; i < n; i++) {

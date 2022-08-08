@@ -70,8 +70,12 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
         alpha = 0.0;
 
     float remainder = pessimistic_estimate(alpha, last_rowsum, rowsum, col, X.host_col_nz[k]);
-    if (ci->use_cont)
-        remainder *= fabs(ci->col_max_vals[k]);
+    if (ci->use_cont) {
+        if (ci->depth == 2)
+            remainder *= fabs(ci->overall_max_val) * fabs(ci->col_max_vals[k]);
+        else
+            remainder *= fabs(ci->overall_max_val) * fabs(ci->overall_max_val) * fabs(ci->col_max_vals[k]);
+    }
 
     float total_estimate = fabs(last_max * alpha) + remainder;
     return total_estimate;

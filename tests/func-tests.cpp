@@ -1392,6 +1392,8 @@ void check_small_continuous() {
     ci.col_real_vals = new vector<float>[p];
     ci.col_max_vals = new float[p];
     ci.use_cont = true;
+    ci.overall_max_val = 0.0;
+    ci.depth = 2;
 
     XMatrix xm;
     xm.X = calloc(p, sizeof(int_fast64_t*));
@@ -1408,6 +1410,7 @@ void check_small_continuous() {
     ci.col_real_vals[3] = {0.2, 0.2, 0.4, -3.3, 2.1};
     ci.col_real_vals[4] = {-0.2, -1.2, 3.2, 3.5, 0.1};
 
+    float overall_max = 0.0;
     for (int j = 0; j < p; j++) {
         float max_val = 0.0;
         for (auto v : ci.col_real_vals[j]) {
@@ -1415,7 +1418,11 @@ void check_small_continuous() {
                 max_val = v;
         }
         ci.col_max_vals[j] = max_val;
+        if (fabs(max_val) > overall_max) {
+            overall_max = fabs(max_val);
+        }
     }
+    ci.overall_max_val = overall_max;
 
     std::vector<float> beta = {0.3, 1.1, 0.9, -2.2, 1.5};
     float* Y = calloc(n, sizeof(float));
@@ -1479,6 +1486,8 @@ void check_continous_ones(UpdateFixture* fixture,
     ci.col_max_vals = col_max_vals;
     ci.col_real_vals = col_real_vals;
     ci.use_cont = true;
+    ci.overall_max_val = 1.0;
+    ci.depth = 3;
     bool check_duplicates = true;
     Lasso_Result lr = simple_coordinate_descent_lasso(fixture->xmatrix, fixture->Y, fixture->n, fixture->p,
         -1, 0.01, 200,
