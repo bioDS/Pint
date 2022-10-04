@@ -1,7 +1,9 @@
 #!/bin/bash
 
-if [ ! $(git diff --staged | wc -l) -gt 0 ]; then
-	exit
+if [ ! $1 == "--force" ]; then
+  if [ ! $(git diff --staged | wc -l) -gt 0 ]; then
+    exit
+  fi
 fi
 isdiff=0
 if [ $(git diff | wc -l) -gt 0 ]; then
