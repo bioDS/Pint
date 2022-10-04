@@ -1,5 +1,8 @@
 AC_INIT([<package>],[<version>])
 
+PACKAGE_NAME="Pint"
+PACKAGE_VERSION="0.2"
+
 # Find the compiler and compiler flags used by R.
 : ${R_HOME=`R RHOME`}
 if test -z "${R_HOME}"; then
