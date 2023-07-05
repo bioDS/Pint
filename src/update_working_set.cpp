@@ -204,8 +204,10 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
     std::vector<int_fast64_t> thread_seen_together[NumCores];
     robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> thread_seen_with_main[NumCores];
     robin_hood::unordered_flat_map<int_fast64_t, std::vector<int_fast64_t>> thread_seen_pair_with_main[NumCores];
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static) reduction(+ \
                                    : total_inter_cols, total, skipped, int2_used, int2_skipped, main_cols_used, skipped_pair_cols, used_pair_cols)
+#endif
     for (int_fast64_t main_i = 0; main_i < count_may_update; main_i++) {
         const int_fast64_t thread_num = omp_get_thread_num();
         // use Xc to read main effect
@@ -468,7 +470,9 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                             }
                     }
                 }
+#ifdef _OPENMP
 #pragma omp critical
+#endif
                 active_set_append(as, k, col_j_cache, inter_len, inter_vals);
                 increased_set = TRUE;
                 total++;
@@ -494,7 +498,6 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                             inter_len++;
                         }
                     }
-                    // #pragma omp critical
                     update_inter_cache(ik, n, rowsum, last_inter_max[tuple_val],
                         col_j_cache, inter_len, inter_col_max);
                 } else {
