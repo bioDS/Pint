@@ -8,7 +8,7 @@
 #include <omp.h>
 #endif
 #include <vector>
-#include <xxhash.h>
+#include "xxHash/xxhash.h"
 // #include<glib-2.0/glib.h>
 
 using namespace std;

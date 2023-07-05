@@ -3,7 +3,7 @@
 #include <omp.h>
 #include <stdlib.h>
 #include <tuple>
-#include <xxhash.h>
+#include "xxHash/xxhash.h"
 
 #include "flat_hash_map.hpp"
 #include "liblasso.h"
