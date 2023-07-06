@@ -9,8 +9,6 @@ Alternatively, install directly from github with:
 install.packages("https://github.com/bioDS/Pint/archive/refs/heads/main.tar.gz", repos=NULL)
 ```
 
-This package requires a 64-bit compiler. If you find R attempting to install a 32 bit version as well and failing (this typically happens on Windows), use `install_github("bioDS/Pint", INSTALL_opts=c("--no-multiarch"))`
-
 This library provides a single function that performs square root lasso regularised linear regression on all pairs of columns in the input matrix X, otherwise modelling Y ~ X. The primary function (including default arguments) is:
 
 ```
