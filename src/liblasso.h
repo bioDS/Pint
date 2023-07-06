@@ -17,6 +17,9 @@
 #include <math.h>
 #ifdef _OPENMP
 #include <omp.h>
+#else
+int omp_get_thread_num();
+int omp_get_max_threads();
 #endif
 #include <stdio.h>
 #include <string.h>

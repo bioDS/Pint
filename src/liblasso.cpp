@@ -3,6 +3,13 @@
 #include <limits.h>
 #ifdef _OPENMP
 #include <omp.h>
+#else
+int omp_get_thread_num() {
+  return 0;
+}
+int omp_get_max_threads() {
+  return 1;
+}
 #endif
 
 int_fast64_t NumCores = 1;
@@ -44,6 +51,7 @@ int_pair* cached_nums = NULL;
 // TODO: the compiler should really do this
 void initialise_static_resources(int_fast64_t use_cores)
 {
+#ifdef _OPENMP
     if (use_cores < 1) {
         NumCores = omp_get_num_procs();
     }
@@ -51,6 +59,9 @@ void initialise_static_resources(int_fast64_t use_cores)
         NumCores = use_cores;
         omp_set_num_threads(NumCores);
     }
+#else
+    NumCores = 1;
+#endif
     if (VERBOSE)
         printf("using %ld cores\n", NumCores);
 }
