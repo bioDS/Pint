@@ -125,3 +125,10 @@ max interaction distance:	| Only columns within this distance in X will be consi
 frac overlap:	| fraction of columns being updated at the same time that is allowed to overlap. No longer used.
 q/t/filename: | output mode. [q]uit immediately without printing output, [t]erminal: prints first 10 values < -500 to terminal, [filename]: prints all non-zero effects to the given file.
 log_level:	| 	Whether and how to log partial results. iter -> every iteration, lambda -> every new lambda, none -> do not log.
+
+# Acknowledgements
+
+This project includes the following work:
+
+- [xxHash](https://github.com/Cyan4973/xxHash) (for identifying identical columns).
+- Malte Skarupke's [flat hash map](https://github.com/skarupke/flat_hash_map).

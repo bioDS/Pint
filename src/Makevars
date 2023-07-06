@@ -1,0 +1,8 @@
+PKG_CXXFLAGS = -std=c++14 -Ofast -ffast-math -DR_PACKAGE -g -Wno-unused-variable $(SHLIB_OPENMP_CXXFLAGS)
+PKG_LIBS = $(SHLIB_OPENMP_CFLAGS) xxHash/libxxhash.a
+
+$(SHLIB): xxHash/libxxhash.a
+
+xxHash/libxxhash.a:
+	@(cd xxHash && $(MAKE) libxxhash.a \
+	CC="$(CC)" CFLAGS="$(CFLAGS) $(CPICFLAGS)" AR="$(AR)" RANLIB="$(RANLIB)")

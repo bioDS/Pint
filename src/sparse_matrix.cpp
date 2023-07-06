@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <vector>
-#include <xxhash.h>
+#include "xxHash/xxhash.h"
 // #include<glib-2.0/glib.h>
 
 using namespace std;
@@ -249,8 +251,10 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     // size_t testcol = -INT_MAX;
     colno = 0;
 // TODO: iter_done isn't exactly being updated safely
+#ifdef _OPENMP
 #pragma omp parallel for shared(X2, X, iter_done) private(length, colno) num_threads(NumCores) reduction(+ \
                                                                                                          : total_count, total_sum) schedule(static)
+#endif
     for (int_fast64_t i = 0; i < p; i++) {
         int_fast64_t val;
         Queue* current_col = queue_new();

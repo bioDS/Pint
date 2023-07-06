@@ -3,7 +3,9 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #ifdef NOT_R
 #include <glib-2.0/glib.h>
 #endif
@@ -295,7 +297,9 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             thread_new_cols[i].clear();
         }
 
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static)
+#endif
         for (int_fast64_t j = 0; j < p; j++) {
             bool prev_wont_update = wont_update[j];
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
@@ -317,8 +321,10 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
         // going on with rowsum/last_rowsum?
         {
 // TODO: parallelising this loop slows down numa updates.
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static) reduction(+ \
                                                     : active_branches, used_branches, pruned_branches)
+#endif
             for (int_fast64_t j = 0; j < p; j++) {
                 // if the branch hasn't been pruned then we'll get an accurate estimate
                 // for this rowsum from update_working_set.
@@ -658,7 +664,9 @@ Lasso_Result simple_coordinate_descent_lasso(
     Beta_Sequence beta_sequence;
 
     float** last_rowsum = (float**)malloc(sizeof *last_rowsum * p);
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static)
+#endif
     for (int_fast64_t i = 0; i < p; i++) {
         last_rowsum[i] = (float*)malloc(sizeof *last_rowsum[i] * n + PADDING);
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
@@ -675,7 +683,9 @@ Lasso_Result simple_coordinate_descent_lasso(
     memset(last_max, 0, p * sizeof(*last_max));
     float* max_int_delta = (float*)malloc(sizeof *max_int_delta * p);
     memset(max_int_delta, 0, sizeof *max_int_delta * p);
+#ifdef _OPENMP
 #pragma omp parallel for schedule(static)
+#endif
     for (int_fast64_t i = 0; i < p; i++) {
         memset(last_rowsum[i], 0, sizeof *last_rowsum[i] * n);
         last_max[i] = 0.0;
@@ -900,7 +910,9 @@ Lasso_Result simple_coordinate_descent_lasso(
     result.unbiased_intercept = unbiased_intercept;
     result.indi = indi;
     result.indist_from_val = indist_from_val;
+#ifdef _OPENMP
 #pragma omp barrier
+#endif
     return result;
 }
 
@@ -954,7 +966,9 @@ Changes update_beta_cyclic_old(
         }
         for (int_fast64_t e = 0; e < xmatrix_sparse.cols[k].nz; e++) {
             int_fast64_t i = column_entries[e];
+#ifdef _OPENMP
 #pragma omp atomic
+#endif
             rowsum[i] += Bk_diff;
         }
     } else {
@@ -1029,7 +1043,9 @@ Changes update_beta_cyclic(AS_Entry* as_entry, float* Y, float* rowsum, int_fast
             float offset = Bk_diff;
             if (ci->use_cont)
                 offset *= col_real_vals[e];
+#ifdef _OPENMP
 #pragma omp atomic
+#endif
             rowsum[i] += offset;
         }
     } else {

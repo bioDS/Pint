@@ -1,7 +1,9 @@
 #include "liblasso.h"
 #include <errno.h>
 #include <limits.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 int_fast64_t NumCores = 1;
 int_fast64_t permutation_splits = 1;
