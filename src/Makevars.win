@@ -1,2 +1,0 @@
-PKG_CXXFLAGS = $(SHLIB_OPENMP_CFLAGS) -std=c++14 -fopenmp -Ofast -ffast-math -g -DR_PACKAGE -g
-PKG_LIBS = $(SHLIB_OPENMP_CFLAGS) -lxxhash
