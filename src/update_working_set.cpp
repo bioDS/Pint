@@ -1,6 +1,8 @@
 #include "robin_hood.h"
 #include <cstdint>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <stdlib.h>
 #include <tuple>
 #include "xxHash/xxhash.h"
