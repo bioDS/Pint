@@ -127,5 +127,5 @@ log_level:	| 	Whether and how to log partial results. iter -> every iteration, l
 
 This project includes the following work:
 
-- [xxHash](https://github.com/Cyan4973/xxHash) (for identifying identical columns).
-- Malte Skarupke's [flat hash map](https://github.com/skarupke/flat_hash_map).
+- [xxHash](https://github.com/Cyan4973/xxHash) (for identifying identical columns) - BSD 2-Clause License.
+- Malte Skarupke's [flat hash map](https://github.com/skarupke/flat_hash_map) - Boost Software License, Version 1.0.
