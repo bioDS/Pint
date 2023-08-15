@@ -1,4 +1,4 @@
-PKG_CXXFLAGS = -std=c++14 -Ofast -ffast-math -DR_PACKAGE -g -Wno-unused-variable $(SHLIB_OPENMP_CXXFLAGS)
+PKG_CXXFLAGS = -std=c++14 -Ofast -ffast-math -DR_PACKAGE -g -Wno-unused-variable $(SHLIB_OPENMP_CXXFLAGS) -fPIC
 PKG_LIBS = $(SHLIB_OPENMP_CFLAGS) xxHash/libxxhash.a
 
 $(SHLIB): xxHash/libxxhash.a
