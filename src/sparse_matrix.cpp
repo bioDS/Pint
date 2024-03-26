@@ -9,7 +9,6 @@
 #endif
 #include <vector>
 #include "xxHash/xxhash.h"
-// #include<glib-2.0/glib.h>
 
 using namespace std;
 
@@ -52,7 +51,6 @@ struct row_set row_list_without_columns(XMatrixSparse Xc, X_uncompressed Xu,
     if (ci->use_cont)
         row_real_vals = new std::vector<float>[n];
 
-    // #pragma omp parallel for
     for (int_fast64_t row = 0; row < n; row++) {
         Thread_Cache thread_cache = thread_caches[omp_get_thread_num()];
         int_fast64_t* row_cache = thread_cache.col_i; // N.B col_i cache must be at least size p
@@ -185,8 +183,6 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
     struct continuous_info* ci)
 {
     int_fast64_t total_cols_checked = 0;
-    // robin_hood::unordered_flat_map<int64_t, std::vector<int64_t>>
-        // new_col_ids_for_hashvalue;
     std::vector<int_fast64_t> vals_to_remove;
     for (auto main : *new_cols) {
         total_cols_checked++;
@@ -202,7 +198,6 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
 
 
         if (indi->main_col_hashes[main_hash.high64].contains(main_hash.low64))
-            // indi->skip_main_col_ids.insert(main);
             indi->skip_main_col_ids[main] = true;
         else
             indi->main_col_hashes[main_hash.high64].insert(main_hash.low64);
@@ -220,10 +215,7 @@ std::vector<int_fast64_t> update_main_indistinguishable_cols(
                 vals_to_remove.push_back(val);
             }
         }
-        // if (main_hash.high64 == -8159609205832722572 && main_hash.low64 == 5476872011942898047)
-        //     printf("inserting main hash: %ld, %ld\n", main_hash.high64, main_hash.low64);
         indi->cols_for_hash[main_hash.high64][main_hash.low64].insert(main);
-        // g_assert_false(indi->cols_for_hash.contains(-8159609205832722572));
     }
     return vals_to_remove;
 }
@@ -248,7 +240,6 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
     int_fast64_t done_percent = 0;
     int_fast64_t total_count = 0;
     int_fast64_t total_sum = 0;
-    // size_t testcol = -INT_MAX;
     colno = 0;
 // TODO: iter_done isn't exactly being updated safely
 #ifdef _OPENMP
@@ -263,7 +254,6 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
         int_fast64_t* col_entries = (int_fast64_t*)malloc(60 * sizeof *col_entries);
         int_fast64_t count = 0;
         int_fast64_t largest_entry = 0;
-        // int_fast64_t max_bits = max_size_given_entries[0];
         int_fast64_t diff = 0;
         int_fast64_t prev_row = -1;
         int_fast64_t total_nz_entries = 0;
@@ -293,7 +283,6 @@ XMatrixSparse sparse_X_from_X(int_fast64_t** X, int_fast64_t n, int_fast64_t p,
                     largest_entry = 0;
                 }
                 // things for the next iter
-                // g_assert_true(count < 60);
                 col_entries[count] = diff;
                 count++;
                 if (used > largest_entry)

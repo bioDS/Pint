@@ -51,8 +51,6 @@ struct C_Beta_Sets cpp_bs_to_c(
 
     int_fast64_t main_offset = 0;
     for (auto it : beta_sets->beta1) {
-        // for (auto it = beta_sets->beta1.begin(); it != beta_sets->beta1.end();
-        // it++) {
         std::vector<int_fast64_t> indist_vec;
         if (NULL != indist_from_val)
             indist_vec = (*indist_from_val)[it.first];

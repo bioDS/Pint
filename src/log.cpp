@@ -106,16 +106,13 @@ int_fast64_t check_can_restore_from_log(const char* filename, int_fast64_t n, in
     }
     sprintf(our_args + strlen(our_args), "\n");
 
-    // printf("checking log\n");
     char* ret = fgets(buffer, buf_size, log_file);
-    // printf("comparing '%s', '%s'n", buffer, "still running");
     if (strcmp(buffer, "still running\n") == 0) {
         // there was an interrupted run, we should check if it was this one.
         ret = fgets(buffer, buf_size, log_file);
         if (ret == NULL) {
             fprintf(stderr, "error reading log file\n");
         }
-        // printf("comparing '%s', '%s'\n", buffer, our_args);
         if (strcmp(buffer, our_args) == 0) {
             // the files were the same!
             can_use = TRUE;
@@ -151,7 +148,6 @@ FILE* restore_from_log(const char* filename, bool check_args, int_fast64_t n, in
     sscanf(buffer, "%ld, %ld", &n, &p);
     int_print_len = std::log10(p * p * p) + 1;
     log_file_offset = ftell(log_file);
-    // init_print(log_file, n, p, num_betas, job_args, job_args_num);
 
     // now we're at the first saved line, check whether it's a complete
     // checkpoint.
@@ -274,7 +270,6 @@ FILE* restore_from_log(const char* filename, bool check_args, int_fast64_t n, in
                 fprintf(stderr, "error reading log file %s\n", filename);
             }
             for (int_fast64_t i = 0; i < beta_size; i++) {
-                // printf("values_buf: '%s'\n", buffer + offset);
                 int_fast64_t beta_no = -1;
                 float beta_val = -1.0;
                 int_fast64_t ret = sscanf(buffer + offset, "%ld,%e, ", &beta_no, &beta_val);
@@ -282,7 +277,6 @@ FILE* restore_from_log(const char* filename, bool check_args, int_fast64_t n, in
                     fprintf(stderr, "failed to match value in log, bad things will now happen\n");
                     fprintf(stderr, "log value was '%s'\n", buffer + offset);
                 }
-                // printf(": beta: %ld,%f\n", beta_no, beta_val);
                 beta_set->insert_or_assign(beta_no, beta_val);
                 offset += 16 + int_print_len;
             }

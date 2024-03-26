@@ -23,8 +23,6 @@ int_fast64_t total_beta_updates = 0;
 int_fast64_t total_beta_nz_updates = 0;
 
 static float c_bar = 0.75;
-// static float c_bar = 0.001;
-// static float c_bar = 750;
 
 void check_beta_order(robin_hood::unordered_flat_map<int_fast64_t, float>* beta,
     int_fast64_t p)
@@ -118,7 +116,6 @@ int_fast64_t adaptive_calibration_check_beta(float c_bar, float lambda_1,
         b2_count++;
     }
 
-    // adjusted_max_diff = max_diff / ((lambda_1 + lambda_2) * (n / 2));
     adjusted_max_diff = (double)max_diff / (((double)lambda_1 + (double)lambda_2));
 
     if (adjusted_max_diff <= c_bar) {
@@ -221,11 +218,6 @@ void subproblem_only(Iter_Vars* vars, float lambda, float* rowsum,
             vars->intercept = update_intercept(rowsum, Y, n, lambda, vars->intercept);
         }
         // update entire working set
-        // #pragma omp parallel for num_threads(NumCores) schedule(static)
-        // shared(Y, rowsum, beta, precalc_get_num, perm)
-        // reduction(+:total_unchanged, total_changed, total_present,
-        // total_notpresent, new_nz_beta, total_beta_updates,
-        // total_beta_nz_updates)
 
         run_beta(&beta_sets->beta1, entry_vec1);
         run_beta(&beta_sets->beta2, entry_vec2);
@@ -305,8 +297,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
             wont_update[j] = wont_update_effect(Xu, lambda, j, last_max[j], last_rowsum[j], rowsum,
                 thread_caches[omp_get_thread_num()].col_j, cont_inf);
             if (!wont_update[j] && !(*vars->seen_before)[j]) {
-            // if (!wont_update[j] && !prev_wont_update) {
-            // if (true) {
                 thread_new_cols[omp_get_thread_num()].insert(j);
             }
         }
@@ -337,11 +327,6 @@ int_fast64_t run_lambda_iters_pruned(Iter_Vars* vars, float lambda, float* rowsu
                     pruned_branches++;
                 }
             }
-            //// we'll also update last_rowums for the active set
-            // for (auto it = active_set->entries2.begin(); it != active_set->entries2.end(); it++) {
-            //     AS_Entry *entry = &it->second;
-            //     memcpy(entry->last_rowsum, rowsum, sizeof *rowsum * n);
-            // }
         }
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
         pruning_time += ((float)(end_time.tv_nsec - start_time.tv_nsec)) / 1e9 + (end_time.tv_sec - start_time.tv_sec);
@@ -468,21 +453,18 @@ int_fast64_t copy_beta_sets(Beta_Value_Sets* from_set, Sparse_Betas* to_set)
     to_set->indices = new int_fast64_t[total_size];
     to_set->values = new float[total_size];
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        // to_set->betas.insert_or_assign(c->first, c->second);
         to_set->indices[count] = c->first;
         to_set->values[count] = c->second;
         count++;
     }
     from_beta = from_set->beta2;
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        // to_set->betas.insert_or_assign(c->first, c->second);
         to_set->indices[count] = c->first;
         to_set->values[count] = c->second;
         count++;
     }
     from_beta = from_set->beta3;
     for (auto c = from_beta.begin(); c != from_beta.end(); c++) {
-        // to_set->betas.insert_or_assign(c->first, c->second);
         to_set->indices[count] = c->first;
         to_set->values[count] = c->second;
         count++;
@@ -868,7 +850,6 @@ Lasso_Result simple_coordinate_descent_lasso(
             Xu,
             unbiased_intercept,
         };
-        // run_lambda_iters_pruned(&iter_vars_pruned, 0.0, rowsum,
         subproblem_only(&iter_vars_pruned, 0.0, rowsum,
             old_rowsum, &active_set, depth, use_intercept, cont_inf);
         if (verbose)
@@ -1014,7 +995,6 @@ Changes update_beta_cyclic(AS_Entry* as_entry, float* Y, float* rowsum, int_fast
                     float cv = col_real_vals[col_entry_pos];
                     rs *= cv;
                     sumk += cv*cv;
-                    // sumn += cv*bk;
                 }
                 sumn -= rs;
                 col_entry_pos++;

@@ -26,7 +26,6 @@ struct pe_params {
 float pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
     int_fast64_t* col, int_fast64_t col_nz)
 {
-    // int_fast64_t *col = &X.host_X[X.host_col_offsets[k]];
     float pos_max = 0.0, neg_max = 0.0;
     for (int_fast64_t ind = 0; ind < col_nz; ind++) {
         int_fast64_t i = col[ind];
@@ -95,12 +94,10 @@ float l2_combined_estimate(X_uncompressed X, float lambda, int_fast64_t k,
 bool wont_update_effect(X_uncompressed X, float lambda, int_fast64_t k, float last_max,
     float* last_rowsum, float* rowsum, int_fast64_t* column_cache, struct continuous_info* ci)
 {
-    // int_fast64_t* cache = malloc(X.n * sizeof *column_cache);
     float upper_bound = l2_combined_estimate(X, lambda, k, last_max, last_rowsum, rowsum, ci);
     return upper_bound <= lambda * total_sqrt_error;
 }
 
-// float as_pessimistic_estimate(float alpha, robin_hood::unordered_flat_map<int_fast64_t, float>* last_rowsum, float* rowsum,
 float as_pessimistic_estimate(float alpha, float* last_rowsum, float* rowsum,
     int_fast64_t* col, int_fast64_t col_nz)
 {

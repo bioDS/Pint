@@ -413,7 +413,6 @@ char update_working_set_cpu(struct XMatrixSparse Xc,
                     a = main;
                     b = main; // TODO: unnecessary
                     c = main;
-                    // k = pair_to_val(std::make_tuple(a, b), p);
                     k = main;
                     if (skip_main_col_ids[k])
                         continue;
